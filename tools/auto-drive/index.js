@@ -50,6 +50,7 @@ let m_options = {
 				//"heading" : -8.5,
 			},
 			"cam_heading" : 0,//physical
+			"cam_height" : 1.0,
 			"pst_channel": "pserver-forward-pst",
 			"check_person_detected": true,
 			"stereo_distance": 0.06,
@@ -63,6 +64,7 @@ let m_options = {
 				//"heading" : -8.5,
 			},
 			"cam_heading" : 180,//physical
+			"cam_height" : 1.0,
 			"pst_channel": "pserver-backward-pst",
 			"check_person_detected": true,
 			"stereo_distance": 0.06,
@@ -90,6 +92,7 @@ let m_options = {
 	// 			//"heading" : -8.5,
 	// 		},
 	// 		"cam_heading" : 0,//physical
+	//		"cam_height" : 0.13,
 	// 		"pst_channel": "pserver-forward-pst",
 	//		"check_person_detected": true,
 	//		"stereo_distance": 0.03,
@@ -103,6 +106,7 @@ let m_options = {
 	// 			//"heading" : -8.5,
 	// 		},
 	// 		"cam_heading" : 180,//physical
+	//		"cam_height" : 0.13,
 	// 		"pst_channel": "pserver-backward-pst",
 	//		"check_person_detected": false,
 	//		"stereo_distance": 0.03,
@@ -548,6 +552,8 @@ function tracking_handler(direction) {
 
 	const tolerance_depth = 0.5;
 	const wheel_separation = m_options["encoder_odom"]["wheel_separation"];
+	const cam_height = m_options.cameras[direction].cam_height;
+	const min_object_height = 0.03;
 
 	const sd = m_options.cameras[direction].stereo_distance;
 	const disparity_map = m_depth[direction].disparity;
@@ -555,14 +561,14 @@ function tracking_handler(direction) {
 	const fov_rad = fov_deg * Math.PI / 180;
 	const f  = (disparity_map.cols / 2) / Math.tan(fov_rad / 2);
 
-	const fw = 2 * tolerance_depth * Math.tan(fov_rad / 2);
-	const tpw = disparity_map.cols * wheel_separation / fw;
+	const ws_pix = f * wheel_separation / tolerance_depth;
+	const ch_pix = f * (cam_height - min_object_height) / tolerance_depth;
 
-	let x = (disparity_map.cols - tpw) / 2;
-	let w = tpw;
+	let x = (disparity_map.cols - ws_pix) / 2;
+	let w = ws_pix;
 	//above the horizon
 	let y = 0;
-	let h = disparity_map.rows / 2;
+	let h = disparity_map.rows / 2 + ch_pix;
 	
 	const roi = disparity_map.getRegion(new cv.Rect(x, y, w, h));
 	const { maxVal, maxLoc, minVal, minLoc } = roi.minMaxLoc();
@@ -578,7 +584,7 @@ function tracking_handler(direction) {
 		return;
 	}
 	const depth = sd * f / disparity;
-	console.log(`nearest object is ${depth}m : ${tpw}pix`);
+	console.log(`nearest object is ${depth}m : ${ws_pix}pix,${ch_pix}pix`);
 	if(depth < tolerance_depth){
 		finalize_fnc();
 		return;
@@ -1304,12 +1310,15 @@ function command_handler(cmd) {
 		case "START_RECORD":
 			stop_robot();
 			if (m_drive_mode == "STANBY") {
-				const extend_mode = (split[1] == "EXTEND" || split[1] == "TRACKING");
+				const options = (split[1] && split[1][0] == '{' ? JSON.parse(split[1]) : {
+					extend : split[1] == "EXTEND",
+					tracking : split[1] == "TRACKING",
+				});
 
 				let pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				let succeeded = false;
 				if (fs.existsSync(pif_dirpath)) {
-					if (extend_mode) {
+					if (options.extend) {
 						for (let i = 1; ; i++) {
 							const pif_dirpath_ext = `${pif_dirpath}_ext_${i}`;
 							if (!fs.existsSync(pif_dirpath_ext)) {
@@ -1353,10 +1362,11 @@ function command_handler(cmd) {
 					"state": "START_RECORD",
 				}));
 
-				if(split[1] == "TRACKING"){
+				if(options.tracking){
 					const settings = EncoderOdometry.settings;
-					const distance = 10;
-					const dtheta = 0;
+					const obj_distance = 10;
+					const obj_heading = 0;
+					const dtheta = obj_heading * Math.PI / 180.0;
 					const waypoints = {};
 					const step = 100;
 					waypoints[0] = {
@@ -1366,7 +1376,7 @@ function command_handler(cmd) {
 						})
 					};
 					for(let i=0;i<=step;i++){
-						const d = i * distance / step;
+						const d = i * obj_distance / step;
 						const distance_left = d - dtheta * settings.wheel_separation / 2;
 						const distance_right = d + dtheta * settings.wheel_separation / 2;
 						waypoints[i+1] = {
