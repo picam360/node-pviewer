@@ -204,8 +204,9 @@ function record_waypoints_handler(tmp_img){
 
 		m_client.publish('picam360-vord', JSON.stringify({
 			"cmd" : "detect",
-			"test" : true,
-			"jpeg_data" : jpeg_data,
+			"test" : false,
+			"show" : true,
+			"jpeg_data" : jpeg_data.toString("base64"),
 		}));
 	}
 
@@ -587,6 +588,8 @@ function main() {
 					m_object_tracking_state = 1;
 				}
 			}else if(params['type'] == 'detect'){
+				m_object_tracking_state = 1;
+
 				console.log(params['objects']);
 			}
 		});
