@@ -1364,8 +1364,8 @@ function command_handler(cmd) {
 
 				if(options.tracking){
 					const settings = EncoderOdometry.settings;
-					const obj_distance = 10;
-					const obj_heading = 0;
+					const obj_distance = options.distance || 10;
+					const obj_heading = options.heading || 0;
 					const dtheta = obj_heading * Math.PI / 180.0;
 					const waypoints = {};
 					const step = 100;
