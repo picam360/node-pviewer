@@ -281,9 +281,12 @@ function tracking_handler(objects){
 		stop_robot();
 		return;
 	}
+	const best = objects.reduce((max, obj) => 
+		obj.score > max.score ? obj : max
+	);
 	const img_width = 512;
 	const fov = 90;
-	const x = (objects[0].bbox[0] + objects[0].bbox[2]) / 2 - img_width / 2;
+	const x = (best.bbox[0] + best.bbox[2]) / 2 - img_width / 2;
 	const ten_deg_pixels = Math.tan(10) * img_width / 2 / Math.tan(fov/2);
 	const angle = x / ten_deg_pixels * 10;
 	if(Math.abs(x) < ten_deg_pixels){
