@@ -72,6 +72,7 @@ let m_options = {
 	},
 	"tracking": {
 		"tolerance_depth": 2.0,
+		"centering_depth": 3.0,
 		"min_object_height": 1.0,
 	},
 
@@ -115,6 +116,11 @@ let m_options = {
 	//		"check_person_detected": false,
 	//		"stereo_distance": 0.03,
 	// 	}
+	// },
+	// "tracking": {
+	// 	"tolerance_depth": 0.1,
+	// 	"centering_depth": 0.2,
+	// 	"min_object_height": 0.1,
 	// },
 };
 let m_argv = null;
@@ -564,7 +570,7 @@ function generateTractrix(L, gamma, r, N = 100)
 
         // rotate back to world
         const x = X * sing - Y * cosg;
-        const y = X * cosg + Y * sing;
+        const y = X * cosg + Y * sing + r;
 
         pts.push({ x, y });
     }
@@ -673,6 +679,7 @@ function tracking_handler(direction) {
 	}
 
 	const tolerance_depth = m_options["tracking"]["tolerance_depth"];
+	const centering_depth = m_options["tracking"]["centering_depth"];
 	//const wheel_separation = m_options["encoder_odom"]["wheel_separation"];
 	const wheel_separation = 2.0;
 	const cam_height = m_options.cameras[direction].cam_height;
@@ -730,7 +737,6 @@ function tracking_handler(direction) {
 	}
 
 	{
-		const centering_depth = 3;
 		const roi = gen_tracking_roi(
 			disparity_map, f, 
 			cam_height, wheel_separation,
