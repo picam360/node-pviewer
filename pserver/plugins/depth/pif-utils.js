@@ -16,12 +16,12 @@ function read_pif(file_path, callback) {
 		const header = data.slice(0, header_size + 4);
 
 		// XMLデータを取得してパース
-		const xmlData = header.slice(4).toString('utf-8');
+		const xml = header.slice(4).toString('utf-8');
         const parser = new fxp.XMLParser({
             ignoreAttributes: false,
             attributeNamePrefix: "",
         });
-        const img_dom = parser.parse(xmlData);
+        const img_dom = parser.parse(xml);
 
         const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
         const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
@@ -39,18 +39,33 @@ function read_pif_from_buffer(tmp_img, callback) {
         }
     
         const data = Buffer.concat([tmp_img[0], tmp_img[1]]);
-        const header = data.slice(0, 2).toString('utf-8');
-        if (header !== 'PI') {
+        const header_head = data.slice(0, 2).toString('utf-8');
+        if (header_head !== 'PI') {
             throw new Error('Invalid file format');
         }
     
         const header_size = data.readUInt16BE(2);
-        const xml = data.slice(4, 4 + header_size).toString('utf-8');
-        const img_dom = xml_parser.parse(xml);
+		const header = data.slice(0, header_size + 4);
+
+		const xml = header.slice(4).toString('utf-8');
+        const parser = new fxp.XMLParser({
+            ignoreAttributes: false,
+            attributeNamePrefix: "",
+        });
+        const img_dom = parser.parse(xml);
+
+        img_dom.build = () => {
+            const builder = new fxp.XMLBuilder({
+                format: false,
+                ignoreAttributes: false,
+                attributeNamePrefix: "",
+            });
+            return builder.build(img_dom);
+        };
     
         const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
         const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
-        callback(tmp_img, [header, meta, tmp_img[2]]);
+        callback(img_dom, [header, meta, tmp_img[2]]);
 	}catch(err){
 	};
 }
