@@ -314,60 +314,70 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
 }
 
 class VslamOdometry {
-    // static settings = {//juki
+    static settings = {//juki
+        "vslam_path" : "/home/picam360/github/picam360-vslam",
+        "vslam_option" : "--disable_vis",
+        "vslam_filename" : "waypoints.data",
+
+        "cam_offset" : {
+            "x" : 0.0,
+            "y" : 2.2,
+            //"y" : 2.228590172834311,
+            "heading" : 0,
+            //"heading" : -8.5,
+        },
+        "cam_heading" : 0,//physical
+
+        //for auto-drive
+        "dr_threashold_waypoint" : 2.0,
+        "dh_threashold_waypoint" : 10,
+        "dr_threashold" : 1.0,
+        "dh_threashold" : 10,
+        "confidence_penalty_gain" : 5,//percentage per meter
+
+        "update_gain" : 0.3,
+        "update_r_cutoff" : 2.0,
+        "update_h_cutoff" : 2.0,
+        "update_r_limit" : 1.0,
+        "update_h_limit" : 45.0,
+
+        "launch_vslam" : true,
+        "calib_enabled" : false,
+    };
+    // static settings = {//jetchariot
     //     vslam_path : '/home/picam360/github/picam360-vslam',
     //     vslam_option : '--disable_vis',
+    //     //vslam_option : '',
     //     vslam_filename : 'waypoints.data',
-    //     cam_offset : {
+    //     cam_offset : {//enc fitting
     //         x : 0.0,
-    //         y : 2.2,
+    //         y : 0.0,
     //         heading : 0,
     //     },
-    //     dr_threashold_waypoint : 2.0,
+    //     cam_heading : 0,//physical
+
+    //     //for auto-drive
+    //     dr_threashold_waypoint : 0.1,
     //     dh_threashold_waypoint : 10,
-    //     dr_threashold : 1.0,
+    //     dr_threashold : 0.05,
     //     dh_threashold : 10,
-        // update_gain : 0.3,
-        // update_r_cutoff : 2.0,
-        // update_h_cutoff : 2.0,
+    //     confidence_penalty_gain : 5,//percentage per meter
+
+    //     //for map
+    //     // dr_threashold_waypoint : 0.2,
+    //     // dh_threashold_waypoint : 20,
+    //     // dr_threashold : 0.1,
+    //     // dh_threashold : 10,
+
+    //     update_gain : 0.5,
+    //     update_r_cutoff : 0.3,
+    //     update_h_cutoff : 15.0,
+    //     update_r_limit : 1.0,
+    //     update_h_limit : 45.0,
 
     //     launch_vslam : true,
     //     calib_enabled : false,
     // };
-    static settings = {//jetchariot
-        vslam_path : '/home/picam360/github/picam360-vslam',
-        vslam_option : '--disable_vis',
-        //vslam_option : '',
-        vslam_filename : 'waypoints.data',
-        cam_offset : {//enc fitting
-            x : 0.0,
-            y : 0.0,
-            heading : 0,
-        },
-        cam_heading : 0,//physical
-
-        //for auto-drive
-        dr_threashold_waypoint : 0.1,
-        dh_threashold_waypoint : 10,
-        dr_threashold : 0.05,
-        dh_threashold : 10,
-        confidence_penalty_gain : 5,//percentage per meter
-
-        //for map
-        // dr_threashold_waypoint : 0.2,
-        // dh_threashold_waypoint : 20,
-        // dr_threashold : 0.1,
-        // dh_threashold : 10,
-
-        update_gain : 0.5,
-        update_r_cutoff : 0.3,
-        update_h_cutoff : 15.0,
-        update_r_limit : 1.0,
-        update_h_limit : 45.0,
-
-        launch_vslam : true,
-        calib_enabled : false,
-    };
     static status = {
         latest_confidence : 0,
     };
