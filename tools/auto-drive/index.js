@@ -118,7 +118,7 @@ let m_auto_drive_direction = "";//forward or backward
 let m_auto_drive_heading_tuning = false;
 let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
-let m_object_tracking = {
+let m_vord_person = {
 	"state": 0,
 	"forward": {
 		"objects": [],
@@ -130,7 +130,15 @@ let m_object_tracking = {
 		"st": 0,
 		"et": 0,
 	},
-}
+};
+let m_vord_tree = {
+	"state": 0,
+	"tree": {
+		"objects": [],
+		"st": 0,
+		"et": 0,
+	},
+};
 const ODOMETRY_TYPE = {
 	GPS: "GPS",
 	ENCODER: "ENCODER",
@@ -150,20 +158,14 @@ let m_odometry_conf = {
 	},
 };
 
-function launchVord() {
+function launchVordTree() {
 	const vord_path = "/home/picam360/github/picam360-vord";
 	const vord_options = "";
-	//perceptree
-    // const command = `
-    //     source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
-    //     conda activate perceptree && \
-    //     python ${vord_path}/vord.py ${vord_options}
-    // `;
-    const command = `
-        source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
-        conda activate yolo_v8_py310 && \
-        PYTHONPATH=/usr/lib/python3.10/dist-packages:$PYTHONPATH python ${vord_path}/vord-person.py ${vord_options}
-    `;
+	const command = `
+		source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
+		conda activate perceptree && \
+		python ${vord_path}/vord-tree.py ${vord_options}
+	`;
 	const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vord_path) });
 	vslam_process.stdout.on('data', (data) => {
 		//console.log(`PICAM360_VORD STDOUT: ${data}`);
@@ -177,8 +179,59 @@ function launchVord() {
 		console.log(`PICAM360_VORD STDOUT CLOSED(: ${code})`);
 	});
 }
-function killVord() {
-	const processName = "picam360-vord";
+function killVordTree() {
+	const processName = "picam360-vord-tree";
+
+	try {
+		const output = execSync(`ps -eo pid,comm,args`, { encoding: "utf-8" });
+
+		const lines = output.trim().split("\n").slice(1);
+
+		const matchingPids = lines
+			.map(line => line.trim().split(/\s+/, 3)) // [pid, comm, args]
+			.filter(([pid, comm, args]) =>
+				comm === processName || args.split(" ")[0] === processName
+			)
+			.map(([pid]) => parseInt(pid));
+
+		// kill
+		for (const pid of matchingPids) {
+			console.log(`Killing PID ${pid} (${processName})`);
+			process.kill(pid);
+		}
+
+		if (matchingPids.length === 0) {
+			console.log(`No matching process found for "${processName}"`);
+		}
+
+	} catch (err) {
+		console.error("Error while killing process:", err.message);
+	}
+}
+
+function launchVordPerson() {
+	const vord_path = "/home/picam360/github/picam360-vord";
+	const vord_options = "";
+	const command = `
+		source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
+		conda activate yolo_v8_py310 && \
+		PYTHONPATH=/usr/lib/python3.10/dist-packages:$PYTHONPATH python ${vord_path}/vord-person.py ${vord_options}
+	`;
+	const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vord_path) });
+	vslam_process.stdout.on('data', (data) => {
+		//console.log(`PICAM360_VORD STDOUT: ${data}`);
+	});
+
+	vslam_process.stderr.on('data', (data) => {
+		console.error(`PICAM360_VORD STDERR: ${data}`);
+	});
+
+	vslam_process.on('close', (code) => {
+		console.log(`PICAM360_VORD STDOUT CLOSED(: ${code})`);
+	});
+}
+function killVordPerson() {
+	const processName = "picam360-vord-person";
 
 	try {
 		const output = execSync(`ps -eo pid,comm,args`, { encoding: "utf-8" });
@@ -379,12 +432,12 @@ function getBest(objects, minCount) {
   const nonZeroCount = countNonZero(scores);
 
   if (nonZeroCount <= minCount) {
-    return null;
+	return null;
   }
 
   // return maximum
   return objects.reduce((max, obj) =>
-    obj.score > max.score ? obj : max
+	obj.score > max.score ? obj : max
   );
 }
 
@@ -399,7 +452,7 @@ function pixelToAngle(dx, width = 512, fovDeg = 120) {
 }
 
 function check_person_detected(direction) {
-	for(const obj of m_object_tracking[direction].objects){
+	for(const obj of m_vord_person[direction].objects){
 		if(obj.label == "person"){
 			return true;
 		}
@@ -470,7 +523,7 @@ function move_pwm_robot(distance, angle, minus=0) {
 	let now = Date.now();
 	
 	if(m_options.cameras[m_auto_drive_direction].check_person_detected !== false){
-		if(now - m_object_tracking[m_auto_drive_direction].et > 3000){
+		if(now - m_vord_person[m_auto_drive_direction].et > 3000){
 			console.log("Valid object tracking is required for safety.");
 			stop_robot();
 			return;
@@ -816,12 +869,30 @@ function main() {
 					if (tmp_img.length == 3) {
 						const jpeg_data = tmp_img[2];
 
-						if(m_options["vord_enabled"] && m_auto_drive_direction == direction){
-							if (m_object_tracking.state == 1) {
-								m_object_tracking.state = 2;
-								m_object_tracking[direction].st = now;
+						if(m_options["vord_enabled"] 
+							&& (m_drive_mode == "STANBY" || m_drive_submode == "TRACKING")
+							&& now - m_vord_tree["tree"].st > 1000){//1fps
 
-								m_client.publish('picam360-vord', JSON.stringify({
+							if (m_vord_tree.state == 1) {
+								m_vord_tree.state = 2;
+								m_vord_tree["tree"].st = now;
+
+								m_client.publish('picam360-vord-tree', JSON.stringify({
+									"cmd": "detect",
+									"test": false,
+									"show": m_options["vord_debug"],
+									"jpeg_data": jpeg_data.toString("base64"),
+								}));
+							}
+						}
+
+						if(m_options["vord_enabled"] && m_auto_drive_direction == direction
+							&& now - m_vord_person[direction].st > 100){//10fps
+							if (m_vord_person.state == 1) {
+								m_vord_person.state = 2;
+								m_vord_person[direction].st = now;
+
+								m_client.publish('picam360-vord-person', JSON.stringify({
 									"cmd": "detect",
 									"test": false,
 									"show": m_options["vord_debug"],
@@ -837,10 +908,10 @@ function main() {
 							record_waypoints_handler(tmp_img);
 	
 							if (m_drive_submode == "TRACKING") {
-								if(now - m_object_tracking[direction].et > 3000){
+								if(now - m_vord_tree["tree"].et > 3000){
 									tracking_handler([]);//stop_robot
 								}else{
-									tracking_handler(m_object_tracking[direction].objects);
+									tracking_handler(m_vord_tree["tree"].objects);
 								}
 							}
 							break;
@@ -867,12 +938,13 @@ function main() {
 					if (tmp_img.length == 3) {
 						const jpeg_data = tmp_img[2];
 
-						if(m_options["vord_enabled"] && m_auto_drive_direction == direction){
-							if (m_object_tracking.state == 1) {
-								m_object_tracking.state = 2;
-								m_object_tracking[direction].st = now;
+						if(m_options["vord_enabled"] && m_auto_drive_direction == direction
+							&& now - m_vord_person[direction].st > 100){//10fps
+							if (m_vord_person.state == 1) {
+								m_vord_person.state = 2;
+								m_vord_person[direction].st = now;
 	
-								m_client.publish('picam360-vord', JSON.stringify({
+								m_client.publish('picam360-vord-person', JSON.stringify({
 									"cmd": "detect",
 									"test": false,
 									"show": m_options["vord_debug"],
@@ -889,30 +961,53 @@ function main() {
 			});
 		}
 
-
-		subscriber.subscribe('picam360-vord-output', (data, key) => {
+		subscriber.subscribe('picam360-vord-tree-output', (data, key) => {
 			//console.log(data);
 			const params = JSON.parse(data);
 
 			if (params['type'] == 'info') {
 				if (params['msg'] == 'startup') {
-					m_object_tracking.state = 1;
+					m_vord_tree.state = 1;
 				}
 			} else if (params['type'] == 'detect') {
+				const direction = "tree";
 				const now = Date.now();
-				m_object_tracking.state = 1;
-				m_object_tracking[params['user_data'].direction].et = now;
-				m_object_tracking[params['user_data'].direction].objects = params['objects'];
-				const elapsed = m_object_tracking[params['user_data'].direction].et - m_object_tracking[params['user_data'].direction].st;
-				console.log(`object_tracking (${params['user_data'].direction}) updated in ${elapsed}ms`);
+				m_vord_tree.state = 1;
+				m_vord_tree[direction].et = now;
+				m_vord_tree[direction].objects = params['objects'];
+				const elapsed = m_vord_tree[direction].et - m_vord_tree[direction].st;
+				console.log(`object_tracking (${direction}) updated in ${elapsed}ms`);
+
+				console.log(params['objects']);
+			}
+		});
+
+		subscriber.subscribe('picam360-vord-person-output', (data, key) => {
+			//console.log(data);
+			const params = JSON.parse(data);
+
+			if (params['type'] == 'info') {
+				if (params['msg'] == 'startup') {
+					m_vord_person.state = 1;
+				}
+			} else if (params['type'] == 'detect') {
+				const direction = params['user_data'].direction;
+				const now = Date.now();
+				m_vord_person.state = 1;
+				m_vord_person[direction].et = now;
+				m_vord_person[direction].objects = params['objects'];
+				const elapsed = m_vord_person[direction].et - m_vord_person[direction].st;
+				console.log(`object_tracking (${direction}) updated in ${elapsed}ms`);
 
 				console.log(params['objects']);
 			}
 		});
 
 		if (m_options["vord_enabled"]) {
-			killVord();
-			launchVord();
+			killVordPerson();
+			launchVordPerson();
+			killVordTree();
+			launchVordTree();
 		}
 
 		setInterval(() => {

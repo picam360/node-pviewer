@@ -36,16 +36,16 @@ const ODOMETRY_TYPE = {
 	VSLAM : "VSLAM",
 };
 let m_odometry_conf = {
-	odom_type : ODOMETRY_TYPE.VSLAM,
-//	odom_type : ODOMETRY_TYPE.ENCODER,
+//	odom_type : ODOMETRY_TYPE.VSLAM,
+	odom_type : ODOMETRY_TYPE.ENCODER,
 	GPS : {
 		enabled : false
 	},
 	ENCODER : {
-		enabled : false
+		enabled : true
 	},
 	VSLAM : {
-		enabled : true
+		enabled : false
 	},
 };
 
@@ -253,7 +253,7 @@ function main() {
 
 		let tmp_img = [];
 		let last_ts = Date.now();
-		subscriber.subscribe('pserver-vslam-pst', (data, key) => {
+		subscriber.subscribe('pserver-forward-pst', (data, key) => {
 			last_ts = Date.now();
 			if(data.length == 0 && tmp_img.length != 0){
 				localization_handler(tmp_img);
