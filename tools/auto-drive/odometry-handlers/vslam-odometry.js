@@ -792,6 +792,7 @@ class VslamOdometry {
                 return;
             }else if(this.current_odom == null){//first estimation
 
+                //TODO : 20250917 : this.vslam_waypoints=null
                 const keys = Object.keys(this.vslam_waypoints);
                 //this.requestTrack(`${this.push_cur}`, jpeg_data, true, 1);
                 const ref_timestamps = keys.slice(0, 5);

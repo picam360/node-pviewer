@@ -84,7 +84,7 @@ class EncoderOdometry {
                 return;
             }
 
-            //dtheta *= -1;//for jikki
+            dtheta *= -1;//for jikki//TODO:20250917
     
             let dx, dy;
             const theta = -encoder_params.heading * Math.PI / 180 + Math.PI / 2;

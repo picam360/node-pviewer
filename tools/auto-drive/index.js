@@ -22,21 +22,24 @@ let m_options = {
 	"waypoint_threshold_m" : 10,
 	"data_filepath" : "/home/picam360/.auto-drive/auto-drive-waypoints",
 	"reverse" : false,
-	//"tolerance_distance" : 2.0,
-	"tolerance_distance" : 0.1,
 
-	// "forward_pwm_base" : 50,
-	// "backward_pwm_base" : 46,
-	// "pwm_range" : 10,
-	// "pwm_control_gain" : 0.06,
-
-	//for jetchariot
-	"forward_pwm_base" : 75,
-	"backward_pwm_base" : 75,
-	"lr_ratio_forward" : 0.999,
-	"lr_ratio_backward" : 1.050,
-	"pwm_range" : 75,
+	//juki
+	"tolerance_distance" : 2.0,
+	"forward_pwm_base" : 50,
+	"backward_pwm_base" : 46,
+	"lr_ratio_forward" : 1.0,
+	"lr_ratio_backward" : 1.0,
+	"pwm_range" : 10,
 	"pwm_control_gain" : 0.06,
+
+	// //for jetchariot
+	// "tolerance_distance" : 0.1,
+	// "forward_pwm_base" : 75,
+	// "backward_pwm_base" : 75,
+	// "lr_ratio_forward" : 0.999,
+	// "lr_ratio_backward" : 1.050,
+	// "pwm_range" : 75,
+	// "pwm_control_gain" : 0.06,
 };
 let m_argv = null;
 let m_socket = null;
