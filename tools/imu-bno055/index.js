@@ -325,8 +325,8 @@ function main(){
 
                     const imu_value = {
                         timestamp,
-                        gyro,
                         accel,
+                        gyro,
                         quaternion,
                         heading,
                         status,
@@ -335,7 +335,13 @@ function main(){
                         console.log('calibration status:', imu_value);
                     }
 
-                    client.publish(`pserver-imu`, JSON.stringify(imu_value), (err, reply) => {
+                    client.publish(`pserver-imu`, JSON.stringify(imu_value, (key, value) => {
+                        if (typeof value === "number") {
+                            return Math.round(value * 1e9) / 1e9;
+                        }else{
+                            return value;
+                        }
+                    }, 2), (err, reply) => {
                         if (err) {
                             console.error('Error publishing message:', err);
                         } else {

@@ -3,16 +3,29 @@ const redis = require('redis');
 
 const ICM_ADDR = 0x68;
 
-// ---- registers ----
-const REG_WHO_AM_I   = 0x75;
-const REG_PWR_MGMT_1 = 0x6B;
-const REG_ACCEL_XOUT_H = 0x3B;
+// ======================================================
+// ICM-20948 registers
+// ======================================================
+const REG_BANK_SEL = 0x7F;
 
-// ---- scales ----
-const ACCEL_SCALE = 9.80665 / 16384.0;   // ±2g
-const GYRO_SCALE  = Math.PI / 180 / 131; // ±250 dps
+// Bank 0
+const REG_WHO_AM_I       = 0x00;
+const REG_PWR_MGMT_1     = 0x06;
+const REG_ACCEL_XOUT_H   = 0x2D;
 
-// ---- timestamp ----
+// Expected WHO_AM_I value
+const WHO_AM_I_ICM20948 = 0xEA;
+
+// ======================================================
+// Scale factors (default full-scale settings)
+// Accel: ±2g, Gyro: ±250 dps
+// ======================================================
+const ACCEL_SCALE = 9.80665 / 16384.0;   // m/s^2 per LSB
+const GYRO_SCALE  = Math.PI / 180 / 131; // rad/s per LSB
+
+// ======================================================
+// Timestamp helper (same as original code)
+// ======================================================
 let t0_hr = 0n;
 let t0_epoch_ns = 0n;
 
@@ -33,19 +46,37 @@ function now_ns() {
     };
 }
 
-// ---- init ----
-function initICM(bus) {
-    const who = bus.readByteSync(ICM_ADDR, REG_WHO_AM_I);
-    if (who !== 0xE1) throw new Error("ICM20498 WHO_AM_I mismatch");
-
-    bus.writeByteSync(ICM_ADDR, REG_PWR_MGMT_1, 0x01); // PLL
-    console.log("ICM20498 initialized");
+// ======================================================
+// Helper: select register bank
+// ======================================================
+function selectBank(bus, bank) {
+    bus.writeByteSync(ICM_ADDR, REG_BANK_SEL, bank << 4);
 }
 
-// ---- burst read ----
+// ======================================================
+// Initialization
+// ======================================================
+function initICM20948(bus) {
+    // Select bank 0
+    selectBank(bus, 0);
+
+    const who = bus.readByteSync(ICM_ADDR, REG_WHO_AM_I);
+    if (who !== WHO_AM_I_ICM20948) {
+        throw new Error(`ICM20948 WHO_AM_I mismatch: 0x${who.toString(16)}`);
+    }
+
+    // Wake up device and select best clock source
+    bus.writeByteSync(ICM_ADDR, REG_PWR_MGMT_1, 0x01);
+
+    console.log('ICM20948 initialized');
+}
+
+// ======================================================
+// Burst read: accel + gyro (Bank 0)
+// ======================================================
 function readImu(bus) {
-    const buf = Buffer.alloc(14);
-    bus.readI2cBlockSync(ICM_ADDR, REG_ACCEL_XOUT_H, 14, buf);
+    const buf = Buffer.alloc(12);
+    bus.readI2cBlockSync(ICM_ADDR, REG_ACCEL_XOUT_H, 12, buf);
 
     const i16 = (o) => {
         let v = (buf[o] << 8) | buf[o + 1];
@@ -60,18 +91,20 @@ function readImu(bus) {
     };
 
     const gyro = {
-        x: i16(8)  * GYRO_SCALE,
-        y: i16(10) * GYRO_SCALE,
-        z: i16(12) * GYRO_SCALE,
+        x: i16(6)  * GYRO_SCALE,
+        y: i16(8)  * GYRO_SCALE,
+        z: i16(10) * GYRO_SCALE,
     };
 
     return { accel, gyro };
 }
 
-// ---- main ----
+// ======================================================
+// Main
+// ======================================================
 async function main() {
     const bus = i2c.openSync(7);
-    initICM(bus);
+    initICM20948(bus);
 
     const client = redis.createClient();
     await client.connect();
@@ -79,16 +112,22 @@ async function main() {
     setInterval(() => {
         const timestamp = now_ns();
         const { accel, gyro } = readImu(bus);
-
+        const imu_value = {
+            timestamp,
+            accel,
+            gyro,
+        };
         client.publish(
-            "pserver-imu",
-            JSON.stringify({
-                timestamp,
-                accel,
-                gyro,
-            })
+            'pserver-imu',
+            JSON.stringify(imu_value, (key, value) => {
+                if (typeof value === "number") {
+                    return Math.round(value * 1e9) / 1e9;
+                }else{
+                    return value;
+                }
+            }, 2)
         );
-    }, 10); // 100Hz
+    }, 1000/500); // 500 Hz
 }
 
 if (require.main === module) {

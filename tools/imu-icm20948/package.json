@@ -1,0 +1,11 @@
+{
+    "name": "imu-icm20948",
+    "version": "1.0.0",
+    "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
+    "license": "MIT",
+    "dependencies": {
+        "ahrs": "^1.3.3",
+        "quaternion": "^2.0.1",
+        "redis": "^4.7.0"
+    }
+}
