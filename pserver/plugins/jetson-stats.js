@@ -10,82 +10,140 @@ function readValue(path, scale = 1) {
     return null;
   }
 }
-function getArpTable() {
-    const stdout = execSync('arp -an', { encoding: 'utf8' });
+function getArpTable(callback) {
+    exec('arp -an',
+        { encoding: 'utf8' },
+        (error, stdout, stderr) => {
 
-    const map = {};
+            // const et = performance.now();
+            // const elapsed_ms = et - st;
+            // if (elapsed_ms > 100) {
+            //     console.log(`getSSID too much slow: ${elapsed_ms.toFixed(2)} ms`);
+            // }
 
-    stdout.split('\n').forEach(line => {
-        const match = line.match(/\((.*?)\) at ([0-9a-f:]{17})/i);
-        if (!match) return;
+            if (error) {
+                callback(error, null);
+                return;
+            }
 
-        const ip = match[1];
-        const mac = match[2].toLowerCase();
+            if (stderr) {
+                callback(new Error(stderr), null);
+                return;
+            }
 
-        map[mac] = ip;
-    });
+            const map = {};
 
-    return map;
+            stdout.split('\n').forEach(line => {
+                const match = line.match(/\((.*?)\) at ([0-9a-f:]{17})/i);
+                if (!match) return;
+
+                const ip = match[1];
+                const mac = match[2].toLowerCase();
+
+                map[mac] = ip;
+            });
+
+            callback(null, map);
+        }
+    );
 }
 
+function getSSID(callback) {
+    //const st = performance.now();
+    exec('nmcli -t -f active,ssid dev wifi | egrep \'^yes:\' | cut -d\\: -f2',
+        { encoding: 'utf8' },
+        (error, stdout, stderr) => {
 
-function getSSID() {
-    const st = performance.now();
-    const stdout = execSync('nmcli -t -f active,ssid dev wifi | egrep \'^yes:\' | cut -d\\: -f2', {
-        encoding: 'utf8'
-    });
-    const et = performance.now();
-    const elapsed_ms = et - st;
-    if(elapsed_ms > 100){
-        console.log(`getSSID too match slow: ${elapsed_ms.toFixed(2)} ms`);
-    }
-    return stdout.trim();
-};
+            // const et = performance.now();
+            // const elapsed_ms = et - st;
+            // if (elapsed_ms > 100) {
+            //     console.log(`getSSID too much slow: ${elapsed_ms.toFixed(2)} ms`);
+            // }
 
-function getStations() {
-    const stdout = execSync('iw dev wlan0 station dump', {
-        encoding: 'utf8'
-    });
+            if (error) {
+                callback(error, null);
+                return;
+            }
 
-    const arpMap = getArpTable();
+            if (stderr) {
+                callback(new Error(stderr), null);
+                return;
+            }
 
-    const stations = {};
-
-    const blocks = stdout.split('Station ').slice(1);
-
-    blocks.forEach(block => {
-        const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-
-        const mac = lines[0].split(' ')[0].toLowerCase();
-        const data = {};
-
-        lines.slice(1).forEach(line => {
-            const match = line.match(/^([^:]+):\s*(.+)$/);
-            if (!match) return;
-
-            const key = match[1].trim();
-            const value = match[2].trim();
-
-            data[key] = value;
-        });
-
-        const ip = arpMap[mac];
-
-        if (ip) {
-            stations[ip] = {
-                mac,
-                ...data
-            };
-        } else {
-            stations[mac] = {
-                mac,
-                ...data,
-                ip: null
-            };
+            callback(null, stdout.trim());
         }
-    });
+    );
+}
 
-    return stations;
+function getStations(callback) {
+    getArpTable((err, arpMap) => {
+        if (err) {
+            console.error(err);
+            callback(err, null);
+            return;
+        }
+
+        //const st = performance.now();
+        exec('iw dev wlan0 station dump',
+            { encoding: 'utf8' },
+            (error, stdout, stderr) => {
+    
+                // const et = performance.now();
+                // const elapsed_ms = et - st;
+                // if (elapsed_ms > 100) {
+                //     console.log(`getSSID too much slow: ${elapsed_ms.toFixed(2)} ms`);
+                // }
+    
+                if (error) {
+                    callback(error, null);
+                    return;
+                }
+    
+                if (stderr) {
+                    callback(new Error(stderr), null);
+                    return;
+                }
+
+                const stations = {};
+
+                const blocks = stdout.split('Station ').slice(1);
+        
+                blocks.forEach(block => {
+                    const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+        
+                    const mac = lines[0].split(' ')[0].toLowerCase();
+                    const data = {};
+        
+                    lines.slice(1).forEach(line => {
+                        const match = line.match(/^([^:]+):\s*(.+)$/);
+                        if (!match) return;
+        
+                        const key = match[1].trim();
+                        const value = match[2].trim();
+        
+                        data[key] = value;
+                    });
+        
+                    const ip = arpMap[mac];
+        
+                    if (ip) {
+                        stations[ip] = {
+                            mac,
+                            ...data
+                        };
+                    } else {
+                        stations[mac] = {
+                            mac,
+                            ...data,
+                            ip: null
+                        };
+                    }
+                });
+        
+                callback(null, stations);
+            }
+        );
+    });
 }
 
 const self = {
@@ -94,9 +152,29 @@ const self = {
         console.log("create host plugin");
         const plugin = {
             name: PLUGIN_NAME,
+            ssid: "NOT_INITIALIZED",
+            wifi_stations: {},
             init_options: function (options) {
                 m_options = options["jetson-stats"];
 
+                setInterval(() => {
+                    getSSID((err, ssid) => {
+                        if (err) {
+                            console.error(err);
+                            return;
+                        }
+                        
+                        self.ssid = ssid;
+                    });
+                    getStations((err, wifi_stations) => {
+                        if (err) {
+                            console.error(err);
+                            return;
+                        }
+                        
+                        self.wifi_stations = wifi_stations;
+                    });
+                }, 1000);
                 setInterval(() => {
                     if(!m_plugin_host.get_redis_client){
                         return;
@@ -118,10 +196,6 @@ const self = {
                           1000
                         );
 
-                        const ssid = getSSID();
-
-                        const wifi_stations = getStations();
-
                         const camdevs = {};
                         if(m_options["camdevs"]){
                             for(const [key, value] of Object.entries(m_options["camdevs"])){
@@ -142,8 +216,8 @@ const self = {
                             voltage,
                             current,
                             tempCPU,
-                            ssid,
-                            wifi_stations,
+                            ssid: self.ssid,
+                            wifi_stations: self.wifi_stations,
                             camdevs,
                         };
 
