@@ -35,8 +35,7 @@ let m_options = {
 	"lr_ratio_backward": 1.0,
 	"pwm_range": 10,
 	"pwm_control_gain": 0.06,
-	"move_forward_camera": "backward",
-	"move_backward_camera": "backward",
+	"auto_drive_camera": "backward",
 	"cameras": {
 		"forward": {
 			"cam_offset" : {
@@ -58,7 +57,7 @@ let m_options = {
 				"heading" : 0,
 				//"heading" : -8.5,
 			},
-			"cam_heading" : 0,//physical
+			"cam_heading" : 180,//physical
 			"pst_channel": "pserver-backward-pst",
 			"check_person_detected": true,
 		}
@@ -73,8 +72,7 @@ let m_options = {
 	// "lr_ratio_backward" : 1.050,
 	// "pwm_range" : 75,
 	// "pwm_control_gain" : 0.06,
-	// "move_forward_camera": "forward",
-	// "move_backward_camera": "forward",
+	// "auto_drive_camera": "backward",
 	// "cameras": {
 	// 	"forward": {
 	// 		"cam_offset" : {
@@ -96,7 +94,7 @@ let m_options = {
 	// 			"heading" : 0,
 	// 			//"heading" : -8.5,
 	// 		},
-	// 		"cam_heading" : 0,//physical
+	// 		"cam_heading" : 180,//physical
 	// 		"pst_channel": "pserver-backward-pst",
 	//		"check_person_detected": false,
 	// 	}
@@ -817,6 +815,7 @@ function main() {
 
 		const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 		load_auto_drive_waypoints_ext(pif_dirpath, 0, null, (waypoints) => {
+
 			waypoints = reindex_waypoints(waypoints, m_options.reverse);
 
 			update_auto_drive_waypoints({
@@ -862,22 +861,24 @@ function main() {
 
 		let last_vslam_pst_ts = Date.now();
 		{
+
 			let tmp_img = [];
 			subscriber.subscribe(m_options.cameras.forward.pst_channel, (data, key) => {
 				const direction = "forward";
 				const now = Date.now();
-				last_vslam_pst_ts = now;
+				m_options.cameras[direction].last_pst_ts = now;
 				if (data.length == 0 && tmp_img.length != 0) {
 					if (tmp_img.length == 3) {
 						const jpeg_data = tmp_img[2];
 
 						if(m_options["vord_enabled"] 
-							&& (m_drive_mode == "STANBY" || m_drive_submode == "TRACKING")
+							&& (m_drive_mode == "STANBY" || m_drive_mode == "RECORD" || m_drive_submode == "TRACKING")
 							&& now - m_vord_tree["tree"].st > 1000){//1fps
 
 							if (m_vord_tree.state == 1) {
 								m_vord_tree.state = 2;
 								m_vord_tree["tree"].st = now;
+								
 
 								m_client.publish('picam360-vord-tree', JSON.stringify({
 									"cmd": "detect",
@@ -905,37 +906,40 @@ function main() {
 						}
 					}
 
-					switch (m_drive_mode) {
-						case "RECORD":
-							record_waypoints_handler(tmp_img);
-	
-							if (m_drive_submode == "TRACKING") {
-								if(now - m_vord_tree["tree"].et > 3000){
-									tracking_handler([]);//stop_robot
-								}else{
-									tracking_handler(m_vord_tree["tree"].objects);
-								}
-							}
-							break;
-						case "AUTO":
-							if (m_auto_drive_ready) {
-								auto_drive_handler(tmp_img);
-							}
-							break;
+					if (m_drive_mode == "RECORD" && m_drive_submode == "TRACKING") {
+						if(now - m_vord_tree["tree"].et > 3000){
+							tracking_handler([]);//stop_robot
+						}else{
+							tracking_handler(m_vord_tree["tree"].objects);
+						}
 					}
+
+					if(m_options["auto_drive_camera"] == direction){
+						last_vslam_pst_ts = now;
+						switch (m_drive_mode) {
+							case "RECORD":
+								record_waypoints_handler(tmp_img);
+								break;
+							case "AUTO":
+								if (m_auto_drive_ready) {
+									auto_drive_handler(tmp_img);
+								}
+								break;
+						}
+					}
+
 					tmp_img = [];
 				} else {
 					tmp_img.push(Buffer.from(data, 'base64'));
 				}
 			});
 		}
-		m_options.cameras.backward.last_pst_ts = Date.now();
 		{
 			let tmp_img = [];
 			subscriber.subscribe(m_options.cameras.backward.pst_channel, (data, key) => {
 				const direction = "backward";
 				const now = Date.now();
-				m_options.cameras.backward.last_pst_ts = now;
+				m_options.cameras[direction].last_pst_ts = now;
 				if (data.length == 0 && tmp_img.length != 0) {
 					if (tmp_img.length == 3) {
 						const jpeg_data = tmp_img[2];
@@ -956,6 +960,21 @@ function main() {
 							}
 						}
 					}
+
+					if(m_options["auto_drive_camera"] == direction){
+						last_vslam_pst_ts = now;
+						switch (m_drive_mode) {
+							case "RECORD":
+								record_waypoints_handler(tmp_img);
+								break;
+							case "AUTO":
+								if (m_auto_drive_ready) {
+									auto_drive_handler(tmp_img);
+								}
+								break;
+						}
+					}
+
 					tmp_img = [];
 				} else {
 					tmp_img.push(Buffer.from(data, 'base64'));

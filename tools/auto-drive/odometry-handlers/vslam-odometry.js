@@ -526,7 +526,7 @@ class VslamOdometry {
                             confidence = cal_confidence(params['confidence'][odom_cur]);
                         }
                         VslamOdometry.status.latest_confidence = confidence;
-                        if(confidence !== undefined && confidence < 5){
+                        if(confidence !== undefined && confidence < 2){
                             console.log("too low confidence", confidence, params['confidence']);
                         }else if (odom_cur > this.last_odom_cur) {
                             console.log("enough confidence", confidence, params['confidence']);
@@ -574,6 +574,10 @@ class VslamOdometry {
                             }else{
                                 const kf_pos = this.active_points[odom_cur];
                                 const enc_pos = this.enc_positions[odom_cur];
+                                if(!kf_pos || !enc_pos){
+                                    console.log("something wrong!");
+                                    return;
+                                }
                                 const diff_x = kf_pos.x - enc_pos.x;
                                 const diff_y = kf_pos.y - enc_pos.y;
                                 const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
