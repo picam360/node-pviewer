@@ -442,6 +442,7 @@ void stereo_thread()
 
             int w = left.cols;
             int h = left.rows;
+            //printf("%d,%d\n", w, h);
 
             cv::Mat left_gray8, right_gray8;
             cv::cvtColor(left, left_gray8, cv::COLOR_BGR2GRAY);
@@ -458,25 +459,75 @@ void stereo_thread()
             std::memcpy(img_l.img->ptr, left_gray16.data, w * h * sizeof(uint16_t));
             std::memcpy(img_r.img->ptr, right_gray16.data, w * h * sizeof(uint16_t));
 
+            int64_t t_ns = sec * 1000000000LL + nsec;
             basalt::OpticalFlowInput::Ptr in(new basalt::OpticalFlowInput);
-            in->t_ns = sec * 1000000000LL + nsec;
+            in->t_ns = t_ns;
             in->img_data = {img_l, img_r};
             opt_flow->input_queue.push(in);
 
             {//stabilizer
                 if (g_left.empty()){
-                    g_left = left_gray8;
-                    g_right = right_gray8;
+                    g_left = left;
+                    g_right = right;
                 }
                 Point2d shift;
                 Mat affine_out;
-                estimateShift(g_left, left_gray8, 32, 32, shift, affine_out);
 
-                std::cout << "shift: " << shift << std::endl;
-                std::cout << "Affine:\n" << affine_out << std::endl;
 
-                g_left = left_gray8;
-                g_right = right_gray8;
+                struct timeval st = { };
+                gettimeofday(&st, NULL);
+
+                bool ret = estimateShift(g_left, left, w, h/2, shift, affine_out);
+
+                struct timeval et = { };
+                gettimeofday(&et, NULL);
+
+                struct timeval diff;
+                timersub(&et, &st, &diff);
+                float elapsed_sec = (float) diff.tv_sec + (float) diff.tv_usec / 1000000;
+                if(ret){
+                    double fov = 90.0;
+                    double fov_rad = fov * M_PI / 180.0;
+                    double fx = w / (2 * tan(fov_rad/2));
+                    double fy = h / (2 * tan(fov_rad/2));
+
+                    double yaw   = atan( shift.x / fx );
+                    double pitch = atan( shift.y / fy );
+
+                    double yaw_deg   = yaw   * 180.0 / CV_PI;
+                    double pitch_deg = pitch * 180.0 / CV_PI;
+
+                    double roll = atan2(affine_out.at<double>(1,0), affine_out.at<double>(0,0));
+                    double roll_deg = roll * 180.0 / M_PI;
+
+                    // printf("stabilizer : euler=%+.6f,%+.6f,%+.6f, shift=%+.6f,%+.6f, elapsed=%+.6f\n",
+                    //     yaw_deg, pitch_deg, roll_deg, shift.x, shift.y, elapsed_sec);
+                    //std::cout << "Affine:\n" << affine_out << std::endl;
+                    {
+                        redisContext *c = redisConnect(REDIS_HOST, REDIS_PORT);
+                        if (c) {
+                            char buff[1024];
+                            int size = snprintf(buff, 1024, "%lf,%lf,%lf,%lf",
+                                yaw_deg, pitch_deg, roll_deg, (double)t_ns / 1e9);
+                            redisCommand(c, "PUBLISH %s %b", "stabilizer", buff, size);
+
+                            // json j;
+                            // j["t_ns"] = t_ns;
+                            // j["shift"] = { shift.x, shift.y };
+                            // j["euler"] = { yaw_deg, pitch_deg, roll_deg };
+
+                            // std::string s = j.dump(2);
+                            // redisCommand(c, "PUBLISH %s %b", "pserver-stabilizer", s.data(), s.size());
+
+                            redisFree(c);
+                        }
+                    }
+                }else{
+                    printf("estimateShift : failed : %f, %ld\n", elapsed_sec, t_ns);
+                }
+
+                g_left = left;
+                g_right = right;
             }
 
             tmp_img.clear();
@@ -495,6 +546,7 @@ void stereo_thread()
         tmp_img.emplace_back(std::move(bin));
         freeReplyObject(r);
     }
+    printf("redis_sub(%s) faild\n", CH_STEREO);
 }
 
 // ============================================================

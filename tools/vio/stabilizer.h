@@ -27,56 +27,89 @@ bool estimateShift(const Mat& img1,
     cvtColor(roi1, g1, COLOR_BGR2GRAY);
     cvtColor(roi2, g2, COLOR_BGR2GRAY);
 
-    // ORB
-    Ptr<ORB> orb = ORB::create(2000);
+    // ---------- feature extraction ----------
+    std::vector<cv::Point2f> pts1;
 
-    vector<KeyPoint> k1, k2;
-    Mat d1, d2;
+    const int GRID=8;
+    int gw=g1.cols/GRID;
+    int gh=gw*g1.rows/g1.cols;
 
-    orb->detectAndCompute(g1, noArray(), k1, d1);
-    orb->detectAndCompute(g2, noArray(), k2, d2);
+    for(int y=0;y<GRID;y++)
+        for(int x=0;x<GRID;x++)
+        {
+            cv::Rect r(x*gw,y*gh,gw,gh);
+            std::vector<cv::Point2f> tmp;
 
-    if (k1.size() < 20 || k2.size() < 20)
-        return false;
+            cv::goodFeaturesToTrack(
+                g1(r), tmp,
+                10,
+                0.001,
+                5);
 
-    BFMatcher matcher(NORM_HAMMING, true);
-    vector<DMatch> matches;
-    matcher.match(d1, d2, matches);
+            for(auto&p:tmp)
+                pts1.push_back(p+cv::Point2f(r.x,r.y));
+        }
 
-    if (matches.size() < 10)
-        return false;
-
-    vector<Point2f> p1, p2;
-    for (auto& m : matches)
+    // FAST fallback
+    if(pts1.size()<80)
     {
-        p1.push_back(k1[m.queryIdx].pt);
-        p2.push_back(k2[m.trainIdx].pt);
+        std::vector<cv::KeyPoint> kp;
+        cv::FAST(g1,kp,20);
+        for(auto&k:kp) pts1.push_back(k.pt);
     }
 
-    // Affine (rotation + scale + translation)
-    Mat inliers;
-    Mat A = estimateAffinePartial2D(p1, p2, inliers, RANSAC);
+    if(pts1.size()<30) return false;
 
-    if (A.empty())
-        return false;
+    // ---------- LK forward ----------
+    std::vector<cv::Point2f> pts2;
+    std::vector<uchar> st;
+    std::vector<float> err;
 
-    affine_out = A.clone();
+    cv::calcOpticalFlowPyrLK(
+        g1,g2,
+        pts1,pts2,
+        st,err,
+        cv::Size(21,21),3);
 
-    // ROI中心点
-    Point2f c(roiW * 0.5f, roiH * 0.5f);
+    // ---------- backward ----------
+    std::vector<cv::Point2f> pts1b;
+    std::vector<uchar> stb;
+    std::vector<float> errb;
 
-    double nx =
-        A.at<double>(0,0)*c.x +
-        A.at<double>(0,1)*c.y +
-        A.at<double>(0,2);
+    cv::calcOpticalFlowPyrLK(
+        g2,g1,
+        pts2,pts1b,
+        stb,errb,
+        cv::Size(21,21),3);
 
-    double ny =
-        A.at<double>(1,0)*c.x +
-        A.at<double>(1,1)*c.y +
-        A.at<double>(1,2);
+    // ---------- FB filter ----------
+    std::vector<cv::Point2f> p1,p2;
 
-    shift.x = nx - c.x;
-    shift.y = ny - c.y;
+    for(int i=0;i<pts1.size();i++)
+        if(st[i]&&stb[i])
+            if(cv::norm(pts1[i]-pts1b[i])<1.0)
+            {
+                p1.push_back(pts1[i]);
+                p2.push_back(pts2[i]);
+            }
+
+    if(p1.size()<20) return false;
+
+    // ---------- affine ----------
+    cv::Mat inl;
+    cv::Mat A=cv::estimateAffinePartial2D(p1,p2,inl,cv::RANSAC);
+
+    if(A.empty()) return false;
+
+    affine_out=A.clone();
+
+    cv::Point2f c(g1.cols*0.5f,g1.rows*0.5f);
+
+    double nx=A.at<double>(0,0)*c.x+A.at<double>(0,1)*c.y+A.at<double>(0,2);
+    double ny=A.at<double>(1,0)*c.x+A.at<double>(1,1)*c.y+A.at<double>(1,2);
+
+    shift.x=nx-c.x;
+    shift.y=ny-c.y;
 
     return true;
 }
