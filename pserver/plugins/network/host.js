@@ -235,6 +235,9 @@ function init_data_stream(callback) {
                     if(res.pviewer_config_ext) {
                         conn.attr.param_pendings.push(["network", "pviewer_config_ext", JSON.stringify(res.pviewer_config_ext)]);
                     }
+                    if(conn.getIpAddress){
+                        conn.attr.param_pendings.push(["network", "downstream_ip_address", conn.getIpAddress()]);
+                    }
         
                     pstcore.pstcore_set_dequeue_callback(res.pst, (data)=>{
                         try{
@@ -377,6 +380,9 @@ function start_websocket(callback) {
                 }
                 getMaxPayload() {
                     return dc._maxPayload;
+                }
+                getIpAddress() {
+                    return request.socket.remoteAddress.replace("::ffff:", "");
                 }
                 send(data) {
                     if (dc.readyState == 3) {

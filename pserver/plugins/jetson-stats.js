@@ -10,11 +10,44 @@ function readValue(path, scale = 1) {
     return null;
   }
 }
+function getArpTable() {
+    const stdout = execSync('arp -an', { encoding: 'utf8' });
+
+    const map = {};
+
+    stdout.split('\n').forEach(line => {
+        const match = line.match(/\((.*?)\) at ([0-9a-f:]{17})/i);
+        if (!match) return;
+
+        const ip = match[1];
+        const mac = match[2].toLowerCase();
+
+        map[mac] = ip;
+    });
+
+    return map;
+}
+
+
+function getSSID() {
+    const st = performance.now();
+    const stdout = execSync('nmcli -t -f active,ssid dev wifi | egrep \'^yes:\' | cut -d\\: -f2', {
+        encoding: 'utf8'
+    });
+    const et = performance.now();
+    const elapsed_ms = et - st;
+    if(elapsed_ms > 100){
+        console.log(`getSSID too match slow: ${elapsed_ms.toFixed(2)} ms`);
+    }
+    return stdout.trim();
+};
 
 function getStations() {
     const stdout = execSync('iw dev wlan0 station dump', {
         encoding: 'utf8'
     });
+
+    const arpMap = getArpTable();
 
     const stations = {};
 
@@ -23,20 +56,33 @@ function getStations() {
     blocks.forEach(block => {
         const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
 
-        const mac = lines[0].split(' ')[0];
+        const mac = lines[0].split(' ')[0].toLowerCase();
         const data = {};
 
         lines.slice(1).forEach(line => {
-        const match = line.match(/^([^:]+):\s*(.+)$/);
-        if (!match) return;
+            const match = line.match(/^([^:]+):\s*(.+)$/);
+            if (!match) return;
 
-        const key = match[1].trim();
-        const value = match[2].trim();
+            const key = match[1].trim();
+            const value = match[2].trim();
 
-        data[key] = value;
+            data[key] = value;
         });
 
-        stations[mac] = data;
+        const ip = arpMap[mac];
+
+        if (ip) {
+            stations[ip] = {
+                mac,
+                ...data
+            };
+        } else {
+            stations[mac] = {
+                mac,
+                ...data,
+                ip: null
+            };
+        }
     });
 
     return stations;
@@ -58,12 +104,12 @@ const self = {
 					const client = m_plugin_host.get_redis_client();
 					if (client) {
                         const voltage = readValue(
-                          '/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon3/in1_input',
+                          '/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon2/in1_input',
                           1000
                         );
                         
                         const current = readValue(
-                          '/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon3/curr1_input',
+                          '/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon2/curr1_input',
                           1000
                         );
                         
@@ -71,6 +117,8 @@ const self = {
                           '/sys/class/thermal/thermal_zone0/temp',
                           1000
                         );
+
+                        const ssid = getSSID();
 
                         const wifi_stations = getStations();
 
@@ -94,6 +142,7 @@ const self = {
                             voltage,
                             current,
                             tempCPU,
+                            ssid,
                             wifi_stations,
                             camdevs,
                         };
