@@ -9,8 +9,8 @@
     "type": "git",
     "url": "git+https://github.com/picam360/node-pviewer.git"
   },
-  "dependencies": {
-  },
+  "dependencies": {},
   "scripts": {
+    "install": "bash setup.sh"
   }
 }

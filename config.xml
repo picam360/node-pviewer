@@ -1,10 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="com.picam360.app.pviewer"
-        version="1.1.0"
-        android-versionCode="10100"
-        ios-CFBundleVersion="1.1.0"
-        xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+<widget android-versionCode="10100" id="com.picam360.app.pviewer" ios-CFBundleVersion="1.1.0" version="1.1.0" xmlns="http://www.w3.org/ns/widgets" xmlns:android="http://schemas.android.com/apk/res/android" xmlns:cdv="http://cordova.apache.org/ns/1.0">
     <name>PViewer</name>
     <description>
         A panoramic video viewer
@@ -13,7 +8,6 @@
         Picam360 Inc.
     </author>
     <content src="http://localhost:8080" />
-    <plugin name="cordova-plugin-whitelist" spec="1" />
     <access origin="*" />
     <allow-intent href="http://*/*" />
     <allow-intent href="https://*/*" />
@@ -21,64 +15,11 @@
     <allow-intent href="sms:*" />
     <allow-intent href="mailto:*" />
     <allow-intent href="geo:*" />
-    <allow-navigation href="*" /> 
-    <platform name="android">
-        <allow-intent href="market:*" />
-		<edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/application">
-		    <application android:usesCleartextTraffic="true" />
-		</edit-config>
-		<icon src="icon.png" />
-    </platform>
-    <platform name="ios">
-        <allow-intent href="itms:*" />
-        <allow-intent href="itms-apps:*" />
-        <preference name="WKWebViewOnly" value="true" />
-        <config-file platform="ios" target="*-Info.plist" parent="NSMotionUsageDescription">
-            <string>PViewer needs access to motion data to display steps.</string>
-        </config-file>
-        <config-file platform="ios" target="*-Info.plist" parent="NSBluetoothAlwaysUsageDescription">
-            <string>This is not used.</string>
-        </config-file>
-        <config-file platform="ios" target="*-Info.plist" parent="NSLocationWhenInUseUsageDescription">
-            <string>This is not used.</string>
-        </config-file>
-        <config-file platform="ios" target="*-Info.plist" parent="NSLocationAlwaysUsageDescription">
-            <string>This is not used.</string>
-        </config-file>
-        <config-file platform="ios" target="*-Info.plist" parent="NSMicrophoneUsageDescription">
-            <string>This is not used.</string>
-        </config-file>
-        <config-file platform="ios" target="*-Info.plist" parent="NSBluetoothPeripheralUsageDescription">
-            <string>This is not used.</string>
-        </config-file>
-        <splash src="res/screen/ios/Default@2x~ipad~anyany.png" />
-        <splash src="res/screen/ios/Default@2x~ipad~comany.png" />
-        <splash src="res/screen/ios/Default@2x~iphone~anyany.png" />
-        <splash src="res/screen/ios/Default@2x~iphone~comany.png" />
-        <splash src="res/screen/ios/Default@2x~iphone~comcom.png" />
-        <splash src="res/screen/ios/Default@3x~iphone~anyany.png" />
-        <splash src="res/screen/ios/Default@3x~iphone~anycom.png" />
-        <splash src="res/screen/ios/Default@3x~iphone~comany.png" />
-    </platform>
-	<platform name="electron">
-	    <preference name="ElectronSettingsFilePath" value="res/electron/settings.json" />
-	    <icon src="res/electron/icon.png" />
-	    <icon src="res/electron/icon@2x.png" target="installer" />
-	</platform>
-    <universal-links>
-        <ios-team-id value="TQ5D9B52DN" />
-        <host name="vpm.picam360.com" scheme="https" event="vpm.picam360.com" >
-             <path url="/pviewer/*" />
-        </host>
-        <host name="park.picam360.com" scheme="https" event="park.picam360.com" >
-             <path url="/watch" />
-        </host>
-        <host name="s.360pi.cam" scheme="https" event="s.360pi.cam" >
-             <path url="/*" />
-        </host>
-     </universal-links>
-     <preference name="AndroidLaunchMode" value="singleInstance" />
-     <preference name="AutoHideSplashScreen" value="true" />
-     <preference name="SplashScreenDelay" value="3000" />
-     <preference name="FadeSplashScreenDuration" value="1000"/>
+    <icon src="res/electron/icon.png" />
+    <icon src="res/electron/icon@2x.png" target="installer" />
+    <preference name="AndroidLaunchMode" value="singleInstance" />
+    <preference name="AutoHideSplashScreen" value="true" />
+    <preference name="SplashScreenDelay" value="3000" />
+    <preference name="FadeSplashScreenDuration" value="1000" />
+    <preference name="ElectronSettingsFilePath" value="res/electron/settings.json" />
 </widget>

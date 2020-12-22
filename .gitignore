@@ -45,6 +45,7 @@ cmake_install.cmake
 build
 app
 node_modules
+pviewer
 
 .DS_Store
 .snipet

@@ -5,7 +5,7 @@
   "main": "pstcore-cordova.js",
   "private": true,
   "dependencies": {
-    "node-pstcore_": "0.0.2"
+    "pstcore": "0.0.1"
   },
   "scripts": {}
 }

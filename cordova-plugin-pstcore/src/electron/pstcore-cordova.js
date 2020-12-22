@@ -1,6 +1,6 @@
 /*global cordova, module*/
 
-var m_pstcore = require('node-pstcore');
+var m_pstcore = require('pstcore');
 var m_pst = null;
 var m_set_param_callback = null;
 module.exports = {
