@@ -1,0 +1,16 @@
+{
+  "name": "node-pviewer",
+  "version": "0.0.1",
+  "description": "PViewer for NodeJS.",
+  "main": "index.js",
+  "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/picam360/node-pviewer.git"
+  },
+  "dependencies": {
+  },
+  "scripts": {
+  }
+}

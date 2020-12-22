@@ -1,0 +1,11 @@
+{
+  "name": "pstcore-cordova-js",
+  "version": "1.0.0",
+  "description": "PstCore Cordova binding.",
+  "main": "pstcore-cordova.js",
+  "private": true,
+  "dependencies": {
+    "node-pstcore_": "0.0.2"
+  },
+  "scripts": {}
+}

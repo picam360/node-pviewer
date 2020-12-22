@@ -1,0 +1,11 @@
+{
+    "browserWindow": {
+ 		"transparent": true,
+ 		"backgroundColor": "#00000000",
+        "fullscreen": false,
+        "frame": false,
+        "webPreferences": {
+        	"nodeIntegration": true
+        }
+    }
+}

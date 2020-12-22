@@ -1,0 +1,30 @@
+{
+  "name": "cordova-plugin-pstcore",
+  "version": "0.1.0",
+  "description": "A pstcore cordova plugin",
+  "cordova": {
+    "id": "cordova-plugin-pstcore",
+    "platforms": [
+      "android",
+      "ios",
+      "wp7"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/picam360/cordova-plugin-pstcore.git"
+  },
+  "keywords": [
+    "cordova",
+    "plugin",
+    "hello",
+    "ecosystem:cordova",
+    "cordova-android"
+  ],
+  "author": "Takuma Hirayama",
+  "license": "GPL",
+  "bugs": {
+    "url": "https://github.com/picam360/cordova-plugin-pstcore/issues"
+  },
+  "homepage": "https://github.com/picam360/cordova-plugin-pstcore#readme"
+}
