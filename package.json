@@ -1,6 +1,6 @@
 {
   "name": "node-pviewer",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "description": "PViewer for NodeJS.",
   "bin": "run.sh",
   "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",

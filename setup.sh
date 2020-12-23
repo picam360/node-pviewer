@@ -16,6 +16,7 @@ cp ../config.json ./www/
 cp -r ../res ./
 
 cordova platform add electron@2.0.0
-cp ../icon.png ./platforms/electron/build-res/installer.png
-cordova prepare electron
+cp ./res/electron/icon.png ./platforms/electron/build-res/installer.png
+cp ./res/electron/cdv-electron-main.js ./platforms/electron/platform_www/cdv-electron-main.js
+cordova prepare electron --release
 #cordova run electron --nobuild
