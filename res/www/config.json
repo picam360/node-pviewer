@@ -1,0 +1,6 @@
+{
+	"plugin_paths" : [
+		"plugins/park/park.js",
+		"plugins/ble/pairing.js"
+	]
+}
