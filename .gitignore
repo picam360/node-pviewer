@@ -42,10 +42,8 @@ CMakeCache.txt
 cmake_install.cmake
 *-debug.cmake
 
-build
-app
+www
 node_modules
-pviewer_electron
 
 .DS_Store
 .snipet

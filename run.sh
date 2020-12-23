@@ -6,5 +6,4 @@ cd $SCRIPT_DIR
 if [ -n "$SYMLINK_DIR" ]; then
     cd $SYMLINK_DIR
 fi
-cd pviewer_electron
-npx electron platforms/electron/www "$@"
+npx electron www "$@"

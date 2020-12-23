@@ -1,6 +1,6 @@
 {
   "name": "node-pviewer",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "PViewer for NodeJS.",
   "bin": "run.sh",
   "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
@@ -9,7 +9,10 @@
     "type": "git",
     "url": "git+https://github.com/picam360/node-pviewer.git"
   },
-  "dependencies": {},
+  "dependencies": {
+    "electron": "*",
+    "pstcore": "0.0.3"
+  },
   "scripts": {
     "install": "bash setup.sh"
   }
