@@ -1,9 +1,31 @@
 #! /usr/bin/env node
+process.chdir(__dirname);
+
 const fs = require("fs");
+const rimraf = require("rimraf");
+const cpx = require('cpx');
 const { execSync } = require('child_process');
 
-if (fs.existsSync('www')) {
-	execSync('rm -r www', {cwd : __dirname});
+try{
+	if (fs.existsSync('www')) {
+		rimraf.sync('www');
+	}
+}catch(err){
+	console.log("error on rm www:" + err);
 }
-execSync('git clone --depth 1 https://github.com/picam360/pviewer.git www', {cwd : __dirname});
-execSync('cp -r ./res/www/* ./www/', {cwd : __dirname});
+
+try{
+	execSync('git clone --depth 1 https://github.com/picam360/pviewer.git www', {cwd : __dirname});
+}catch(err){
+	console.log("error on git:" + err);
+}
+
+try{
+	cpx.copy('./res/www/*', './www/', function (err) {
+		if (err) {
+			throw(err);
+		}
+	});
+}catch(err){
+	console.log("error on cp ./res/www/* ./www/:" + err);
+}

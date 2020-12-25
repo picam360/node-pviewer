@@ -1,6 +1,6 @@
 {
   "name": "node-pviewer",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "PViewer for NodeJS.",
   "bin": {
     "pviewer": "app.js"
@@ -12,6 +12,8 @@
     "url": "git+https://github.com/picam360/node-pviewer.git"
   },
   "dependencies": {
+    "rimraf": "*",
+    "cpx": "*",
     "electron": "*",
     "pstcore": "*"
   },
