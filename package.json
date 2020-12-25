@@ -1,8 +1,10 @@
 {
   "name": "node-pviewer",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "PViewer for NodeJS.",
-  "bin" : { "pviewer" : "app.js" },
+  "bin": {
+    "pviewer": "app.js"
+  },
   "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
   "license": "MIT",
   "repository": {
@@ -14,6 +16,6 @@
     "pstcore": "*"
   },
   "scripts": {
-    "install": "bash setup.sh"
+    "install": "node setup.js"
   }
 }

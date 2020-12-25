@@ -1,6 +1,6 @@
 #! /usr/bin/env node
-const { spawn } = require('child_process');
+const { execSync } = require('child_process');
 
-process.chdir(__dirname);
+const argv = ['npx', 'electron', 'www'].concat(process.argv.slice(2));
 
-spawn('npx', ['electron', 'www'].concat(process.argv.slice(2)));
+execSync(argv.join(' '), {cwd : __dirname});
