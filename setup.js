@@ -3,7 +3,7 @@ process.chdir(__dirname);
 
 const fs = require("fs");
 const rimraf = require("rimraf");
-const cpx = require('cpx');
+const rcopy = require('recursive-copy');
 const { execSync } = require('child_process');
 
 try{
@@ -21,7 +21,7 @@ try{
 }
 
 try{
-	cpx.copy('./res/www/*', './www/', function (err) {
+	rcopy('./res/www', './www', function (err) {
 		if (err) {
 			throw(err);
 		}
