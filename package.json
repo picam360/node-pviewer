@@ -1,6 +1,6 @@
 {
   "name": "node-pviewer",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "PViewer for NodeJS.",
   "bin": "run.sh",
   "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "electron": "*",
-    "pstcore": "0.0.3"
+    "pstcore": "*"
   },
   "scripts": {
     "install": "bash setup.sh"
