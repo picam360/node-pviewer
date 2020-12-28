@@ -79,14 +79,25 @@ function createWindow () {
     ////// customize start///////
     let loadUrl = cdvUrl.includes('://') ? cdvUrl : `${basePath}/${cdvUrl}`;
     
+	var filepath = null;
 	var wrtc_key = null;
 	for (var i = 0; i < process.argv.length; i++) {
+		if (process.argv[i] == "-f") {
+			filepath = process.argv[i + 1];
+			i++;
+		}
 		if (process.argv[i] == "-w") {
 			wrtc_key = process.argv[i + 1];
 			i++;
 		}
 	}
-	if(wrtc_key){
+	if(filepath){
+		if(filepath[0] == '/' || filepath[0] == '.'){
+			filepath = "file://" + filepath;
+		}
+		loadUrl += "?pvf=" + encodeURIComponent(filepath);
+	}
+	else if(wrtc_key){
 		loadUrl += "?wrtc-key=" + wrtc_key;
 	}
 	
