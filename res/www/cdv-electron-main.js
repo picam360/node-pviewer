@@ -92,7 +92,8 @@ function createWindow () {
 		}
 	}
 	if(filepath){
-		if(filepath[0] == '/' || filepath[0] == '.'){
+		if(filepath.startsWith("http://") || filepath.startsWith("https://")){
+		}else{
 			filepath = "file://" + filepath;
 		}
 		loadUrl += "?pvf=" + encodeURIComponent(filepath);
