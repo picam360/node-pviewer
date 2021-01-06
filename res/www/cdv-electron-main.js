@@ -131,22 +131,33 @@ function configureProtocol () {
     protocol.interceptFileProtocol('file', (_, cb) => { cb(null); });
 }
 
+////// customize start///////
+app.commandLine.appendSwitch('enable-transparent-visuals');
+app.commandLine.appendSwitch('disable-gpu');
+////// customize end///////
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
-    if (!isFileProtocol) {
-        configureProtocol();
-    }
-
-    if (devTools && cdvElectronSettings.devToolsExtension) {
-        const extensions = cdvElectronSettings.devToolsExtension.map(id => devTools[id] || id);
-        devTools.default(extensions) // default = install extension
-            .then((name) => console.log(`Added Extension:  ${name}`))
-            .catch((err) => console.log('An error occurred: ', err));
-    }
-
-    createWindow();
+////// customize start///////
+	setTimeout(() => {
+////// customize end///////
+	    if (!isFileProtocol) {
+	        configureProtocol();
+	    }
+	
+	    if (devTools && cdvElectronSettings.devToolsExtension) {
+	        const extensions = cdvElectronSettings.devToolsExtension.map(id => devTools[id] || id);
+	        devTools.default(extensions) // default = install extension
+	            .then((name) => console.log(`Added Extension:  ${name}`))
+	            .catch((err) => console.log('An error occurred: ', err));
+	    }
+	
+	    createWindow();
+////// customize start///////
+	}, 300);
+////// customize end///////
 });
 
 // Quit when all windows are closed.
