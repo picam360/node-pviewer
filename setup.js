@@ -15,7 +15,7 @@ try{
 }
 
 try{
-	execSync('git clone --depth 1 https://github.com/picam360/pviewer.git www', {cwd : __dirname});
+	execSync('git clone --depth 1 https://github.com/picam360/pviewer.git www -b v0.1', {cwd : __dirname});
 }catch(err){
 	console.log("error on git:" + err);
 }

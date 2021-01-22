@@ -1,6 +1,6 @@
 {
   "name": "node-pviewer",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "PViewer for NodeJS.",
   "bin": {
     "pviewer": "app.js"

@@ -34,16 +34,8 @@ module.exports = {
 	on_set_param: function (successCallback, errorCallback) {
 		m_set_param_callback = successCallback;
 	},
-	build_pvf_streamer: function (successCallback, errorCallback) {
-        var stdef = "";
-        //cur += sprintf(buff + cur, "pvf_loader url=%s", url);
-		if (process.platform == 'darwin') {
-        	stdef += "vt_decoder name=decoder";
-		} else {
-        	stdef += "libde265_decoder name=decoder";
-		}
-        stdef += "!pgl_renderer name=renderer";
-        m_pst = m_pstcore.pstcore_build_pstreamer(stdef);
+	build_pstreamer: function (def, successCallback, errorCallback) {
+        m_pst = m_pstcore.pstcore_build_pstreamer(def);
 
         successCallback("OK");
 	},
