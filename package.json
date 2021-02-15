@@ -1,6 +1,6 @@
 {
   "name": "node-pviewer",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "PViewer for NodeJS.",
   "bin": {
     "pviewer": "app.js"
@@ -15,7 +15,7 @@
     "recursive-copy": "*",
     "rimraf": "*",
     "electron": "*",
-    "node-pstcore": "0.0.11"
+    "node-pstcore": "0.0.15"
   },
   "scripts": {
     "install": "node setup.js"
