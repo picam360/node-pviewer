@@ -23,12 +23,6 @@ module.exports = {
 		const config_json = JSON.stringify(config);
 		m_pstcore.pstcore_init(config_json);
 		
-		m_pstcore.pstcore_add_set_param_done_callback((msg) => {
-			if(m_set_param_callback) {
-				m_set_param_callback(msg);
-			}
-		});
-		
         successCallback("OK");
 	},
 	on_set_param: function (successCallback, errorCallback) {
@@ -36,6 +30,12 @@ module.exports = {
 	},
 	build_pstreamer: function (def, successCallback, errorCallback) {
         m_pst = m_pstcore.pstcore_build_pstreamer(def);
+		
+		m_pstcore.pstcore_add_set_param_done_callback(m_pst, (msg) => {
+			if(m_set_param_callback) {
+				m_set_param_callback(msg);
+			}
+		});
 
         successCallback("OK");
 	},

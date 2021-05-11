@@ -58,6 +58,26 @@ if (!isFileProtocol) {
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow;
 
+function GetQueryString(_url) {
+	var url = _url || window.location.search;
+	if(url.indexOf('?') >= 0){
+		url = url.split('?')[1];
+	}
+	var result = {};
+	var query = url;
+	var parameters = query.split('&');
+
+	for (var i = 0; i < parameters.length; i++) {
+		var element = parameters[i].split('=');
+
+		var paramName = decodeURIComponent(element[0]);
+		var paramValue = decodeURIComponent(element[1]);
+
+		result[paramName] = paramValue;
+	}
+	return result;
+}
+
 function createWindow () {
     // Create the browser window.
     let appIcon;
@@ -81,24 +101,34 @@ function createWindow () {
     
 	var filepath = null;
 	var wrtc_key = null;
+	var ws_url = null;
 	for (var i = 0; i < process.argv.length; i++) {
 		if (process.argv[i] == "-f") {
 			filepath = process.argv[i + 1];
 			i++;
 		}
 		if (process.argv[i] == "-w") {
-			wrtc_key = process.argv[i + 1];
+            if(process.argv[i + 1].startsWith("ws://")){
+                ws_url = process.argv[i + 1];
+            }else{
+			    wrtc_key = process.argv[i + 1];
+            }
 			i++;
 		}
 	}
 	if(filepath){
 		if(filepath.startsWith("http://") || filepath.startsWith("https://")){
+            if(filepath.includes("pvf=")){
+                var query = GetQueryString(filepath);
+                filepath = query["pvf"];
+            }
 		}else{
 			filepath = "file://" + filepath;
 		}
 		loadUrl += "?pvf=" + encodeURIComponent(filepath);
-	}
-	else if(wrtc_key){
+	}else if(ws_url){
+		loadUrl += "?ws-url=" + ws_url;
+	}else if(wrtc_key){
 		loadUrl += "?wrtc-key=" + wrtc_key;
 	}
 	
