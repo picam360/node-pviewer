@@ -44,6 +44,7 @@ cmake_install.cmake
 
 www
 node_modules
+dist
 *-lock.json
 
 .DS_Store
