@@ -9,7 +9,7 @@
     "width": 800,
     "hasShadow": false,
     "transparent": true,
-    "backgroundColor": "#00000000",
+    "backgroundColor": "#01000000",
     "fullscreen": false,
     "frame": false
   },
