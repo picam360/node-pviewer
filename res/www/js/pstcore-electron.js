@@ -4,7 +4,7 @@ var m_pstcore = require('node-pstcore');
 var m_pst = null;
 var m_set_param_callback = null;
 module.exports = {
-	init: function (successCallback, errorCallback) {
+	init_internal: function (config, successCallback, errorCallback) {
 		const config = {
 				"plugin_paths" : [
 					"plugins/pvf_loader_st.so",

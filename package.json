@@ -19,6 +19,7 @@
     "node-pstcore": "0.4.3"
   },
   "scripts": {
-    "install": "node setup.js"
+    "install": "node setup.js",
+    "start": "node app.js"
   }
 }
