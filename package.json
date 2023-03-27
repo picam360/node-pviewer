@@ -1,7 +1,7 @@
 {
   "main": "main.js",
   "name": "node-pviewer",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "PViewer for NodeJS.",
   "bin": {
     "pviewer": "app.js"
@@ -13,14 +13,13 @@
     "url": "git+https://github.com/picam360/node-pviewer.git"
   },
   "dependencies": {
-    "recursive-copy": "*",
-    "rimraf": "*",
     "electron": "11.1.1",
     "electron-devtools-installer": "^3.2.0",
-    "node-pstcore": "0.4.3"
+    "node-pstcore": "0.4.3",
+    "rimraf": "*"
   },
   "scripts": {
     "install": "node setup.js",
-    "start": "npx electron ."
+    "start": "node app.js"
   }
 }
