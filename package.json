@@ -1,7 +1,7 @@
 {
   "main": "main.js",
   "name": "node-pviewer",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "PViewer for NodeJS.",
   "bin": {
     "pviewer": "app.js"
