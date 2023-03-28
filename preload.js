@@ -3,12 +3,13 @@ const { contextBridge } = require('electron')
 console.log("preload.js");
 
 var m_pstcore = require('node-pstcore');
+var electron_win = require('electron').remote.getCurrentWindow();
 
 window.electron = {
     pstcore: m_pstcore,
+    win : electron_win,
 };
 
-var electron_win = require('electron').remote.getCurrentWindow();
 document.addEventListener("dblclick", (ev) => {
     if (ev.clientY < 50) { // title bar
         if (electron_win.isMaximized()) {
