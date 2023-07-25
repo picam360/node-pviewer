@@ -21,7 +21,7 @@ document.addEventListener("dblclick", (ev) => {
 });
 
 electron_win.on('focus', function(ev) {
-    if(!app.get_pst()){
+    if(!app.get_pst || !app.get_pst()){
         return;
     }
     // var now = Date.now();
@@ -38,7 +38,7 @@ electron_win.on('focus', function(ev) {
     electron_win.show();
 });
 window.addEventListener('resize', function(ev) {
-    if(!app.get_pst()){
+    if(!app.get_pst || !app.get_pst()){
         return;
     }
     setTimeout(()=>{
@@ -51,7 +51,7 @@ window.addEventListener('resize', function(ev) {
     }, 300);
 });
 setInterval(() => {
-    if(!app.get_pst()){
+    if(!app.get_pst || !app.get_pst()){
         window.is_fullscreen = false;
         return;
     }
