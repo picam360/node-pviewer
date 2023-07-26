@@ -31,6 +31,8 @@ const createWindow = () => {
         frame: false,
     });
 
+    //win.webContents.openDevTools();
+
     win.loadFile('www/index.html');
 };
 
