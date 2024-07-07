@@ -42,5 +42,5 @@ app.commandLine.appendSwitch('disable-gpu');
 app.whenReady().then(() => {
     setTimeout(() => {
         createWindow();
-    }, 300);
+    }, 3000);//avoid ubuntu transparent issue
 });
