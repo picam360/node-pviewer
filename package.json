@@ -2,7 +2,7 @@
     "name": "node-pviewer",
     "version": "1.0.6",
     "bin": {
-     "pviewer-server": "server.js"
+     "pserver": "server.js"
     },
     "scripts": {
      "install": "node setup.js"
