@@ -2,12 +2,11 @@
 process.chdir(__dirname);
 
 const fs = require("fs");
-const rimraf = require("rimraf");
 const { execSync } = require('child_process');
 
 try{
 	if (fs.existsSync('www')) {
-		rimraf.sync('www');
+		fs.rmSync('www', {recursive:true, force:true});
 	}
 }catch(err){
 	console.log("error on rm www:" + err);
@@ -20,7 +19,9 @@ try{
 }
 
 try{
-	fs.copyFileSync('www/config.json.tmp', 'www/config.json');
+	fs.copyFileSync("www/plugins/network/signaling.js", "plugins/network/signaling.js");
+	fs.copyFileSync("www/plugins/network/meeting.js", "plugins/network/meeting.js");
+	fs.copyFileSync("www/plugins/network/rtp.js", "plugins/network/rtp.js");
 }catch(err){
-	console.log("error on copy config.json : " + err);
+	console.log("copy files:" + err);
 }
