@@ -1,0 +1,11 @@
+[Unit]
+Description = pserver daemon
+
+[Service]
+ExecStart = /bin/bash @CMAKE_INSTALL_PREFIX@/bin/pserver
+ExecStartPost = /bin/sleep 3
+Restart = always
+Type = simple
+
+[Install]
+WantedBy = multi-user.target

@@ -1,0 +1,15 @@
+##regist service
+
+[Unit]
+Description = tileserver-gl daemon
+
+[Service]
+ExecStart = /usr/bin/docker run --name tileserver-gl --rm -p 9111:8080 -v @DATA_PATH@:/data maptiler/tileserver-gl:v4.13.0
+ExecStop = -/usr/bin/docker kill tileserver-gl
+
+Restart = always
+RestartSec = 3
+Type = simple
+
+[Install]
+WantedBy = multi-user.target
