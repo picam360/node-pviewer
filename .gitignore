@@ -46,6 +46,7 @@ www
 node_modules
 dist
 *-lock.json
+.vscode
 
 .DS_Store
 .snipet
