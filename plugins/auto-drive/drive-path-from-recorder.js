@@ -45,7 +45,6 @@ module.exports = {
 							if (err) throw err;
 							callback(filename, result["picam360:frame"].$);
 						});
-						callback(filename, metaString);
 					});
 				});
 			}catch(err){
