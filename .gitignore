@@ -42,8 +42,9 @@ CMakeCache.txt
 cmake_install.cmake
 *-debug.cmake
 
-www
+pviewer
 node_modules
+pserver/*.json
 dist
 *-lock.json
 .vscode

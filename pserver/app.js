@@ -125,7 +125,7 @@ function start_webserver(callback) { // start up websocket server
             }
         });
     });
-    express_app.use(express.static('www')); // this need be set
+    express_app.use(express.static('../pviewer')); // this need be set
 	var http_port = 9001;
 	if(options['http_port']){
 		http_port = options['http_port'];
