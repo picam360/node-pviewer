@@ -1,3 +1,8 @@
+#!/bin/bash
+
+SCRIPT_DIR=$(dirname "$0")
+cd "$SCRIPT_DIR" || exit
+
 if [ "$1" = "" ]; then
     echo no address
     exit
@@ -25,7 +30,8 @@ echo "ADDRESS=10.42.0.$ADDRESS"
 
 MACADDRESS=$(cat /sys/class/net/wlan0/address)
 
-sudo rm /etc/NetworkManager/system-connections/* 2>/dev/null
+. reset_wifi.sh
+sleep 1
 
 sudo nmcli device wifi connect "$SSID" password "$PWD"
 sudo cp ifcfg-picam360 /etc/NetworkManager/system-connections/$SSID

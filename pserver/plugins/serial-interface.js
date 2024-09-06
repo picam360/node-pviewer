@@ -74,21 +74,21 @@ function connect_ntrip(conf, data_callback, close_callback) {
     });
 }
 
-const getIPAddress = (callback) => {
+const getIPAddress = (callback, callback_arg) => {
     const networkInterfaces = os.networkInterfaces();
     for (const interfaceName in networkInterfaces) {
         const addresses = networkInterfaces[interfaceName];
         for (const address of addresses) {
             if (address.family === 'IPv4' && !address.internal) {
-                callback(address.address);
+                callback(address.address, callback_arg);
                 return;
             }
         }
     }
-    callback('IP_NOT_FOUND');
+    callback('IP_NOT_FOUND', callback_arg);
 };
 
-const getSSID = (callback) => {
+const getSSID = (callback, callback_arg) => {
     const platform = os.platform();
 
     let command;
@@ -106,35 +106,65 @@ const getSSID = (callback) => {
     exec(command, (err, stdout, stderr) => {
         if (err) {
             console.error('Error executing command:', err);
-            callback('ERROR_OCURED');
+            callback('ERROR_OCURED', callback_arg);
             return;
         }
 
         if (platform === 'win32') {
             const match = stdout.match(/SSID\s*:\s*(.+)/);
             if (match && match[1]) {
-                callback(match[1].trim());
+                callback(match[1].trim(), callback_arg);
             } else {
-                callback('SSID_NOT_FOUND');
+                callback('SSID_NOT_FOUND', callback_arg);
             }
         } else if (platform === 'darwin') {
             const match = stdout.match(/ SSID: (.+)/);
             if (match && match[1]) {
-                callback(match[1].trim());
+                callback(match[1].trim(), callback_arg);
             } else {
-                callback('SSID_NOT_FOUND');
+                callback('SSID_NOT_FOUND', callback_arg);
             }
         } else if (platform === 'linux') {
             if (stdout) {
-                callback(stdout.trim());
+                callback(stdout.trim(), callback_arg);
             } else {
-                callback('SSID_NOT_FOUND');
+                callback('SSID_NOT_FOUND', callback_arg);
             }
         }
     });
 };
 
-const connectWifi = (ssid, password, callback) => {
+const resetWifi = (callback, callback_arg) => {
+    let command = `bash ${__dirname}/../../docker/jetson/wifi/reset_wifi.sh`;
+
+    exec(command, (err, stdout, stderr) => {
+        if (err || stderr) {
+            console.error('Error executing command:', err, stderr);
+            callback(false, callback_arg);
+            return;
+        }
+        console.log('Command executed successfully');
+        console.log('stdout:', stdout);
+        callback(true, callback_arg);
+    });
+};
+
+const enableAPMode = (ippaddress, ssid, password, callback, callback_arg) => {
+    let command = `bash ${__dirname}/../../docker/jetson/wifi/setup_wifi_host.sh ${ippaddress} ${ssid} ${password}`;
+
+    exec(command, (err, stdout, stderr) => {
+        if (err || stderr) {
+            console.error('Error executing command:', err, stderr);
+            callback(false, callback_arg);
+            return;
+        }
+        console.log('Command executed successfully');
+        console.log('stdout:', stdout);
+        callback(true, callback_arg);
+    });
+};
+
+const connectWifi = (ssid, password, callback, callback_arg) => {
     const platform = os.platform();
     let command;
 
@@ -187,16 +217,16 @@ const connectWifi = (ssid, password, callback) => {
     exec(command, (err, stdout, stderr) => {
         if (err || stderr) {
             console.error('Error executing command:', err, stderr);
-            callback(false);
+            callback(false, callback_arg);
             return;
         }
         console.log('Command executed successfully');
         console.log('stdout:', stdout);
-        callback(true);
+        callback(true, callback_arg);
     });
 };
 
-const getWifiNetworks = (callback) => {
+const getWifiNetworks = (callback, callback_arg) => {
     const platform = os.platform();
     let command;
 
@@ -250,7 +280,7 @@ const getWifiNetworks = (callback) => {
                 }
             });
         }
-        callback(networks);
+        callback(networks, callback_arg);
     });
 };
 
@@ -417,6 +447,14 @@ var self = {
                 }, 50);
 
                 parser.on('data', (data) => {
+                    const options = {
+                        header : "",
+                    };
+                    if (data.startsWith("CAMRX ")) {
+                        const strs = data.split(/ (.+)/);
+                        options.header = "CAMTX ";
+                        data = strs[1];
+                    }
                     if (data.startsWith("ECH ")) {
                         //console.log(data);
                     } else if (data.startsWith("DBG ")) {
@@ -431,19 +469,19 @@ var self = {
                             case "GET_RTCM"://from esp32
                                 break;
                             case "GET_IP"://from esp32
-                                getIPAddress((ip_address) => {
-                                    m_msg_queue.push(`RES GET_IP ${ip_address}\n`);
-                                });
+                                getIPAddress((ip_address, options) => {
+                                    m_msg_queue.push(options.header + `RES GET_IP ${ip_address}\n`);
+                                }, options);
                                 break;
                             case "GET_SSID"://from esp32
-                                getSSID((ssid) => {
-                                    m_msg_queue.push(`RES GET_SSID ${ssid}\n`);
-                                });
+                                getSSID((ssid, options) => {
+                                    m_msg_queue.push(options.header + `RES GET_SSID ${ssid}\n`);
+                                }, options);
                                 break;
                             case "SET_NMEA"://from esp32
                                 try {
                                     //console.log(stat);
-                                    m_msg_queue.push(`RES SET_NMEA\n`);
+                                    m_msg_queue.push(options.header + `RES SET_NMEA\n`);
                                     if(!params[2]){
                                         return;
                                     }
@@ -470,31 +508,31 @@ var self = {
                                     //console.log(err);
                                 }
                                 break;
+                            case "RESET_WIFI"://from ble
+                                resetWifi((succeeded, options) => {
+                                    m_msg_queue.push(options.header + `RES RESET_WIFI ${succeeded ? "SUCCEEDED" : "FAILED"}\n`);
+                                }, options);
+                                break;
                             case "CONNECT_WIFI"://from ble
-                                connectWifi(params[2], params[3], (succeeded) => {
-                                    var res = `RES CONNECT_WIFI ${succeeded ? "SUCCEEDED" : "FAILED"}\n`;
-                                    port.write(res, (err) => {
-                                        if (err) {
-                                            return console.log('Error on write:', err.message, res);
-                                        }
-                                    });
-                                });
+                                connectWifi(params[2], params[3], (succeeded, options) => {
+                                    m_msg_queue.push(options.header + `RES CONNECT_WIFI ${succeeded ? "SUCCEEDED" : "FAILED"}\n`);
+                                }, options);
+                                break;
+                            case "ENABLE_APMODE"://from ble
+                                enableAPMode(params[2] || "1", params[3] || "", params[4] || "", (succeeded, options) => {
+                                    m_msg_queue.push(options.header + `RES ENABLE_APMODE ${succeeded ? "SUCCEEDED" : "FAILED"}\n`);
+                                }, options);
                                 break;
                             case "GET_WIFI_NETWORKS"://from ble
-                                getWifiNetworks((list) => {
+                                getWifiNetworks((list, options) => {
                                     list.sort((a, b) => b.signal - a.signal);
                                     let list_str = list.map(net => net.ssid).join(' ');
                                     if (list_str.length > 500) {
                                         list_str = list_str.substring(0, 500);
                                         list_str = list_str.substring(0, list_str.lastIndexOf(' '));
                                     }
-                                    var res = `RES GET_WIFI_NETWORKS ${list_str}\n`;
-                                    port.write(res, (err) => {
-                                        if (err) {
-                                            return console.log('Error on write:', err.message, res);
-                                        }
-                                    });
-                                });
+                                    m_msg_queue.push(options.header + `RES GET_WIFI_NETWORKS ${list_str}\n`);
+                                }, options);
                                 break;
                         }
                     }else{
