@@ -21,13 +21,11 @@
             "@APP.SIZE@" : "1024x512"
         },
     },
-    "plugin" : {
-        "paths" : [
-            "plugins/redis.js",
-            "plugins/serial-interface.js",
-            "plugins/network/host.js"
-        ],
-    },
+    "plugin_paths" : [
+        "plugins/redis.js",
+        "plugins/serial-interface.js",
+        "plugins/network/host.js"
+    ],
     "serial_interface" : {
         "path" : "/dev/ttyACM0"
     },

@@ -63,21 +63,29 @@ var self = {
                             case "camera.takePicture":
                                 m_target_filename = formatDate(new Date()) + ".pvf";
                                 data = {"id":m_target_filename.toString()};
-                                plugin_host.send_command("take_picture.take_picture", {
-                                    "FILE_PATH" : m_base_path + m_target_filename,
-                                }, (res) => {
-                                    console.log("done");
-                                });
+                                plugin_host.send_command(
+                                    "take_picture.take_picture",
+                                    {
+                                        "file_path" : m_base_path + m_target_filename
+                                    },
+                                    (res) => {
+                                        console.log("done");
+                                    }
+                                );
                                 break;
                             case "pserver.generatePsf":
                                 m_target_filename = formatDate(new Date()) + ".psf";
                                 data = {"id":m_target_filename.toString()};
-                                plugin_host.send_command("generate_psf.generate_psf", {
-                                    "FILE_PATH" : m_base_path + m_target_filename,
-                                    "psf_config" : options.psf_config,
-                                }, (res) => {
-                                    console.log("done");
-                                });
+                                plugin_host.send_command(
+                                    "generate_psf.generate_psf",
+                                    {
+                                        "FILE_PATH" : m_base_path + m_target_filename,
+                                        "psf_config" : options.psf_config,
+                                    },
+                                    (res) => {
+                                        console.log("done");
+                                    }
+                                );
                                 break;
                             default:
                                 data = {"err":"unknown cmd"};

@@ -44,8 +44,16 @@ var self = {
             command_handler: function (cmd, args, conn) {
                 switch(cmd){
                 case "take_picture":
-                    plugin.start_stream(options.name, {
-                        "FILE_PATH" : args
+                    if(args && args.file_path){
+                        m_target_filename = args.file_path;
+                    }else{
+                        m_target_filename = formatDate(new Date()) + ".pvf";
+                    }
+                    plugin.start_stream("start_stream.start_stream", {
+                        "stream" : "take-picture-ptpvf",
+                        "replacements" : {
+                            "@FILE_PATH@" : m_base_path + m_target_filename
+                        }
                     }, () => {
                         console.log("done");
                     });
@@ -53,63 +61,6 @@ var self = {
                 default:
                     break;
                 }
-            },
-            apply_params : (str, params) => {
-                if(!str){
-                    return "";
-                }
-                for(var key in params) {
-                    str = str.toString().replace(new RegExp("@" + key + "@", "g"), params[key]);
-                }
-                return str;
-            },
-            start_stream : (name, params, callback) => {
-                var stream_params = null;
-                if(m_options && m_options["stream_params"] && m_options["stream_params"][name]){
-                    stream_params = m_options["stream_params"][name];
-                }
-                if(!stream_params || !stream_params[""]){
-                    return;
-                }
-                var def = stream_params[""];
-                def = plugin.apply_params(def, params);
-                pstcore.pstcore_build_pstreamer(def, pst => {
-                    if(!pst){
-                        console.log("something wrong!", def);
-                        return;
-                    }
-                    for(var key in stream_params) {
-                        if(key === ""){
-                            continue;
-                        }
-                        var dotpos = key.lastIndexOf(".");
-                        var name = key.substr(0, dotpos);
-                        var param = key.substr(dotpos + 1);
-                        var value = stream_params[key];
-                        value = plugin.apply_params(value, params);
-                        if(!name || !param || !value){
-                            continue;
-                        }
-                        pstcore.pstcore_set_param(pst, name, param, value);
-                    }
-        
-                    var eob = true;
-                    pstcore.pstcore_set_dequeue_callback(pst, (data)=>{
-                        if(data == null){//eob
-                            if(eob){//eos
-                                pstcore.pstcore_destroy_pstreamer(pst);
-                                if(callback){
-                                    callback();
-                                }
-                            }else{
-                                eob = true;
-                            }
-                        }else{
-                            eob = false;
-                        }
-                    });
-                    pstcore.pstcore_start_pstreamer(pst);
-                });
             },
         };
         return plugin;
