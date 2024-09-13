@@ -43,7 +43,7 @@ var self = {
 
                 var express_app = m_plugin_host.get_express_app();
                 
-                express_app.all('/ocs/*', function(req, res) {
+                express_app.all('/osc/*', function(req, res) {
                     var url = req.url.split("?")[0];
                     var query = req.url.split("?")[1];
                     var filename = url.substr(5);
@@ -63,16 +63,19 @@ var self = {
                             case "camera.takePicture":
                                 m_target_filename = formatDate(new Date()) + ".pvf";
                                 data = {"id":m_target_filename.toString()};
-                                plugin.start_stream(options.name, {
-                                    "FILE_PATH" : m_base_path + m_target_filename
-                                }, () => {
+                                plugin_host.send_command("take_picture.take_picture", {
+                                    "FILE_PATH" : m_base_path + m_target_filename,
+                                }, (res) => {
                                     console.log("done");
                                 });
                                 break;
                             case "pserver.generatePsf":
                                 m_target_filename = formatDate(new Date()) + ".psf";
                                 data = {"id":m_target_filename.toString()};
-                                plugin.generate_psf(m_base_path + m_target_filename, options.psf_config, () => {
+                                plugin_host.send_command("generate_psf.generate_psf", {
+                                    "FILE_PATH" : m_base_path + m_target_filename,
+                                    "psf_config" : options.psf_config,
+                                }, (res) => {
                                     console.log("done");
                                 });
                                 break;
@@ -124,104 +127,7 @@ var self = {
                     console.log("200");
                 });
             },
-            pst_started: function (pstcore, pst) {
-            },
-            pst_stopped: function (pstcore, pst) {
-            },
             command_handler: function (cmd, conn) {
-            },
-            apply_params : (str, params) => {
-                if(!str){
-                    return "";
-                }
-                for(var key in params) {
-                    str = str.toString().replace(new RegExp("@" + key + "@", "g"), params[key]);
-                }
-                return str;
-            },
-            start_stream : (name, params, callback) => {
-                var stream_params = null;
-                if(m_options && m_options["stream_params"] && m_options["stream_params"][name]){
-                    stream_params = m_options["stream_params"][name];
-                }
-                if(!stream_params || !stream_params[""]){
-                    return;
-                }
-                var def = stream_params[""];
-                def = plugin.apply_params(def, params);
-                pstcore.pstcore_build_pstreamer(def, pst => {
-                    if(!pst){
-                        console.log("something wrong!", def);
-                        return;
-                    }
-                    for(var key in stream_params) {
-                        if(key === ""){
-                            continue;
-                        }
-                        var dotpos = key.lastIndexOf(".");
-                        var name = key.substr(0, dotpos);
-                        var param = key.substr(dotpos + 1);
-                        var value = stream_params[key];
-                        value = plugin.apply_params(value, params);
-                        if(!name || !param || !value){
-                            continue;
-                        }
-                        pstcore.pstcore_set_param(pst, name, param, value);
-                    }
-        
-                    var eob = true;
-                    pstcore.pstcore_set_dequeue_callback(pst, (data)=>{
-                        if(data == null){//eob
-                            if(eob){//eos
-                                pstcore.pstcore_destroy_pstreamer(pst);
-                                if(callback){
-                                    callback();
-                                }
-                            }else{
-                                eob = true;
-                            }
-                        }else{
-                            eob = false;
-                        }
-                    });
-                    pstcore.pstcore_start_pstreamer(pst);
-                });
-            },
-            generate_psf : (filepath, config, callback) => {
-                var tmp_dir = filepath + ".tmp";
-                fs.mkdirSync(tmp_dir);
-                fs.mkdirSync(tmp_dir + "/pvf");
-                fs.writeFileSync(tmp_dir + "/config.json", JSON.stringify(config));
-
-                function copy_pvf(idx, cb){
-                    if(idx >= config.points.length){
-                        cb();
-                        return;
-                    }
-                    var src = m_base_path + path.basename(config.points[idx].path);
-                    var dst = tmp_dir + "/" + config.points[idx].path;
-                    fs.copyFile(src, dst, (err) => {
-                        if (err) {
-                            console.error('error', err);
-                        }
-                        copy_pvf(idx + 1, cb);
-                    });
-                }
-                copy_pvf(0, () => {const { spawn } = require('child_process');
-                    const cmd = `(cd ${tmp_dir} && zip -0r - ./*) > ${filepath + ".zip"}`;
-                    exec(cmd, (error, stdout, stderr) => {
-                        if (error) {
-                          console.error(`error: ${error.message}`);
-                          return;
-                        }
-
-                        console.log(`done ${cmd}`);
-                        fs.renameSync(filepath + ".zip", filepath);
-                        if(callback){
-                            callback();
-                        }
-                    });
-                });
             },
         };
         return plugin;

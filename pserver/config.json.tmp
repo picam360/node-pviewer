@@ -1,12 +1,41 @@
 {
-    "wrtc_enabled" : false,
-    "wrtc_key" : "",
-    "stream_def" : "default",
-    "stream_defs" : {
-        "default" : "mixer"
+    "n_clients_limit" : 2,
+    "meeting" : {
+        "enabled" : false
     },
-    "plugin_paths" : [
-	    "plugins/network/host.js"
-    ],
+    "wrtc" : {
+        "enabled" : false,
+        "key" : "unique_key",
+    },
+    "stream" : {
+        "default" : "4khdr-stereo",
+        "paths" : [
+            "streams/4khdr-stereo.json",
+            "streams/4khdr-mono.json",
+            "streams/8mp-stereo.json",
+            "streams/8mp-mono.json",
+            "streams/take-picture-ptpvf.json"
+        ],
+        "replacements" : {
+            "@APP.BITRATE_KBPS@" : "2000",
+            "@APP.SIZE@" : "1024x512"
+        },
+    },
+    "plugin" : {
+        "paths" : [
+            "plugins/redis.js",
+            "plugins/serial-interface.js",
+            "plugins/network/host.js"
+        ],
+    },
+    "serial_interface" : {
+        "path" : "/dev/ttyACM0"
+    },
+    "pviewer_config_ext" : "",
+    "license" : {
+        "app_key" : "your_app_key",
+        "sku" : "P360SWLIC-STEREO-V1",
+        "iface" : "wlan0"
+    },
     "debug" : 0
 }
