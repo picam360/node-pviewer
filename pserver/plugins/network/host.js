@@ -445,7 +445,7 @@ function start_websocket(callback) {
 }
 function start_wrtc(callback) {
     // wrtc
-    if (options["wrtc_enabled"]) {
+    if (options["wrtc"] && options["wrtc"].enabled) {
         var P2P_API_KEY = "v8df88o1y4zbmx6r";
         global.Blob = "blob";
         global.File = "file";
@@ -471,7 +471,7 @@ function start_wrtc(callback) {
             }
             global.window.evt_listener[name].push(callback);
         }
-        var key = options["wrtc_key"] || uuidgen();
+        var key = options["wrtc"].key || uuidgen();
         console.log("\n\n\n");
         console.log("webrtc key : " + key);
         console.log("https://picam360.github.io/pviewer/?wrtc-key=" + key);

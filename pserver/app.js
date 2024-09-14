@@ -1,15 +1,16 @@
 #! /usr/bin/env node
 process.chdir(__dirname);
-var os = require('os');
-var child_process = require('child_process');
-var async = require('async');
-var fs = require("fs");
-var moment = require("moment");
-var sprintf = require('sprintf-js').sprintf;
-var express = require('express');
-var cors = require('cors');
+const os = require('os');
+const child_process = require('child_process');
+const async = require('async');
+const fs = require("fs");
+const moment = require("moment");
+const sprintf = require('sprintf-js').sprintf;
+const express = require('express');
+const cors = require('cors');
+const jsonc = require('jsonc-parser');
 
-var pstcore = require('node-pstcore');
+const pstcore = require('node-pstcore');
 
 var express_app = null;
 var http = null;
@@ -187,13 +188,15 @@ async.waterfall([
 				}
 			}
 			var json_str = lines.join("\n");
-			options = JSON.parse(json_str);
+			options = jsonc.parse(json_str);
 		} else {
 			options = {};
 		}
 		if(wrtc_key){
-			options["wrtc_enabled"] = true;
-			options["wrtc_key"] = wrtc_key;
+			options["wrtc"] = {
+				"enabled" : true,
+				"key" : wrtc_key
+			};
 		}
 		options["params"] = Object.assign(options["params"]||{}, params);
 

@@ -5,7 +5,7 @@
     },
     "wrtc" : {
         "enabled" : false,
-        "key" : "unique_key",
+        "key" : "unique_key"
     },
     "stream" : {
         "paths" : [
@@ -19,7 +19,7 @@
         "replacements" : {
             "@APP.BITRATE_KBPS@" : "2000",
             "@APP.SIZE@" : "1024x512"
-        },
+        }
     },
     "plugin_paths" : [
         "plugins/redis.js",
