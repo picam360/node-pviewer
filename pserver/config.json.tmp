@@ -8,8 +8,8 @@
         "key" : "unique_key",
     },
     "stream" : {
-        "default" : "4khdr-stereo",
         "paths" : [
+            "streams/default.json",
             "streams/4khdr-stereo.json",
             "streams/4khdr-mono.json",
             "streams/8mp-stereo.json",
