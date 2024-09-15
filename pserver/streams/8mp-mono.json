@@ -1,7 +1,7 @@
 {
     "base" : "8mp-stereo",
     "params" : {
-        "-mux.vin1" : ""
+        "mux.vin1" : null
     },
     "replacements" : {
     }

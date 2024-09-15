@@ -17,16 +17,16 @@ var express_app = null;
 var http = null;
 var https = null;
 
-var plugin_host = {};
-var plugins = [];
-var pstdefs = {};
-var cmd_list = [];
+var m_plugin_host = {};
+var m_plugins = [];
+var m_pstdefs = {};
+var m_cmd_list = [];
 
 var GC_THRESH = 16 * 1024 * 1024; // 16MB
 
 var UPSTREAM_DOMAIN = "upstream.";
 
-var options = {};
+var m_options = {};
 var m_pvf_filepath = null;
 var m_calibrate = null;
 var m_calibrate_hq = null;
@@ -40,12 +40,12 @@ function start_webserver(callback) { // start up websocket server
 
 	var https_key_filepath = 'certs/https/localhost-key.pem';
 	var https_cert_filepath = 'certs/https/localhost.pem';
-	if(options['https_key_filepath'] &&
-	   options['https_cert_filepath']){
-		if(fs.existsSync(options['https_key_filepath']) &&
-		   fs.existsSync(options['https_cert_filepath'])){
-			https_key_filepath = options['https_key_filepath'];
-			https_cert_filepath = options['https_cert_filepath'];
+	if(m_options['https_key_filepath'] &&
+	   m_options['https_cert_filepath']){
+		if(fs.existsSync(m_options['https_key_filepath']) &&
+		   fs.existsSync(m_options['https_cert_filepath'])){
+			https_key_filepath = m_options['https_key_filepath'];
+			https_cert_filepath = m_options['https_cert_filepath'];
 		}else{
 			console.log("https key cert file not found.");
 		}
@@ -123,16 +123,16 @@ function start_webserver(callback) { // start up websocket server
     });
     express_app.use(express.static('../pviewer')); // this need be set
 	var http_port = 9001;
-	if(options['http_port']){
-		http_port = options['http_port'];
+	if(m_options['http_port']){
+		http_port = m_options['http_port'];
 	}
     http.listen(http_port, function() {
         console.log('listening http on *:' + http_port);
     });
 
 	var https_port = 9002;
-	if(options['https_port']){
-		https_port = options['https_port'];
+	if(m_options['https_port']){
+		https_port = m_options['https_port'];
 	}
     https.listen(https_port, function() {
         console.log('listening https on *:' + https_port);
@@ -183,18 +183,18 @@ async.waterfall([
 				}
 			}
 			var json_str = lines.join("\n");
-			options = jsonc.parse(json_str);
+			m_options = jsonc.parse(json_str);
 		} else {
-			options = {};
+			m_options = {};
 		}
 		if(wrtc_key){
-			options["wrtc"] = {
+			m_options["wrtc"] = {
 				"enabled" : true,
 				"key" : wrtc_key
 			};
 		}
-		if(options["pstdefs"]){
-			options["pstdefs"]["replacements"] = Object.assign(options["pstdefs"]["replacements"] || {}, replacements);
+		if(m_options["pstdefs"]){
+			m_options["pstdefs"]["replacements"] = Object.assign(m_options["pstdefs"]["replacements"] || {}, replacements);
 		}
 
 		callback(null);
@@ -226,10 +226,10 @@ async.waterfall([
 		callback(null);
 	},
 	function(callback) {
-		if(options["license"] && options["license"]["app_key"]){
+		if(m_options["license"] && m_options["license"]["app_key"]){
 			console.log("init license");
 			var cmd = sprintf("node %s/tools/license_retriever %s %s %s %s",
-				__dirname, options["license"]["app_key"], options["license"]["sku"], "license_key.json", options["license"]["iface"]);
+				__dirname, m_options["license"]["app_key"], m_options["license"]["sku"], "license_key.json", m_options["license"]["iface"]);
 			//console.log(cmd);
 			child_process.exec(cmd);
 		}
@@ -379,11 +379,11 @@ async.waterfall([
 			var domain = split[0].split('.');
 			if (domain.length != 1 && domain[0] != "pserver") {
 				// delegate to plugin
-				for (var i = 0; i < plugins.length; i++) {
-					if (plugins[i].name && plugins[i].name == domain[0]) {
-						if (plugins[i].command_handler) {
+				for (var i = 0; i < m_plugins.length; i++) {
+					if (m_plugins[i].name && m_plugins[i].name == domain[0]) {
+						if (m_plugins[i].command_handler) {
 							split[0] = split[0].substring(split[0].indexOf('.') + 1);
-							res = plugins[i].command_handler(split.join(' '), args);
+							res = m_plugins[i].command_handler(split.join(' '), args);
 							break;
 						}
 					}
@@ -396,12 +396,12 @@ async.waterfall([
 				var id = conn.frame_info.snapper_uuid;
 				if (id) {
 					var dirname = moment().format('YYYYMMDD_HHmmss');
-					var filepath = (options['record_path'] || 'Videos') + '/' + dirname;
+					var filepath = (m_options['record_path'] || 'Videos') + '/' + dirname;
 					var cmd = CAPTURE_DOMAIN + "set_vstream_param";
 					cmd += " -p base_path=" + filepath;
 					cmd += " -p mode=RECORD";
 					cmd += " -u " + id;
-					plugin_host.send_command(cmd, args);
+					m_plugin_host.send_command(cmd, args);
 					console.log("snap");
 				}
 			} else if (split[0] == "start_record") {
@@ -410,12 +410,12 @@ async.waterfall([
 				var id = conn.frame_info.recorder_uuid;
 				if (id) {
 					var dirname = moment().format('YYYYMMDD_HHmmss');
-					var filepath = (options['record_path'] || 'Videos') + '/' + dirname;
+					var filepath = (m_options['record_path'] || 'Videos') + '/' + dirname;
 					var cmd = CAPTURE_DOMAIN + "set_vstream_param";
 					cmd += " -p base_path=" + filepath;
 					cmd += " -p mode=RECORD";
 					cmd += " -u " + id;
-					res = plugin_host.send_command(cmd, args);
+					res = m_plugin_host.send_command(cmd, args);
 					conn.frame_info.is_recording = true;
 					console.log("start record");
 				}
@@ -425,7 +425,7 @@ async.waterfall([
 					var cmd = CAPTURE_DOMAIN + "set_vstream_param";
 					cmd += " -p mode=IDLE";
 					cmd += " -u " + id;
-					res = plugin_host.send_command(cmd, args);
+					res = m_plugin_host.send_command(cmd, args);
 					conn.frame_info.is_recording = false;
 					console.log("stop record");
 				}
@@ -433,72 +433,97 @@ async.waterfall([
 			return res;
 		}
 		setInterval(function() {
-			if (cmd_list.length) {
-				const params = cmd_list.shift();
+			if (m_cmd_list.length) {
+				const params = m_cmd_list.shift();
 				const res = command_handler(params.cmd, params.cmd_args);
 				if(params.cmd_args && params.cmd_args.callback){
 					params.cmd_args.callback.callback(res, params.cmd_args.callback_args);
 				}
 			}
 		}, 20);
-		plugin_host.send_command = function(cmd, cmd_args) {
-			cmd_list.push({ cmd, cmd_args });
+		m_plugin_host.send_command = function(cmd, cmd_args) {
+			m_cmd_list.push({ cmd, cmd_args });
 		};
-		plugin_host.get_http = function() {
+		m_plugin_host.get_http = function() {
 			return http;
 		};
-		plugin_host.get_https = function() {
+		m_plugin_host.get_https = function() {
 			return https;
 		};
-		plugin_host.get_express_app = function() {
+		m_plugin_host.get_express_app = function() {
 			return express_app;
 		};
-		plugin_host.fire_pst_started = function(pst) {
-			for (var i = 0; i < plugins.length; i++) {
-				if (plugins[i].pst_started) {
-					plugins[i].pst_started(pstcore, pst);
+		m_plugin_host.fire_pst_started = function(pst) {
+			for (var i = 0; i < m_plugins.length; i++) {
+				if (m_plugins[i].pst_started) {
+					m_plugins[i].pst_started(pstcore, pst);
 				}
 			}
 		};
-		plugin_host.fire_pst_stopped = function(pst) {
-			for (var i = 0; i < plugins.length; i++) {
-				if (plugins[i].pst_stopped) {
-					plugins[i].pst_stopped(pstcore, pst);
+		m_plugin_host.fire_pst_stopped = function(pst) {
+			for (var i = 0; i < m_plugins.length; i++) {
+				if (m_plugins[i].pst_stopped) {
+					m_plugins[i].pst_stopped(pstcore, pst);
 				}
 			}
 		};
-		plugin_host.build_pstreamer = function(name, callback) {
-
+		/**
+		 * build pstreamer
+		 *
+		 * @param {object} pstdef - { "base" : "string", "params" : {}, "replacements" : {} }
+		 * @param {function} callback - callback( { pst, params, pstcore } )
+		 * @returns {}
+		 */
+		m_plugin_host.build_pstreamer = function(pstdef, callback) {
+			if(typeof pstdef === 'string'){
+				pstdef = {
+					"base" : pstdef
+				};
+			}
+			if(!m_pstdefs[pstdef.base]){
+				pstdef.base = m_options["pstdefs"].default;
+			}
 			const name_list = [];
 			{
-				let _name = name;
-				for(let c=0;c<10;c++){
-					if (pstdefs[_name]) {
-						name_list.push(_name);
-						_name = pstdefs[_name].base;
-						if(!_name){
-							break
+				let name = pstdef.base;
+				while(name && name_list.length < 10){
+					if (m_pstdefs[name]) {
+						name_list.push(name);
+						name = m_pstdefs[name].base;
+						if(!name){
+							break;
 						}
 					}else{
-						console.log("no stream definition : " + _name);
+						console.log("no stream definition : " + name);
 						if(callback){
-							callback(null, pstcore);
+							callback( { pstcore, pst : null } );
 						}
 						return;
 					}
 				}
 			}
 			let def = "";
-			let params = [];
+			let params = {};
 			let replacements = {};
-			for(let k in name_list){
-				const _name = name_list[k];
-				if(pstdefs[_name].def){
-					def = pstdefs[_name].def;
-					params = pstdefs[_name].params;
-					replacements = pstdefs[_name].replacements;
+			for (let i = 0; i < name_list.length; i++) {
+				const name = name_list[i];
+				if(m_pstdefs[name].def){
+					def = m_pstdefs[name].def;
 					break;
 				}
+			}
+			for (let i = name_list.length - 1; i >= 0; i--) {
+				const name = name_list[i];
+				params = Object.assign(params, m_pstdefs[name].params || {});
+				replacements = Object.assign(replacements, m_pstdefs[name].replacements || {});
+			}
+			{//config.json is high priority
+				params = Object.assign(params, m_options["pstdefs"].params || {});
+				replacements = Object.assign(replacements, m_options["pstdefs"].replacements || {});
+			}
+			{//function param is high priority
+				params = Object.assign(params, pstdef.params || {});
+				replacements = Object.assign(replacements, pstdef.replacements || {});
 			}
 
 			function replace(str, replacements){
@@ -510,25 +535,21 @@ async.waterfall([
 				}
 				return str;
 			}
-			def = replace(def);
-			
-			pstcore.pstcore_build_pstreamer(def, (pst) => {
+			def = replace(def, replacements);
+			{
+				const replaced = {};
 				for(var key in params) {
-					var dotpos = key.lastIndexOf(".");
-					var name = key.substr(0, dotpos);
-					var param = key.substr(dotpos + 1);
 					var value = params[key];
-					value = replace(value);
-					if(!name || !param || !value){
+					if(value === null){
 						continue;
 					}
-					pstcore.pstcore_set_param(conn.attr.pst, name, param, value);
-
-					conn.attr.param_pendings.push([name, param, value]);
+					replaced[key] = replace(value, replacements);
 				}
-
+				params = replaced;
+			}
+			pstcore.pstcore_build_pstreamer(def, (pst) => {
 				if(callback){
-					callback(pst, pstcore);
+					callback( { pstcore, pst, params });
 				}
 			});
 		}
@@ -542,9 +563,9 @@ async.waterfall([
 	},
 	function(callback) {
 		// load pstdefs
-		if (options["pstdefs"]) {
-			for (var k in options["pstdefs"]["paths"]) {
-				const pstdef_path = options["pstdefs"]["paths"][k];
+		if (m_options["pstdefs"]) {
+			for (var k in m_options["pstdefs"]["paths"]) {
+				const pstdef_path = m_options["pstdefs"]["paths"][k];
 				console.log("loading... " + pstdef_path);
 				if (fs.existsSync(pstdef_path)) {
 					const lines = fs.readFileSync(pstdef_path, 'utf-8').replace(/\r/g, '').split('\n')
@@ -559,7 +580,7 @@ async.waterfall([
 					if(!name){
 						name = path.basename(pstdef_path, path.extname(pstdef_path));
 					}
-					pstdefs[name] = pstdef;
+					m_pstdefs[name] = pstdef;
 				}
 			}
 		}
@@ -567,21 +588,21 @@ async.waterfall([
 	},
 	function(callback) {
 		// load plugin
-		if (options["plugin_paths"]) {
-			for (var k in options["plugin_paths"]) {
-				var plugin_path = options["plugin_paths"][k];
+		if (m_options["plugin_paths"]) {
+			for (var k in m_options["plugin_paths"]) {
+				var plugin_path = m_options["plugin_paths"][k];
 				console.log("loading... " + plugin_path);
 				var plugin_factory = require("./" + plugin_path);
 				if(plugin_factory && plugin_factory.create_plugin){
-					var plugin = plugin_factory.create_plugin(plugin_host);
-					plugins.push(plugin);
+					var plugin = plugin_factory.create_plugin(m_plugin_host);
+					m_plugins.push(plugin);
 				}else{
 					console.log("fail... " + plugin_path);
 				}
 			}
-			for (var i = 0; i < plugins.length; i++) {
-				if (plugins[i].init_options) {
-					plugins[i].init_options(options);
+			for (var i = 0; i < m_plugins.length; i++) {
+				if (m_plugins[i].init_options) {
+					m_plugins[i].init_options(m_options);
 				}
 			}
 		}

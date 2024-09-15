@@ -49,18 +49,48 @@ var self = {
                     }else{
                         m_target_filename = formatDate(new Date()) + ".pvf";
                     }
-                    plugin.start_stream("start_stream.start_stream", {
-                        "stream" : "take-picture-ptpvf",
-                        "replacements" : {
-                            "@FILE_PATH@" : m_base_path + m_target_filename
-                        }
-                    }, () => {
+                    plugin.take_picture(m_base_path + m_target_filename, () => {
                         console.log("done");
                     });
                     break;
                 default:
                     break;
                 }
+            },
+            take_picture : (file_path, callback) => {
+                m_plugin_host.build_pstreamer({
+                    "base" : "take-picture-ptpvf",
+                    "replacements" : {
+                        "@FILE_PATH@" : file_path
+                    }
+                }, (res) => {
+                    for(var key in res.params) {
+                        var dotpos = key.lastIndexOf(".");
+                        var name = key.substr(0, dotpos);
+                        var param = key.substr(dotpos + 1);
+                        var value = params[key];
+                        if(!name || !param || !value){
+                            continue;
+                        }
+                        pstcore.pstcore_set_param(res.pst, name, param, value);
+                    }
+                    var eob = true;
+                    pstcore.pstcore_set_dequeue_callback(res.pst, (data) => {
+                        if(data == null){//eob
+                            if(eob){//eos
+                                pstcore.pstcore_destroy_pstreamer(res.pst);
+                                if(callback){
+                                    callback();
+                                }
+                            }else{
+                                eob = true;
+                            }
+                        }else{
+                            eob = false;
+                        }
+                    });
+                    pstcore.pstcore_start_pstreamer(res.pst);
+                });
             },
         };
         return plugin;

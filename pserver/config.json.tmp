@@ -8,8 +8,8 @@
         "key" : "unique_key"
     },
     "pstdefs" : {
+        "default" : "4khdr-stereo",
         "paths" : [
-            "streams/default.json",
             "streams/4khdr-stereo.json",
             "streams/4khdr-mono.json",
             "streams/8mp-stereo.json",

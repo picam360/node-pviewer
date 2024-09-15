@@ -116,7 +116,7 @@ function init_data_stream(callback) {
             mode: options.frame_mode || "WINDOW",
             width: options.frame_width || 512,
             height: options.frame_height || 512,
-            stream_def: options.stream_def || "h264",
+            stream_def: options.stream_def || "default",
             fps: options.frame_fps || 5,
             bitrate: options.frame_bitrate,
         };
@@ -216,8 +216,20 @@ function init_data_stream(callback) {
             }
 
             if((conn.frame_info.stream_mode == "vid" || conn.frame_info.stream_mode == "vid+mt")){
-                m_plugin_host.build_pstreamer(conn.frame_info.stream_def, (pst) => {
-                    conn.attr.pst = pst;
+                m_plugin_host.build_pstreamer(conn.frame_info.stream_def, (res) => {
+                    conn.attr.pst = res.pst;
+                    for(var key in res.params) {
+                        var dotpos = key.lastIndexOf(".");
+                        var name = key.substr(0, dotpos);
+                        var param = key.substr(dotpos + 1);
+                        var value = params[key];
+                        if(!name || !param || !value){
+                            continue;
+                        }
+                        pstcore.pstcore_set_param(res.pst, name, param, value);
+    
+                        conn.attr.param_pendings.push([name, param, value]);
+                    }
                     // pviewer_config_ext for client loading extra plugins
                     if(options['pviewer_config_ext']) {
                         fs.readFile(options['pviewer_config_ext'], 'utf8', function(err, data_str) {
@@ -229,7 +241,7 @@ function init_data_stream(callback) {
                         });
                     }
         
-                    pstcore.pstcore_set_dequeue_callback(conn.attr.pst, (data)=>{
+                    pstcore.pstcore_set_dequeue_callback(res.pst, (data)=>{
                         try{
                             if(data == null){//eob
                                 var pack = rtp.build_packet(Buffer.from("<eob/>", 'ascii'), PT_ENQUEUE);
@@ -250,7 +262,7 @@ function init_data_stream(callback) {
                         }
                     });
             
-                    pstcore.pstcore_add_set_param_done_callback(conn.attr.pst, (pst_name, param, value) => {
+                    pstcore.pstcore_add_set_param_done_callback(res.pst, (pst_name, param, value) => {
                         if(conn.attr.in_pt_set_param){//prevent loop back
                             return;
                         }
@@ -263,8 +275,8 @@ function init_data_stream(callback) {
                         conn.attr.param_pendings.push([pst_name, param, value]);
                         //console.log(pst_name, param, value);
                     });
-                    m_plugin_host.fire_pst_started(conn.attr.pst);
-                    pstcore.pstcore_start_pstreamer(conn.attr.pst);
+                    m_plugin_host.fire_pst_started(res.pst);
+                    pstcore.pstcore_start_pstreamer(res.pst);
                 });
             }
     
