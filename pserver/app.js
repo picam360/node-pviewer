@@ -493,7 +493,7 @@ async.waterfall([
 			let replacements = {};
 			for(let k in name_list){
 				const _name = name_list[k];
-				if(pstdefs[_name].pstdef){
+				if(pstdefs[_name].def){
 					def = pstdefs[_name].def;
 					params = pstdefs[_name].params;
 					replacements = pstdefs[_name].replacements;
@@ -513,7 +513,6 @@ async.waterfall([
 			def = replace(def);
 			
 			pstcore.pstcore_build_pstreamer(def, (pst) => {
-				conn.attr.pst = pst;
 				for(var key in params) {
 					var dotpos = key.lastIndexOf(".");
 					var name = key.substr(0, dotpos);
@@ -558,7 +557,7 @@ async.waterfall([
 					const pstdef = jsonc.parse(json_str);
 					let name = pstdef.name;
 					if(!name){
-						name = path.basename(pstdef_path);
+						name = path.basename(pstdef_path, path.extname(pstdef_path));
 					}
 					pstdefs[name] = pstdef;
 				}
