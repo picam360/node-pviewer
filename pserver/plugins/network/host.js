@@ -58,7 +58,6 @@ var upstream_north = 0;
 var options = {};
 var PLUGIN_NAME = "host";
 var m_plugin_host;
-var m_pvf_filepath;
 var m_mt_host;
 var m_last_src = 0;
 
@@ -216,54 +215,18 @@ function init_data_stream(callback) {
                 m_mt_host.add_client(rtp);
             }
 
-            var def;
-            var need_to_set_stream_params = false;
             if((conn.frame_info.stream_mode == "vid" || conn.frame_info.stream_mode == "vid+mt")){
-                if(m_pvf_filepath){
-                    var def = "pvf_loader url=\"file:/" + m_pvf_filepath + "\"";
-                }else{
-                    if (!options['stream_defs'] || !options['stream_defs'][conn.frame_info.stream_def]) {
-                        console.log("no stream definition : " + conn.frame_info.stream_def);
-                        return;
-                    }
-                    def = options['stream_defs'][conn.frame_info.stream_def];
-                    for(var key in options['params']) {
-                        def = def.replace(new RegExp("@" + key + "@", "g"), options['params'][key]);
-                    }
-                    need_to_set_stream_params = true;
-                }
-                pstcore.pstcore_build_pstreamer(def, pst => {
+                m_plugin_host.build_pstreamer(conn.frame_info.stream_def, (pst) => {
                     conn.attr.pst = pst;
-                    if(need_to_set_stream_params){
-                        if(options['stream_params'] && options['stream_params'][conn.frame_info.stream_def]) {
-                            for(var key in options['stream_params'][conn.frame_info.stream_def]) {
-                                var dotpos = key.lastIndexOf(".");
-                                var name = key.substr(0, dotpos);
-                                var param = key.substr(dotpos + 1);
-                                var value = options['stream_params'][conn.frame_info.stream_def][key];
-                                for(var key2 in options['params']) {
-                                    if(!value){
-                                        break;
-                                    }
-                                    value = value.toString().replace(new RegExp("@" + key2 + "@", "g"), options['params'][key2]);
-                                }
-                                if(!name || !param || !value){
-                                    continue;
-                                }
-                                pstcore.pstcore_set_param(conn.attr.pst, name, param, value);
-        
-                                conn.attr.param_pendings.push([name, param, value]);
+                    // pviewer_config_ext for client loading extra plugins
+                    if(options['pviewer_config_ext']) {
+                        fs.readFile(options['pviewer_config_ext'], 'utf8', function(err, data_str) {
+                            if (err) {
+                                console.log("err :" + err);
+                            } else {
+                                conn.attr.param_pendings.push(["network", "pviewer_config_ext", data_str]);
                             }
-                        }
-                        if(options['pviewer_config_ext']) {
-                            fs.readFile(options['pviewer_config_ext'], 'utf8', function(err, data_str) {
-                                if (err) {
-                                    console.log("err :" + err);
-                                } else {
-                                    conn.attr.param_pendings.push(["network", "pviewer_config_ext", data_str]);
-                                }
-                            });
-                        }
+                        });
                     }
         
                     pstcore.pstcore_set_dequeue_callback(conn.attr.pst, (data)=>{

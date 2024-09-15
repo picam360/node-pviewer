@@ -7,7 +7,7 @@
         "enabled" : false,
         "key" : "unique_key"
     },
-    "stream" : {
+    "pstdefs" : {
         "paths" : [
             "streams/default.json",
             "streams/4khdr-stereo.json",

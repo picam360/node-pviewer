@@ -1,6 +1,6 @@
 {
-    "base_stream" : "8mp-stereo",
-    "stream_params" : {
+    "base" : "8mp-stereo",
+    "params" : {
         "-mux.vin1" : ""
     },
     "replacements" : {

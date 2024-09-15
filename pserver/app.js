@@ -1,6 +1,7 @@
 #! /usr/bin/env node
 process.chdir(__dirname);
 const os = require('os');
+const path = require('path');
 const child_process = require('child_process');
 const async = require('async');
 const fs = require("fs");
@@ -18,14 +19,8 @@ var https = null;
 
 var plugin_host = {};
 var plugins = [];
+var pstdefs = {};
 var cmd_list = [];
-var watches = [];
-var statuses = [];
-
-var upstream_info = "";
-var upstream_menu = "";
-var upstream_quaternion = [0, 0, 0, 1.0];
-var upstream_north = 0;
 
 var GC_THRESH = 16 * 1024 * 1024; // 16MB
 
@@ -149,7 +144,7 @@ async.waterfall([
 	function(callback) { // argv
 		var wrtc_key = null;
 		var conf_filepath = 'config.json';
-		var params = {};
+		var replacements = {};
 		for (var i = 0; i < process.argv.length; i++) {
 			if (process.argv[i] == "-c") {//config
 				conf_filepath = process.argv[i + 1];
@@ -163,9 +158,9 @@ async.waterfall([
 				wrtc_key = process.argv[i + 1];
 				i++;
 			}
-			if (process.argv[i] == "-p") {//params
+			if (process.argv[i] == "-r") {//replacements
 				var [key, value] = process.argv[i + 1].split("=");
-				params[key] = value;
+				replacements[key] = value;
 				i++;
 			}
 			if (process.argv[i].startsWith("--calibrate=")) {
@@ -198,7 +193,9 @@ async.waterfall([
 				"key" : wrtc_key
 			};
 		}
-		options["params"] = Object.assign(options["params"]||{}, params);
+		if(options["pstdefs"]){
+			options["pstdefs"]["replacements"] = Object.assign(options["pstdefs"]["replacements"] || {}, replacements);
+		}
 
 		callback(null);
 	},
@@ -376,7 +373,8 @@ async.waterfall([
 		// plugin host
 		var m_view_quaternion = [0, 0, 0, 1.0];
 		// cmd handling
-		function command_handler(value, callback, ext) {
+		function command_handler(value, args) {
+			let res = null;
 			var split = value.split(' ');
 			var domain = split[0].split('.');
 			if (domain.length != 1 && domain[0] != "pserver") {
@@ -385,12 +383,12 @@ async.waterfall([
 					if (plugins[i].name && plugins[i].name == domain[0]) {
 						if (plugins[i].command_handler) {
 							split[0] = split[0].substring(split[0].indexOf('.') + 1);
-							plugins[i].command_handler(split.join(' '), callback, ext);
+							res = plugins[i].command_handler(split.join(' '), args);
 							break;
 						}
 					}
 				}
-				return;
+				return res;
 			}
 			if (split[0] == "ping") {
 				//
@@ -403,7 +401,7 @@ async.waterfall([
 					cmd += " -p base_path=" + filepath;
 					cmd += " -p mode=RECORD";
 					cmd += " -u " + id;
-					plugin_host.send_command(cmd, callback, ext);
+					plugin_host.send_command(cmd, args);
 					console.log("snap");
 				}
 			} else if (split[0] == "start_record") {
@@ -417,7 +415,7 @@ async.waterfall([
 					cmd += " -p base_path=" + filepath;
 					cmd += " -p mode=RECORD";
 					cmd += " -u " + id;
-					plugin_host.send_command(cmd, callback, ext);
+					res = plugin_host.send_command(cmd, args);
 					conn.frame_info.is_recording = true;
 					console.log("start record");
 				}
@@ -427,35 +425,24 @@ async.waterfall([
 					var cmd = CAPTURE_DOMAIN + "set_vstream_param";
 					cmd += " -p mode=IDLE";
 					cmd += " -u " + id;
-					plugin_host.send_command(cmd, callback, ext);
+					res = plugin_host.send_command(cmd, args);
 					conn.frame_info.is_recording = false;
 					console.log("stop record");
 				}
 			}
+			return res;
 		}
 		setInterval(function() {
 			if (cmd_list.length) {
-				var params = cmd_list.shift();
-				command_handler(params.cmd, params.callback, params.ext);
+				const params = cmd_list.shift();
+				const res = command_handler(params.cmd, params.cmd_args);
+				if(params.cmd_args && params.cmd_args.callback){
+					params.cmd_args.callback.callback(res, params.cmd_args.callback_args);
+				}
 			}
 		}, 20);
-		plugin_host.send_command = function(cmd, callback, ext) {
-			cmd_list.push({ cmd, callback, ext });
-		};
-		plugin_host.get_vehicle_quaternion = function() {
-			return upstream_quaternion;
-		};
-		plugin_host.get_vehicle_north = function() {
-			return upstream_north;
-		};
-		plugin_host.get_view_quaternion = function() {
-			return m_view_quaternion;
-		};
-		plugin_host.add_watch = function(name, callback) {
-			watches[name] = callback;
-		};
-		plugin_host.add_status = function(name, callback) {
-			statuses[name] = callback;
+		plugin_host.send_command = function(cmd, cmd_args) {
+			cmd_list.push({ cmd, cmd_args });
 		};
 		plugin_host.get_http = function() {
 			return http;
@@ -480,49 +467,72 @@ async.waterfall([
 				}
 			}
 		};
+		plugin_host.build_pstreamer = function(name, callback) {
 
-		plugin_host.add_watch(UPSTREAM_DOMAIN + "quaternion", function(
-			value) {
-			var separator = (/[,]/);
-			var split = value.split(separator);
-			upstream_quaternion = [parseFloat(split[0]),
-			parseFloat(split[1]), parseFloat(split[2]),
-			parseFloat(split[3])
-			];
-		});
+			const name_list = [];
+			{
+				let _name = name;
+				for(let c=0;c<10;c++){
+					if (pstdefs[_name]) {
+						name_list.push(_name);
+						_name = pstdefs[_name].base;
+						if(!_name){
+							break
+						}
+					}else{
+						console.log("no stream definition : " + _name);
+						if(callback){
+							callback(null, pstcore);
+						}
+						return;
+					}
+				}
+			}
+			let def = "";
+			let params = [];
+			let replacements = {};
+			for(let k in name_list){
+				const _name = name_list[k];
+				if(pstdefs[_name].pstdef){
+					def = pstdefs[_name].def;
+					params = pstdefs[_name].params;
+					replacements = pstdefs[_name].replacements;
+					break;
+				}
+			}
 
-		plugin_host.add_watch(UPSTREAM_DOMAIN + "north", function(value) {
-			upstream_north = parseFloat(value);
-		});
+			function replace(str, replacements){
+				if(!str){
+					return str;
+				}
+				for(var key in replacements) {
+					str = str.replace(new RegExp(key, "g"), replacements[key]);
+				}
+				return str;
+			}
+			def = replace(def);
+			
+			pstcore.pstcore_build_pstreamer(def, (pst) => {
+				conn.attr.pst = pst;
+				for(var key in params) {
+					var dotpos = key.lastIndexOf(".");
+					var name = key.substr(0, dotpos);
+					var param = key.substr(dotpos + 1);
+					var value = params[key];
+					value = replace(value);
+					if(!name || !param || !value){
+						continue;
+					}
+					pstcore.pstcore_set_param(conn.attr.pst, name, param, value);
 
-		plugin_host.add_watch(UPSTREAM_DOMAIN + "info", function(value) {
-			upstream_info = value;
-		});
+					conn.attr.param_pendings.push([name, param, value]);
+				}
 
-		plugin_host.add_watch(UPSTREAM_DOMAIN + "menu", function(value) {
-			upstream_menu = value;
-		});
-
-		plugin_host.add_status("is_recording", function(conn) {
-			return {
-				succeeded: true,
-				value: conn.frame_info.is_recording
-			};
-		});
-
-		plugin_host.add_status("info", function() {
-			return {
-				succeeded: upstream_info != "",
-				value: upstream_info
-			};
-		});
-
-		plugin_host.add_status("menu", function() {
-			return {
-				succeeded: upstream_menu != "",
-				value: upstream_menu
-			};
-		});
+				if(callback){
+					callback(pst, pstcore);
+				}
+			});
+		}
 
 		callback(null);
 	},
@@ -530,6 +540,31 @@ async.waterfall([
 		start_webserver(() => {
 			callback(null);
 		});
+	},
+	function(callback) {
+		// load pstdefs
+		if (options["pstdefs"]) {
+			for (var k in options["pstdefs"]["paths"]) {
+				const pstdef_path = options["pstdefs"]["paths"][k];
+				console.log("loading... " + pstdef_path);
+				if (fs.existsSync(pstdef_path)) {
+					const lines = fs.readFileSync(pstdef_path, 'utf-8').replace(/\r/g, '').split('\n')
+					for(var i=0;i<lines.length;i++){
+						if(lines[i][0] == '#'){
+							lines[i] = "";
+						}
+					}
+					const json_str = lines.join("\n");
+					const pstdef = jsonc.parse(json_str);
+					let name = pstdef.name;
+					if(!name){
+						name = path.basename(pstdef_path);
+					}
+					pstdefs[name] = pstdef;
+				}
+			}
+		}
+		callback(null);
 	},
 	function(callback) {
 		// load plugin

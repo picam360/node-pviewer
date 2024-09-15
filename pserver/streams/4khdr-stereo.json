@@ -1,6 +1,6 @@
 {
-    "stream_def" : "dealer ! v4l2_tegra_encoder name=encoder br=@APP.BITRATE_KBPS@ preset=ultrafast",
-    "stream_params" : {
+    "def" : "dealer ! v4l2_tegra_encoder name=encoder br=@APP.BITRATE_KBPS@ preset=ultrafast",
+    "params" : {
         "dealer.def" : "mux name=mux ! mjpeg_tegra_decoder name=decoder cudamem=1 ! pcuda_remapper name=remapper ho=1 dup=0 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
         "mux.vin0" : "v4l2_capture name=capture s=@APP.CAM0@",
         "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET0@\" lens_params=\"@CALIB.LENS0@\" />",

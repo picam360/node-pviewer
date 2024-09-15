@@ -1,6 +1,6 @@
 {
-    "base_stream" : "4khdr-stereo",
-    "stream_params" : {
+    "base" : "4khdr-stereo",
+    "params" : {
     },
     "replacements" : {
         "@APP.CAM0@" : "3264x2448@15:/dev/video0",

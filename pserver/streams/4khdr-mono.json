@@ -1,6 +1,6 @@
 {
-    "base_stream" : "4khdr-stereo",
-    "stream_params" : {
+    "base" : "4khdr-stereo",
+    "params" : {
         "-mux.vin1" : ""
     },
     "replacements" : {
