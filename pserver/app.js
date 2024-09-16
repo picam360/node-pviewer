@@ -549,7 +549,7 @@ async.waterfall([
 			}
 			pstcore.pstcore_build_pstreamer(def, (pst) => {
 				if(callback){
-					callback( { pstcore, pst, params });
+					callback( { pstcore, pst, params } );
 				}
 			});
 		}

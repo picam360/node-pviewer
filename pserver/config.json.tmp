@@ -24,10 +24,21 @@
     "plugin_paths" : [
         "plugins/redis.js",
         "plugins/serial-interface.js",
-        "plugins/network/host.js"
+        "plugins/camera/take-picture.js",
+        "plugins/camera/generate-psf.js",
+        "plugins/network/host.js",
+        "plugins/network/http-pvf.js",
+        "plugins/network/osc.js",
+        "plugins/startup.js"
     ],
     "serial_interface" : {
         "path" : "/dev/ttyACM0"
+    },
+    "startup" : {
+        "enabled" : false,
+        "cmd" : "any_command",
+        "cmd_args" : {},
+        "delay_ms" : 1000
     },
     "pviewer_config_ext" : "",
     "license" : {

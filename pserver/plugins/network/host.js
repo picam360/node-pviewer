@@ -222,7 +222,7 @@ function init_data_stream(callback) {
                         var dotpos = key.lastIndexOf(".");
                         var name = key.substr(0, dotpos);
                         var param = key.substr(dotpos + 1);
-                        var value = params[key];
+                        var value = res.params[key];
                         if(!name || !param || !value){
                             continue;
                         }

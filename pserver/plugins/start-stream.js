@@ -20,7 +20,7 @@ var self = {
             command_handler: function (cmd, args, conn) {
                 switch(cmd){
                 case "start_stream":
-                    plugin.start_stream(options.name, args, () => {
+                    plugin.start_stream(args, () => {
                         console.log("done");
                     });
                     break;
@@ -28,10 +28,21 @@ var self = {
                     break;
                 }
             },
-            start_stream : (name, params, callback) => {
-                m_plugin_host.build_pstreamer(name, (pst) => {
+            start_stream : (pstdef, callback) => {
+                m_plugin_host.build_pstreamer(pstdef, (res) => {
+                    for(var key in res.params) {
+                        var dotpos = key.lastIndexOf(".");
+                        var name = key.substr(0, dotpos);
+                        var param = key.substr(dotpos + 1);
+                        var value = res.params[key];
+                        if(!name || !param || !value){
+                            continue;
+                        }
+                        pstcore.pstcore_set_param(res.pst, name, param, value);
+                    }
+
                     var eob = true;
-                    pstcore.pstcore_set_dequeue_callback(pst, (data)=>{
+                    pstcore.pstcore_set_dequeue_callback(res.pst, (data)=>{
                         if(data == null){//eob
                             if(eob){//eos
                                 pstcore.pstcore_destroy_pstreamer(pst);
@@ -45,7 +56,7 @@ var self = {
                             eob = false;
                         }
                     });
-                    pstcore.pstcore_start_pstreamer(pst);
+                    pstcore.pstcore_start_pstreamer(res.pst);
                 });
             },
         };
