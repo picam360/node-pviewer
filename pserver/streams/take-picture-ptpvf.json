@@ -1,9 +1,9 @@
 {
     "base" : "4khdr-stereo",
-    "def" : "mux name=mux ! pantilt port=@PANTILT.PORT@ max_speed=1000 speed_threshold=1 speed_threshold=100 speed_span_post=100 cod=5,0 ! mjpeg_tegra_decoder ! ptpvf_generator vr180=0 size=@PTPVF.SIZE@ npq=@PTPVF.NPQ@ path=@FILE_PATH@",
+    "def" : "mux name=mux ! pantilt port=@PTPVF.PORT@ max_speed=1000 speed_threshold=1 speed_threshold=100 speed_span_post=100 cod=5,0 ! mjpeg_tegra_decoder ! ptpvf_generator vr180=0 size=@PTPVF.SIZE@ npq=@PTPVF.NPQ@ path=@FILE_PATH@",
     "params" : {
         "dealer.def" : null,
-        "ptpvf_generator" : "pcuda_remapper name=remapper edge_r=\"0.1\" s=@OWIDTH@x@OHEIGHT@ ho=1 sync=1 ! v4l2_tegra_encoder name=encoder fps=1 ii=1 br=@PTPVF.BITRATE_KBPS@"
+        "ptpvf_generator.def" : "pcuda_remapper name=remapper edge_r=\"0.1\" s=@PTPVF.SIZE@ ho=1 sync=1 ! v4l2_tegra_encoder name=encoder fps=1 ii=1 br=@PTPVF.BITRATE_KBPS@"
     },
     "replacements" : {
         "@PTPVF.BITRATE_KBPS@" : "1000",
@@ -14,4 +14,3 @@
         "@PTPVF.NPQ@" : "3"
     }
 }
-

@@ -45,6 +45,7 @@ cmake_install.cmake
 pviewer
 node_modules
 pserver/*.json
+pserver/userdata
 dist
 *-lock.json
 .vscode
