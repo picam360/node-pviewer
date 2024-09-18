@@ -26,8 +26,8 @@ function readRegister(register, length) {
 async function main() {
   try {
     // Set encoder config (ECONF: Data type=int32, Count dir=Up, Multiply=x2_A, Phase=A,B)
-    const econf = 0x07;
-    writeRegister(ECONF_REG_ADDR, econf);
+    //const econf = 0x07;
+    //writeRegister(ECONF_REG_ADDR, econf);
     
     // Wait for 4 seconds to let the device reboot after setting config
     await new Promise(resolve => setTimeout(resolve, 4000));

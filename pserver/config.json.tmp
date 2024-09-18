@@ -29,6 +29,7 @@
         "plugins/network/host.js",
         "plugins/network/http-pvf.js",
         "plugins/network/osc.js",
+        "plugins/encoder/encoder-y2kb.js",
         "plugins/startup.js"
     ],
     "serial_interface" : {
@@ -39,6 +40,14 @@
         "cmd" : "any_command",
         "cmd_args" : {},
         "delay_ms" : 1000
+    },
+    "encoder_y2kb" : {
+        "enabled" : false,
+        "bus_num" : 1,
+        "addrs" : {
+            "left" : "0x11",
+            "right" : "0x12"
+        }
     },
     "pviewer_config_ext" : "",
     "license" : {
