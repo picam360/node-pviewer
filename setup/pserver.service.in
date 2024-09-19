@@ -2,7 +2,8 @@
 Description = pserver daemon
 
 [Service]
-ExecStartPre=/bin/sleep 10  # wait for EglDisplay ready
+# wait for EglDisplay ready
+ExecStartPre=/bin/sleep 10
 ExecStart = /bin/bash @CMAKE_INSTALL_PREFIX@/bin/pserver
 ExecStartPost = /bin/sleep 3
 Restart = always
