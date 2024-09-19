@@ -324,7 +324,11 @@ var self = {
             init_options: function (options) {
                 m_options = options["serial_interface"];
 
-                if (m_options && m_options.path) {
+                if(!m_options || !m_options.enabled){
+                    return;
+                }
+
+                if (m_options.path) {
                     plugin.handle_serial_interface(m_options.path);
                 }
 

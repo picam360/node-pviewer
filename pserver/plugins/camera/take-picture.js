@@ -8,7 +8,8 @@ const path = require('path');
 var pstcore = require('node-pstcore');
 
 var m_options = {};
-var m_base_path = "./";
+var m_base_path = "userdata/pvf";
+var m_pstdef = "take-picture-ptpvf";
 var PLUGIN_NAME = "take_picture";
 
 var m_target_filename = "";
@@ -33,12 +34,18 @@ var self = {
             name: PLUGIN_NAME,
             init_options: function (options) {
                 m_options = options["take_picture"];
+                if(!m_options){
+                    return;
+                }
 
-                m_base_path = 'userdata/pvf';
                 if(options["take_picture"] && options["take_picture"]["base_path"]){
                     m_base_path = options["take_picture"]["base_path"] + "/";
                 }else if(options["http_pvf"] && options["http_pvf"]["base_path"]){
                     m_base_path = options["http_pvf"]["base_path"] + "/";
+                }
+                
+                if(options["pstdef"]){
+                    m_pstdef = options["pstdef"];
                 }
             },
             command_handler: function (cmd, args, conn) {
@@ -49,7 +56,7 @@ var self = {
                     }else{
                         m_target_filename = formatDate(new Date()) + ".pvf";
                     }
-                    plugin.take_picture(m_base_path + m_target_filename, () => {
+                    plugin.take_picture(m_pstdef, m_base_path + m_target_filename, () => {
                         console.log("done");
                     });
                     break;
@@ -57,9 +64,9 @@ var self = {
                     break;
                 }
             },
-            take_picture : (file_path, callback) => {
+            take_picture : (pstdef, file_path, callback) => {
                 m_plugin_host.build_pstreamer({
-                    "base" : "take-picture-ptpvf",
+                    "base" : pstdef,
                     "replacements" : {
                         "@FILE_PATH@" : file_path
                     }

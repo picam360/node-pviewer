@@ -35,6 +35,9 @@
     "serial_interface" : {
         "path" : "/dev/ttyACM0"
     },
+    "take_picture" : {
+        "pstdef" : "take-picture-ptpvf"
+    },
     "startup" : {
         "enabled" : false,
         "cmd" : "any_command",
