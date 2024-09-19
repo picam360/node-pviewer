@@ -5,6 +5,7 @@
 Description = pserver daemon
 
 [Service]
+ExecStartPre=/bin/sleep 10  # wait for EglDisplay ready
 ExecStart = /usr/bin/pserver -c @CONFIG_PATH@
 ExecStop = -/usr/bin/docker kill pserver
 
