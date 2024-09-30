@@ -264,6 +264,26 @@ function main() {
         m_redis_client = client;
     });
 
+    if(true){
+        const subscriber = client.duplicate();
+        subscriber.connect().then(() => {
+            console.log('redis subscriber connected:');
+
+            subscriber.subscribe('pserver-rtcm', (message, key) => {
+                const data = Buffer.from(message);
+
+                var chunks = chunkDataWithSequenceAndChecksum(data, 64);
+                m_msg_queue.push("RES GET_RTCM start\n");
+                for(const chunk of chunks){
+                    var base64str = Buffer.from(chunk).toString('base64');
+                    m_msg_queue.push(`RES GET_RTCM ${base64str}\n`);
+                }
+                m_msg_queue.push("RES GET_RTCM end\n");
+
+            });
+        });
+    }
+
     const port = new SerialPort({
         path,
         baudRate: 115200,
@@ -393,4 +413,4 @@ function main() {
 
 if (require.main === module) {
     main();
-  }
+}
