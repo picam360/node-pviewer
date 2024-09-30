@@ -93,7 +93,7 @@ function main() {
         //if(now_ms - m_last_rtcm_time_ms > 1000){
         //    m_last_rtcm_time_ms = now_ms;
 
-            client.publish('pserver-rtcm', data, (err, reply) => {
+            client.publish('pserver-rtcm', data.toString('base64'), (err, reply) => {
                 if (err) {
                     console.error('Error publishing message:', err);
                 } else {

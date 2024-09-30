@@ -270,7 +270,7 @@ function main() {
             console.log('redis subscriber connected:');
 
             subscriber.subscribe('pserver-rtcm', (message, key) => {
-                const data = Buffer.from(message);
+                const data = Buffer.from(message, 'base64');
 
                 var chunks = chunkDataWithSequenceAndChecksum(data, 64);
                 m_msg_queue.push("RES GET_RTCM start\n");
