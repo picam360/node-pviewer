@@ -7,7 +7,7 @@ const I2C_SLAVE_DEV_ADDR = 0x11;
 const CVAL_REG_ADDR = 0x03;
 const ECONF_REG_ADDR = 0x0B;
 
-const busNumber = 1; // Check your I2C bus number on Jetson, typically 1
+const busNumber = 0; // Check your I2C bus number on Jetson, typically 1
 const i2cBus = i2c.openSync(busNumber);
 
 // Helper function to write a value to a specific register

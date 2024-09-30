@@ -1,7 +1,7 @@
 import sys
 from Adafruit_MotorHAT import Adafruit_MotorHAT
 
-driver = Adafruit_MotorHAT(i2c_bus=1)
+driver = Adafruit_MotorHAT(i2c_bus=0)
 motor1 = driver.getMotor(1)
 motor2 = driver.getMotor(2)
 dir_forward = Adafruit_MotorHAT.BACKWARD

@@ -3,7 +3,7 @@
     "params" : {
         "dealer.def" : "mux name=mux ! mjpeg_tegra_decoder name=decoder cudamem=1 ! pcuda_remapper name=remapper ho=1 dup=0 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
         "mux.vin0" : "v4l2_capture name=capture s=@APP.CAM0@",
-        "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET0@\" lens_params=\"@CALIB.LENS0@\" />",
+        "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET0@\" lens_params=\"@CALIB.LENS0@\" nmea=\"@GET_PARAM('redis.pserver-nmea')@\" encoder=\"@GET_PARAM('redis.pserver-encoder')@\" />",
         "mux.vin0.capture.set_sharpness" : "@V4L2.SHARPNESS@",
         "mux.vin0.capture.set_backlight_compensation" : "@V4L2.SHARPNESS@",
         "mux.vin1" : "v4l2_capture name=capture s=@APP.CAM1@",
