@@ -29,7 +29,9 @@
         "plugins/network/host.js",
         "plugins/network/http-pvf.js",
         "plugins/network/osc.js",
+        "plugins/motor/motor.js",
         "plugins/encoder/encoder-y2kb.js",
+        "plugins/imu/imu-bno055.js",
         "plugins/startup.js"
     ],
     "serial_interface" : {
@@ -44,13 +46,22 @@
         "cmd_args" : {},
         "delay_ms" : 1000
     },
+    "motor" : {
+        "enabled" : false,
+        "debug" : false
+    },
     "encoder_y2kb" : {
         "enabled" : false,
-        "bus_num" : 1,
+        "bus_num" : 0,
         "addrs" : {
             "left" : "0x11",
             "right" : "0x12"
-        }
+        },
+        "debug" : false
+    },
+    "imu_bno055" : {
+        "enabled" : false,
+        "debug" : false
     },
     "pviewer_config_ext" : "",
     "license" : {

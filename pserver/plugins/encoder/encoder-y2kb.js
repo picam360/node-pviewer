@@ -2,6 +2,7 @@ module.exports = {
 	create_plugin: function (plugin_host) {
 		console.log("create encoder_y2kb plugin");
     const i2c = require('i2c-bus');
+    let m_options = {};
 
 		var plugin = {
 			name: "encoder_y2kb",
@@ -37,14 +38,14 @@ module.exports = {
         // Register addresses
         const CVAL_REG_ADDR = 0x03;
 
-        const i2cBus = i2c.openSync(m_options.bus_num);
-
         // Periodically read the encoder count
         setInterval(() => {
           // Read 4 bytes from the encoder count register
 
           const counts = {};
           try {
+
+            const i2cBus = i2c.openSync(m_options.bus_num);
           
             for (const key in m_options.addrs) {
               const addr = parseInt(m_options.addrs[key]);
@@ -52,10 +53,14 @@ module.exports = {
               i2cBus.readI2cBlockSync(addr, CVAL_REG_ADDR, buffer.byteLength, buffer);
               const count = buffer.readInt32LE(0); // Convert to signed 32-bit integer
             
-              //console.log(`${addr}, Count: ${count}`);
+              if(m_options.debug){
+                console.log(`${addr}, Count: ${count}`);
+              }
 
               counts[key] = count;
             }
+            
+            i2cBus.closeSync();
       
           } catch (error) {
             console.error("Error:", error);

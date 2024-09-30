@@ -369,7 +369,7 @@ async.waterfall([
 		}
 		
 		//check memory usage
-		if(options["memory_usage_limit"]){
+		if(m_options["memory_usage_limit"]){
 			setInterval(() => {
 				const totalMem = os.totalmem();
 				const freeMem = os.freemem();
@@ -378,7 +378,7 @@ async.waterfall([
 			
 				console.log(`Memory Usage: ${usedMem} / ${totalMem} B ${usedMemPercentage.toFixed(2)}%`);
 			
-				const memory_usage_limit = (options["memory_usage_limit"] || 95);
+				const memory_usage_limit = (m_options["memory_usage_limit"] || 95);
 				if (usedMemPercentage > memory_usage_limit) {
 					console.log(`Memory usage exceeds ${memory_usage_limit}%. Killing the process...`);
 					process.exit(1); // Exit the process with an error code
