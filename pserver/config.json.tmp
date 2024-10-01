@@ -11,7 +11,9 @@
         "default" : "4khdr-stereo",
         "paths" : [
             "streams/4khdr-stereo.json",
+            "streams/4khdr-stereo-calib.json",
             "streams/4khdr-mono.json",
+            "streams/4khdr-mono-calib.json",
             "streams/8mp-stereo.json",
             "streams/8mp-mono.json",
             "streams/take-picture-ptpvf.json"

@@ -1,15 +1,15 @@
 {
     "def" : "dealer ! v4l2_tegra_encoder name=encoder br=@APP.BITRATE_KBPS@ preset=ultrafast",
     "params" : {
-        "dealer.def" : "mux name=mux ! mjpeg_tegra_decoder name=decoder cudamem=1 ! pcuda_remapper name=remapper ho=1 dup=0 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
+        "dealer.def" : "mux name=mux ! mjpeg_tegra_decoder name=decoder cudamem=@JPGDEC.CUDAMEM@ ! pcuda_remapper name=remapper ho=1 dup=0 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
         "mux.vin0" : "v4l2_capture name=capture s=@APP.CAM0@",
-        "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET0@\" lens_params=\"@CALIB.LENS0@\" nmea=\"@GET_PARAM('redis.pserver-nmea')@\" encoder=\"@GET_PARAM('redis.pserver-encoder')@\" />",
+        "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET0@\" lens_params=\"@CALIB.LENS0@\" />",
         "mux.vin0.capture.set_sharpness" : "@V4L2.SHARPNESS@",
-        "mux.vin0.capture.set_backlight_compensation" : "@V4L2.SHARPNESS@",
+        "mux.vin0.capture.set_backlight_compensation" : "@V4L2.BLACKLIGHT_COMPENSATION@",
         "mux.vin1" : "v4l2_capture name=capture s=@APP.CAM1@",
         "mux.vin1.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET1@\" lens_params=\"@CALIB.LENS1@\" />",
         "mux.vin1.capture.set_sharpness" : "@V4L2.SHARPNESS@",
-        "mux.vin1.capture.set_backlight_compensation" : "@V4L2.SHARPNESS@"
+        "mux.vin1.capture.set_backlight_compensation" : "@V4L2.BLACKLIGHT_COMPENSATION@"
     },
     "replacements" : {
         "@APP.N_STREAMS@" : "1",
@@ -17,6 +17,7 @@
         "@APP.SIZE@" : "1024x512",
         "@APP.CAM0@" : "3840x2880@15:/dev/video0",
         "@APP.CAM1@" : "3840x2880@15:/dev/video1",
+        "@JPGDEC.CUDAMEM@" : "1",
         "@CALIB.DEG_OFFSET0@" : "-90,0,0",
         "@CALIB.DEG_OFFSET1@" : "-90,0,0",
         "@CALIB.LENS0@" : "file:///etc/pserver/lens-params0.json",

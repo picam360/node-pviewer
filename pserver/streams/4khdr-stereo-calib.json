@@ -1,0 +1,11 @@
+{
+    "base" : "4khdr-stereo",
+    "def" : "mux name=mux ! mjpeg_tegra_decoder name=decoder cudamem=@JPGDEC.CUDAMEM@ ! pgl_calibrator name=calibrator w=1024 h=1024 d=0 ! v4l2_tegra_encoder name=encoder fps=15",
+    "params" : {
+    },
+    "replacements" : {
+        "@JPGDEC.CUDAMEM@" : "0",
+        "@CALIB.DEG_OFFSET0@" : "-90,0,0",
+        "@CALIB.DEG_OFFSET1@" : "-90,0,0"
+    }
+}
