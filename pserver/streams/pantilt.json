@@ -1,0 +1,16 @@
+{
+    "base" : "4khdr-stereo",
+    "def" : "mux name=mux ! pantilt port=@PANTILT.PORT@ max_speed=1000 speed_threshold=1 speed_threshold=100 speed_span_post=100 cod=5,0 ! v4l2_tegra_encoder name=encoder br=@APP.BITRATE_KBPS@ preset=ultrafast",
+    "params" : {
+        "mux.vin0" : "redis watch=pserver-nmea watch=pserver-encoder watch=pserver-imu ! v4l2_capture name=capture s=@APP.CAM0@ ! mjpeg_tegra_decoder name=decoder cudamem=@JPGDEC.CUDAMEM@",
+        "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET0@\" lens_params=\"@CALIB.LENS0@\" nmea=\"@GET_PARAM('redis.pserver-nmea')@\" encoder=\"@GET_PARAM('redis.pserver-encoder')@\" imu=\"@GET_PARAM('redis.pserver-imu')@\" />"
+    },
+    "replacements" : {
+        "@PANTILT.PORT@" : "/dev/ttyUSB0"
+    },
+    "pviewer_config_ext" : {
+        "plugin_paths" : [
+            "plugins/actuator/wheel.js"
+        ]
+    }
+}

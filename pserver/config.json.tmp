@@ -31,7 +31,7 @@
         "plugins/network/host.js",
         "plugins/network/http-pvf.js",
         "plugins/network/osc.js",
-        "plugins/motor/motor.js",
+        "plugins/vehicle/wheel.js",
         "plugins/encoder/encoder-y2kb.js",
         "plugins/imu/imu-bno055.js",
         "plugins/startup.js"
@@ -48,7 +48,7 @@
         "cmd_args" : {},
         "delay_ms" : 1000
     },
-    "motor" : {
+    "wheel" : {
         "enabled" : false,
         "debug" : false
     },

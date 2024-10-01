@@ -1,6 +1,6 @@
 module.exports = {
 	create_plugin: function (plugin_host) {
-		console.log("create motor plugin");
+		console.log("create wheel plugin");
 		var { PythonShell } = require('python-shell');
 
 		let m_options = {};
@@ -9,17 +9,17 @@ module.exports = {
 		var pyshell = null;
 
 		var plugin = {
-			name: "motor",
+			name: "wheel",
 			init_options: function (options) {
-				m_options = options["motor"];
+				m_options = options["wheel"];
 
 				if(!m_options){
 					m_options = {};
 				}
 				if(m_options.enabled){
-					pyshell = new PythonShell(__dirname + '/motor.py');
+					pyshell = new PythonShell(__dirname + '/wheel.py');
 					pyshell.on('message', function (message) {
-						console.log("motor.py : " + message);
+						console.log("wheel.py : " + message);
 					});
 					pyshell.send('init');
 					setTimeout(() => {
@@ -30,7 +30,7 @@ module.exports = {
 								subscriber.connect().then(() => {
 									console.log('redis connected:');
 
-									subscriber.subscribe('pserver-vehicle-control', (data, key) => {
+									subscriber.subscribe('pserver-vehicle-wheel', (data, key) => {
 										var params = data.trim().split(' ');
 										switch (params[0]) {
 											case "CMD":
