@@ -10,7 +10,7 @@
     },
     "pviewer_config_ext" : {
         "plugin_paths" : [
-            "plugins/actuator/wheel.js"
+            "plugins/vehicle/wheel.js"
         ]
     }
 }
