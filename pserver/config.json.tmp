@@ -16,6 +16,7 @@
             "streams/4khdr-mono-calib.json",
             "streams/8mp-stereo.json",
             "streams/8mp-mono.json",
+            "streams/pantilt.json",
             "streams/take-picture-ptpvf.json"
         ],
         "replacements" : {
