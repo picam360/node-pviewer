@@ -231,14 +231,8 @@ function init_data_stream(callback) {
                         conn.attr.param_pendings.push([name, param, value]);
                     }
                     // pviewer_config_ext for client loading extra plugins
-                    if(options['pviewer_config_ext']) {
-                        fs.readFile(options['pviewer_config_ext'], 'utf8', function(err, data_str) {
-                            if (err) {
-                                console.log("err :" + err);
-                            } else {
-                                conn.attr.param_pendings.push(["network", "pviewer_config_ext", data_str]);
-                            }
-                        });
+                    if(res.pviewer_config_ext) {
+                        conn.attr.param_pendings.push(["network", "pviewer_config_ext", JSON.stringify(res.pviewer_config_ext)]);
                     }
         
                     pstcore.pstcore_set_dequeue_callback(res.pst, (data)=>{
@@ -621,7 +615,7 @@ function send_file(filename, key, conn, data) {
 }
 
 function filerequest_handler(filename, key, conn) {
-    fs.readFile("www/" + filename, function(err, data) {
+    fs.readFile("../pviewer/" + filename, function(err, data) {
         if (err) {
             var header_str = "<picam360:file name=\"" + filename +
                 "\" key=\"" + key + "\" status=\"404\" />";

@@ -4,7 +4,5 @@
         "mux.vin1" : null
     },
     "replacements" : {
-        "@CALIB.DEG_OFFSET0@" : "-90,0,0",
-        "@CALIB.DEG_OFFSET1@" : "-90,0,0"
     }
 }

@@ -65,7 +65,6 @@
         "enabled" : false,
         "debug" : false
     },
-    "pviewer_config_ext" : "",
     "license" : {
         "app_key" : "your_app_key",
         "sku" : "P360SWLIC-STEREO-V1",

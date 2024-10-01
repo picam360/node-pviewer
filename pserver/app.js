@@ -523,6 +523,7 @@ async.waterfall([
 			let def = "";
 			let params = {};
 			let replacements = {};
+			let pviewer_config_ext = {};
 			for (let i = 0; i < name_list.length; i++) {
 				const name = name_list[i];
 				if(m_pstdefs[name].def){
@@ -534,6 +535,7 @@ async.waterfall([
 				const name = name_list[i];
 				params = Object.assign(params, m_pstdefs[name].params || {});
 				replacements = Object.assign(replacements, m_pstdefs[name].replacements || {});
+				pviewer_config_ext = Object.assign(pviewer_config_ext, m_pstdefs[name].pviewer_config_ext || {});
 			}
 			{//config.json is high priority
 				params = Object.assign(params, m_options["pstdefs"].params || {});
@@ -567,7 +569,7 @@ async.waterfall([
 			}
 			pstcore.pstcore_build_pstreamer(def, (pst) => {
 				if(callback){
-					callback( { pstcore, pst, params } );
+					callback( { pstcore, pst, params, pviewer_config_ext } );
 				}
 			});
 		}
