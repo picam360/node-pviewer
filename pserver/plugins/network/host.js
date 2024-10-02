@@ -227,7 +227,7 @@ function init_data_stream(callback) {
                             continue;
                         }
                         pstcore.pstcore_set_param(res.pst, name, param, value);
-    
+                        console.log("stream params : ", name, param, value);
                         conn.attr.param_pendings.push([name, param, value]);
                     }
                     // pviewer_config_ext for client loading extra plugins
