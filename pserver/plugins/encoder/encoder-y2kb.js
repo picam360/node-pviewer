@@ -43,9 +43,11 @@ module.exports = {
           // Read 4 bytes from the encoder count register
 
           const counts = {};
+          
+          let i2cBus;
           try {
 
-            const i2cBus = i2c.openSync(m_options.bus_num);
+            i2cBus = i2c.openSync(m_options.bus_num);
           
             for (const key in m_options.addrs) {
               const addr = parseInt(m_options.addrs[key]);
@@ -59,11 +61,17 @@ module.exports = {
 
               counts[key] = count;
             }
-            
-            i2cBus.closeSync();
       
           } catch (error) {
             console.error("Error:", error);
+          } finally {
+            if (i2cBus) {
+              try {
+                i2cBus.closeSync();
+              } catch (closeError) {
+                console.error("Failed to close I2C bus:", closeError);
+              }
+            }
           }
 
           if (m_plugin_host.get_redis_client) {

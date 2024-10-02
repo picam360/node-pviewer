@@ -31,53 +31,81 @@ module.exports = {
         const OPERATION_MODE_NDOF = 0x0C;
         
         // 初期化関数
-        function initBNO055() {
-          const i2cBus = i2c.openSync(0);
+        function initBNO055(bus_num) {
+          
+          let i2cBus;
+          try {
 
-          // チップIDを確認
-          const chipId = i2cBus.readByteSync(BNO055_I2C_ADDR, BNO055_CHIP_ID);
-          if (chipId !== 0xA0) {
-            throw new Error('BNO055のチップIDが一致しません');
+            i2cBus = i2c.openSync(bus_num);
+
+            // チップIDを確認
+            const chipId = i2cBus.readByteSync(BNO055_I2C_ADDR, BNO055_CHIP_ID);
+            if (chipId !== 0xA0) {
+              throw new Error('BNO055のチップIDが一致しません');
+            }
+          
+            // センサーの初期化
+            i2cBus.writeByteSync(BNO055_I2C_ADDR, BNO055_PWR_MODE, 0x00); // 通常動作モード
+            i2cBus.writeByteSync(BNO055_I2C_ADDR, BNO055_SYS_TRIGGER, 0x00); // リセット解除
+            i2cBus.writeByteSync(BNO055_I2C_ADDR, BNO055_OPR_MODE, OPERATION_MODE_NDOF); // NDOFモード設定
+            console.log('BNO055 初期化完了');
+      
+          } catch (error) {
+            console.error("Error:", error);
+          } finally {
+            if (i2cBus) {
+              try {
+                i2cBus.closeSync();
+              } catch (closeError) {
+                console.error("Failed to close I2C bus:", closeError);
+              }
+            }
           }
-        
-          // センサーの初期化
-          i2cBus.writeByteSync(BNO055_I2C_ADDR, BNO055_PWR_MODE, 0x00); // 通常動作モード
-          i2cBus.writeByteSync(BNO055_I2C_ADDR, BNO055_SYS_TRIGGER, 0x00); // リセット解除
-          i2cBus.writeByteSync(BNO055_I2C_ADDR, BNO055_OPR_MODE, OPERATION_MODE_NDOF); // NDOFモード設定
-          console.log('BNO055 初期化完了');
-
-          i2cBus.closeSync();
         }
         
         // データ取得関数 (クォータニオン)
-        function readQuaternion() {
-          const i2cBus = i2c.openSync(0);
+        function readQuaternion(bus_num) {
+          
+          let i2cBus;
+          try {
 
-          const buffer = Buffer.alloc(8); // 8バイト分のバッファ
-          i2cBus.readI2cBlockSync(BNO055_I2C_ADDR, BNO055_QUATERNION_DATA_W_LSB, 8, buffer);
-        
-          // 生の16ビット整数値を取得
-          let w = (buffer[1] << 8) | buffer[0];
-          let x = (buffer[3] << 8) | buffer[2];
-          let y = (buffer[5] << 8) | buffer[4];
-          let z = (buffer[7] << 8) | buffer[6];
-        
-          // 2の補数形式で扱うため、負の値が正しく処理されるようにする
-          if (w & 0x8000) w -= 65536;
-          if (x & 0x8000) x -= 65536;
-          if (y & 0x8000) y -= 65536;
-          if (z & 0x8000) z -= 65536;
-        
-          // クォータニオンの正規化 (1単位 = 1/2^14)
-          const scale = 1.0 / (1 << 14); // 1/16384
-          return {
-            w: w * scale,
-            x: x * scale,
-            y: y * scale,
-            z: z * scale,
-          };
+            i2cBus = i2c.openSync(bus_num);
 
-          i2cBus.closeSync();
+            const buffer = Buffer.alloc(8); // 8バイト分のバッファ
+            i2cBus.readI2cBlockSync(BNO055_I2C_ADDR, BNO055_QUATERNION_DATA_W_LSB, 8, buffer);
+          
+            // 生の16ビット整数値を取得
+            let w = (buffer[1] << 8) | buffer[0];
+            let x = (buffer[3] << 8) | buffer[2];
+            let y = (buffer[5] << 8) | buffer[4];
+            let z = (buffer[7] << 8) | buffer[6];
+          
+            // 2の補数形式で扱うため、負の値が正しく処理されるようにする
+            if (w & 0x8000) w -= 65536;
+            if (x & 0x8000) x -= 65536;
+            if (y & 0x8000) y -= 65536;
+            if (z & 0x8000) z -= 65536;
+          
+            // クォータニオンの正規化 (1単位 = 1/2^14)
+            const scale = 1.0 / (1 << 14); // 1/16384
+            return {
+              w: w * scale,
+              x: x * scale,
+              y: y * scale,
+              z: z * scale,
+            };
+      
+          } catch (error) {
+            console.error("Error:", error);
+          } finally {
+            if (i2cBus) {
+              try {
+                i2cBus.closeSync();
+              } catch (closeError) {
+                console.error("Failed to close I2C bus:", closeError);
+              }
+            }
+          }
         }
         
         // クォータニオンから方位（ヘディング、Yaw）を計算する関数
@@ -103,11 +131,11 @@ module.exports = {
         }
         
         // メイン処理
-        initBNO055();
+        initBNO055(0);
         setInterval(() => {
           try {
             // クォータニオンを取得
-            const quaternion = readQuaternion();
+            const quaternion = readQuaternion(0);
             if(m_options.debug){
               console.log('クォータニオン');
               console.log('W:', quaternion.w);
