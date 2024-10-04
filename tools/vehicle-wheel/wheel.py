@@ -6,7 +6,7 @@ motor1 = driver.getMotor(1)
 motor2 = driver.getMotor(2)
 dir_forward = Adafruit_MotorHAT.BACKWARD
 dir_backward = Adafruit_MotorHAT.FORWARD
-duty = 40
+duty = 20
 speed = int(duty*255/100)
 
 for line in sys.stdin:

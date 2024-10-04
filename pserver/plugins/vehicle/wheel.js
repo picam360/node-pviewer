@@ -1,12 +1,9 @@
 module.exports = {
 	create_plugin: function (plugin_host) {
 		console.log("create wheel plugin");
-		var { PythonShell } = require('python-shell');
 
 		let m_options = {};
-		var m_cmd_timer = 0;
 		var m_duty = 50;// %
-		var pyshell = null;
 
 		var plugin = {
 			name: "wheel",
@@ -16,50 +13,27 @@ module.exports = {
 				if(!m_options){
 					m_options = {};
 				}
-				if(m_options.enabled){
-					pyshell = new PythonShell(__dirname + '/wheel.py');
-					pyshell.on('message', function (message) {
-						console.log("wheel.py : " + message);
-					});
-					pyshell.send('init');
-					setTimeout(() => {
-						if (m_plugin_host.get_redis_client) {
-							const client = m_plugin_host.get_redis_client();
-							if (client) {
-								const subscriber = client.duplicate();
-								subscriber.connect().then(() => {
-									console.log('redis connected:');
-
-									subscriber.subscribe('pserver-vehicle-wheel', (data, key) => {
-										var params = data.trim().split(' ');
-										switch (params[0]) {
-											case "CMD":
-												if(m_options.debug){
-													console.log(`"${data}" subscribed.`);
-												}
-												plugin.command_handler(params[1]);
-												break;
-										}
-									});
-								});
-							}
-						}
-					}, 1000);
-				}
 			},
 			command_handler: function (cmd) {
-				if(!pyshell){
+				if(!m_options.enabled){
 					return;
 				}
 
 				var split = cmd.split(' ');
 				cmd = split[0];
-				pyshell.send(cmd);
-
-				clearTimeout(m_cmd_timer);
-				m_cmd_timer = setTimeout(() => {
-					pyshell.send("stop");
-				}, m_options.cmd_effective_period || 500);
+				
+				if (m_plugin_host.get_redis_client) {
+					const client = m_plugin_host.get_redis_client();
+					if (client) {
+						client.publish('pserver-vehicle-wheel', `CMD ${cmd}`, (err, reply) => {
+							if (err) {
+								console.error('Error publishing message:', err);
+							} else {
+								//console.log(`Message published to ${reply} subscribers.`);
+							}
+						});
+					}
+				}
 			}
 		};
 		return plugin;

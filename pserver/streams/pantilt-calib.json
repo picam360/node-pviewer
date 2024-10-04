@@ -1,13 +1,15 @@
 {
     "base" : "pantilt",
-    "def" : "mux name=mux ! pantilt port=@PANTILT.PORT@ max_speed=1000 speed_threshold=1 speed_threshold=100 speed_span_post=100 cod=5,0 ! pgl_calibrator name=calibrator w=1024 h=1024 d=0 ! v4l2_tegra_encoder name=encoder fps=15",
+    "def" : "mux name=mux ! pantilt port=@PANTILT.PORT@ max_speed=@PANTILT.MAX_SPEED@ speed_threshold=@PANTILT.SPEED_THRESHOLD@ speed_span_post=100 cod=5,0 ! pgl_calibrator name=calibrator w=1024 h=1024 match_threshold=0.5 d=0 ! v4l2_tegra_encoder name=encoder fps=15",
     "params" : {
         "dealer.def" : null,
         "mux.vin1" : null
     },
     "replacements" : {
         "@JPGDEC.CUDAMEM@" : "0",
-        "@PANTILT.PORT@" : "/dev/ttyUSB0"
+        "@PANTILT.PORT@" : "/dev/ttyUSB0",
+        "@PANTILT.MAX_SPEED@" : "2000",
+        "@PANTILT.SPEED_THRESHOLD@" : "1",
     },
     "pviewer_config_ext" : {
         "plugin_paths" : [

@@ -1,0 +1,16 @@
+##regist service
+#bash setup_service.sh /path/to/config.json
+
+[Unit]
+Description = pserver vehicle-wheel daemon
+
+[Service]
+ExecStart = /usr/bin/pserver-vehicle-wheel
+WorkingDirectory=@SCRIPT_DIR@
+
+Restart = always
+RestartSec = 3
+Type = simple
+
+[Install]
+WantedBy = multi-user.target
