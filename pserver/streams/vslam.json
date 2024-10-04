@@ -7,6 +7,8 @@
         "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" passthrough:nmea=\"@GET_PARAM('redis.pserver-nmea')@\" passthrough:encoder=\"@GET_PARAM('redis.pserver-encoder')@\" passthrough:imu=\"@GET_PARAM('redis.pserver-imu')@\" />"
     },
     "replacements" : {
+        "@APP.CAM0@" : "2048x1536@5:/dev/video0",
+        "@APP.CAM1@" : "2048x1536@5:/dev/video1",
         "@CALIB.DEG_OFFSET.X@" : "0"
     },
     "pviewer_config_ext" : {

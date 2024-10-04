@@ -17,6 +17,7 @@
             "streams/8mp-stereo.json",
             "streams/8mp-mono.json",
             "streams/pantilt.json",
+            "streams/pantilt-calib.json",
             "streams/vslam.json",
             "streams/take-picture-ptpvf.json"
         ],

@@ -59,7 +59,7 @@ module.exports = {
 				clearTimeout(m_cmd_timer);
 				m_cmd_timer = setTimeout(() => {
 					pyshell.send("stop");
-				}, m_options.cmd_effective_period || 100);
+				}, m_options.cmd_effective_period || 500);
 			}
 		};
 		return plugin;
