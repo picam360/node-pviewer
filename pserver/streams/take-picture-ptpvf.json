@@ -8,8 +8,6 @@
     "replacements" : {
         "@PTPVF.BITRATE_KBPS@" : "1000",
         "@PTPVF.SIZE@" : "2048x1024",
-        "@CALIB.DEG_OFFSET0@" : "-90,0,0",
-        "@CALIB.DEG_OFFSET1@" : "-90,0,0",
         "@PANTILT.PORT@" : "/dev/ttyUSB0",
         "@PTPVF.NPQ@" : "3"
     }

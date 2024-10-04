@@ -499,9 +499,9 @@ async.waterfall([
 				};
 			}
 			if(!m_pstdefs[pstdef.base]){
-				console.log("no stream definition : " + name);
-				console.log("use default stream definition : " + pstdef.base);
+				console.log("no stream definition : " + pstdef.base);
 				pstdef.base = m_options["pstdefs"].default;
+				console.log("use default stream definition : " + pstdef.base);
 			}
 			const name_list = [];
 			{
