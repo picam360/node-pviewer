@@ -281,14 +281,18 @@ function start_wrtc_host(p2p_uuid, callback, err_callback, options) {
     connect();
 }
 
-const bind_wrtc_and_ws = (dc, ws) => {
+const bind_wrtc_and_ws = (dc, ws, options) => {
+    options = options || {};
+
     // WebSocket -> DataChannel
     ws.binaryType = 'arraybuffer';// blob or arraybuffer
     ws.onopen = (event) => {
         console.log("ws opened.");
     };
     ws.onmessage = (event) => {
-        console.log("ws2dc send", event.data.length);
+        if(options.debug){
+            console.log("ws2dc send", event.data.length);
+        }
         dc.send(event.data);
     };
     ws.onclose = (event) => {
@@ -301,7 +305,9 @@ const bind_wrtc_and_ws = (dc, ws) => {
         console.log("dc opened.");
     };
     dc.onmessage = (event) => {
-        console.log("dc2ws send", event.data.length);
+        if(options.debug){
+            console.log("dc2ws send", event.data.length);
+        }
         ws.send(event.data);
     };
     dc.onclose = (event) => {
@@ -309,12 +315,15 @@ const bind_wrtc_and_ws = (dc, ws) => {
         ws.close();
     };
 };
-const bind_wrtc_and_socket = (dc, socket) => {
-    dc.pendings = [];
+
+const bind_wrtc_and_socket = (dc, socket, options) => {
+    options = options || {};
 
     // Socket -> DataChannel
     socket.on('data', (data) => {
-        console.log("socket2dc send", data.length, dc.readyState);
+        if(options.debug){
+            console.log("socket2dc send", data.length, dc.readyState);
+        }
         if (dc.readyState === 'open') {
             dc.send(data);
         }else{
@@ -324,12 +333,12 @@ const bind_wrtc_and_socket = (dc, socket) => {
     });
 
     socket.on('end', () => {
-        console.log("ws closed.");
+        console.log("socket closed.");
         dc.close();
     });
 
     socket.on('error', (err) => {
-        console.log("ws error.", err);
+        console.log("socket error.", err);
         dc.close();
     });
 
@@ -345,8 +354,11 @@ const bind_wrtc_and_socket = (dc, socket) => {
         }
     };
     dc.onmessage = (event) => {
-        console.log("dc2socket send", event.data.length);
-        socket.write(Buffer.from(event.data));
+        const data = Buffer.from(event.data);
+        if(options.debug){
+            console.log("dc2socket send", data.length);
+        }
+        socket.write(data);
     };
     dc.onclose = (event) => {
         console.log("dc closed.");
