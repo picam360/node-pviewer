@@ -37,7 +37,7 @@ var SIGNALING_PORT = 443;
 var SIGNALING_SECURE = true;
 var P2P_API_KEY = "v8df88o1y4zbmx6r";
 
-class Wrtc2Ws {
+class DataChannel2WebSocket {
     constructor(dataChannel) {
         this.dataChannel = dataChannel;
         this.readyState = this.getReadyState(); // Convert RTCDataChannel readyState to WebSocket-compatible readyState
@@ -162,7 +162,7 @@ function start_wrtc_client(p2p_uuid, callback, err_callback, options) {
                 console.log('Data channel is created!');
 
                 const dc = ev.channel;
-                callback(new Wrtc2Ws(dc));
+                callback(dc);
             };
             pc.onerror = function(err) {
                 if (err.type == "peer-unavailable") {
@@ -178,6 +178,7 @@ function start_wrtc_client(p2p_uuid, callback, err_callback, options) {
         sig.request_offer(p2p_uuid);
     });
 }
+
 function start_wrtc_host(p2p_uuid, callback, err_callback, options) {
     options = options || {};
 
@@ -225,7 +226,7 @@ function start_wrtc_host(p2p_uuid, callback, err_callback, options) {
             pc_map[request.src] = pc;
 
             const dc = pc.createDataChannel('data');
-            callback(new Wrtc2Ws(dc));
+            callback(dc);
 
             pc.createOffer().then(function(sdp) {
                 console.log('setLocalDescription');
@@ -279,7 +280,84 @@ function start_wrtc_host(p2p_uuid, callback, err_callback, options) {
     };
     connect();
 }
+
+const bind_wrtc_and_ws = (dc, ws) => {
+    // WebSocket -> DataChannel
+    ws.binaryType = 'arraybuffer';// blob or arraybuffer
+    ws.onopen = (event) => {
+        console.log("ws opened.");
+    };
+    ws.onmessage = (event) => {
+        console.log("ws2dc send", event.data.length);
+        dc.send(event.data);
+    };
+    ws.onclose = (event) => {
+        console.log("ws closed.");
+        dc.close();
+    };
+
+    // DataChannel -> WebSocket
+    dc.onopen = (event) => {
+        console.log("dc opened.");
+    };
+    dc.onmessage = (event) => {
+        console.log("dc2ws send", event.data.length);
+        ws.send(event.data);
+    };
+    dc.onclose = (event) => {
+        console.log("dc closed.");
+        ws.close();
+    };
+};
+const bind_wrtc_and_socket = (dc, socket) => {
+    dc.pendings = [];
+
+    // Socket -> DataChannel
+    socket.on('data', (data) => {
+        console.log("socket2dc send", data.length, dc.readyState);
+        if (dc.readyState === 'open') {
+            dc.send(data);
+        }else{
+            dc.pendings = dc.pendings || [];
+            dc.pendings.push(data);
+        }
+    });
+
+    socket.on('end', () => {
+        console.log("ws closed.");
+        dc.close();
+    });
+
+    socket.on('error', (err) => {
+        console.log("ws error.", err);
+        dc.close();
+    });
+
+    // DataChannel -> Socket
+    dc.onopen = (event) => {
+        console.log("dc opened.");
+        if(dc.pendings){
+            for(const data of dc.pendings){
+                console.log("socket2dc send pending", data.length, dc.readyState);
+                dc.send(data);
+            }
+            dc.pendings = undefined;
+        }
+    };
+    dc.onmessage = (event) => {
+        console.log("dc2socket send", event.data.length);
+        socket.write(Buffer.from(event.data));
+    };
+    dc.onclose = (event) => {
+        console.log("dc closed.");
+        socket.end();
+    };
+};
+
 module.exports = {
+    DataChannel2WebSocket,
     start_wrtc_client,
-    start_wrtc_host
+    start_wrtc_host,
+    bind_wrtc_and_ws,
+    bind_wrtc_and_socket,
 };
