@@ -14,7 +14,7 @@ sudo chmod +x /usr/bin/${SERVICE_NAME}
 
 sed -e "s%@SCRIPT_DIR@%${SCRIPT_DIR}%" \
     -e "s%@SERVICE_NAME@%${SERVICE_NAME}%" \
-    ${SERVICE_NAME}.in | sudo tee /etc/systemd/system/${SERVICE_NAME}.service
+    ${SERVICE_NAME}.service.in | sudo tee /etc/systemd/system/${SERVICE_NAME}.service
 
 sudo systemctl daemon-reload
 sudo systemctl restart ${SERVICE_NAME}.service

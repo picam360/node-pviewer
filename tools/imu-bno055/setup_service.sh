@@ -3,7 +3,7 @@
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 CONFIG_PATH=$1
 NODE_PATH=$(which node)
-SERVICE_NAME=pserver-ntrip-client.service
+SERVICE_NAME=imu-bno055
 
 sed -e "s%@CONFIG_PATH@%${CONFIG_PATH}%" \
     -e "s%@NODE_PATH@%${NODE_PATH}%" \
