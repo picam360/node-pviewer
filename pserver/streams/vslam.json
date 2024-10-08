@@ -1,9 +1,9 @@
 {
     "base" : "4khdr-stereo",
-    "def" : "dealer !  mjpeg_encoder ! recorder path=/home/picam360/rec_@FIRST_STORED_TIME@/@TIME_STAMP@.jpeg ! mjpeg_decoder ! v4l2_tegra_encoder name=encoder br=@APP.BITRATE_KBPS@ preset=ultrafast",
+    "def" : "dealer ! mjpeg_encoder ! redis pst_pub=pserver-vslam-pst ! mjpeg_decoder ! v4l2_tegra_encoder name=encoder br=@APP.BITRATE_KBPS@ preset=ultrafast",
     "params" : {
-        "dealer.def" : "mux name=mux! pcuda_remapper name=remapper maptype=WINDOW fov=90 ignore_view_params=1 s=@APP.SIZE@ n_vstreams=1",
-        "mux.vin0" : "redis watch=pserver-nmea watch=pserver-encoder watch=pserver-imu ! v4l2_capture name=capture s=@APP.CAM0@ ! mjpeg_tegra_decoder name=decoder cudamem=@JPGDEC.CUDAMEM@",
+        "dealer.def" : "mux name=mux ! pcuda_remapper name=remapper maptype=WINDOW fov=90 ignore_view_params=1 s=@APP.SIZE@ n_vstreams=1",
+        "mux.vin0" : "redis param_sub=pserver-nmea param_sub=pserver-encoder param_sub=pserver-imu ! v4l2_capture name=capture s=@APP.CAM0@ ! mjpeg_tegra_decoder name=decoder cudamem=@JPGDEC.CUDAMEM@",
         "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" passthrough:nmea=\"@GET_PARAM('redis.pserver-nmea')@\" passthrough:encoder=\"@GET_PARAM('redis.pserver-encoder')@\" passthrough:imu=\"@GET_PARAM('redis.pserver-imu')@\" />"
     },
     "replacements" : {

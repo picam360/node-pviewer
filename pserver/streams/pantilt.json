@@ -2,7 +2,7 @@
     "base" : "4khdr-stereo",
     "params" : {
         "dealer.def" : "mux name=mux ! pantilt port=@PANTILT.PORT@ max_speed=@PANTILT.MAX_SPEED@ speed_threshold=@PANTILT.SPEED_THRESHOLD@ speed_span_post=100 cod=5,0 ! pcuda_remapper name=remapper ho=1 dup=0 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
-        "mux.vin0" : "redis watch=pserver-nmea watch=pserver-encoder watch=pserver-imu ! v4l2_capture name=capture s=@APP.CAM0@ ! mjpeg_tegra_decoder name=decoder cudamem=@JPGDEC.CUDAMEM@",
+        "mux.vin0" : "redis param_sub=pserver-nmea param_sub=pserver-encoder param_sub=pserver-imu ! v4l2_capture name=capture s=@APP.CAM0@ ! mjpeg_tegra_decoder name=decoder cudamem=@JPGDEC.CUDAMEM@",
         "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" pantilt_params=\"@CALIB.PANTILT@\" passthrough:nmea=\"@GET_PARAM('redis.pserver-nmea')@\" passthrough:encoder=\"@GET_PARAM('redis.pserver-encoder')@\" passthrough:imu=\"@GET_PARAM('redis.pserver-imu')@\" />"
     },
     "replacements" : {

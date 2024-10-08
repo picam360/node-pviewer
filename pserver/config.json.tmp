@@ -36,7 +36,6 @@
         "plugins/network/osc.js",
         "plugins/vehicle/wheel.js",
         "plugins/encoder/encoder-y2kb.js",
-        "plugins/imu/imu-bno055.js",
         "plugins/startup.js"
     ],
     "serial_interface" : {
@@ -62,10 +61,6 @@
             "left" : "0x11",
             "right" : "0x12"
         },
-        "debug" : false
-    },
-    "imu_bno055" : {
-        "enabled" : false,
         "debug" : false
     },
     "license" : {
