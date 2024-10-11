@@ -122,7 +122,7 @@ function start_webserver(callback) { // start up websocket server
         });
     });
     express_app.use(express.static('../pviewer')); // this need be set
-	var http_port = 9001;
+	var http_port = 36080;//PICAM360(36000)+HTTP(80)+APPCODE(0)
 	if(m_options['http_port']){
 		http_port = m_options['http_port'];
 	}
@@ -130,7 +130,7 @@ function start_webserver(callback) { // start up websocket server
         console.log('listening http on *:' + http_port);
     });
 
-	var https_port = 9002;
+	var https_port = 36443;//PICAM360(36000)+HTTPS(443)+APPCODE(0)
 	if(m_options['https_port']){
 		https_port = m_options['https_port'];
 	}
