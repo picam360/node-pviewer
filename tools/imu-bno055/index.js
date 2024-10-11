@@ -3,7 +3,8 @@ const fs = require('fs');
 const i2c = require('i2c-bus');
 let m_options = {
     bus_num : 0,
-    calib_path : "/etc/pserver/imu-bno055.calib"
+    calib_path : "/etc/pserver/imu-bno055.calib",
+    fps : 15,
 };
 let m_mode = "CONFIG";
 
@@ -213,7 +214,7 @@ function main(){
                 } catch (err) {
                     reject(err);
                 }
-            }, 1000); // Retrieve data every second
+            }, 1000 / m_options.fps); // Retrieve data every second
         });
     }).catch((err) => {
         console.error('Error:', err);
