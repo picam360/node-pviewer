@@ -1,5 +1,5 @@
 const { J } = require('quaternion');
-console.log("create motor plugin");
+console.log("auto-drive");
 var fs = require("fs");
 const nmea = require('nmea-simple');
 const xml2js = require('xml2js');
