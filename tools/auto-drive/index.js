@@ -266,7 +266,7 @@ function main() {
 		
 		const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 		load_auto_drive_waypoints(pif_dirpath, (drive_waypoints) => {
-			client.set('pserver-active-drive-waypoints', JSON.stringify(drive_waypoints)).then((data) => {
+			client.set('pserver-auto-drive-waypoints', JSON.stringify(drive_waypoints)).then((data) => {
 				console.log('set drive path', data);
 			});
 		});
