@@ -171,6 +171,18 @@ function rotate_robot(angle) {
 		m_client.publish('pserver-vehicle-wheel', 'CMD TURN_LEFT');
 	}
 }
+function update_auto_drive_cur(cur) {
+	m_auto_drive_cur = cur;
+	m_client.set('pserver-auto-drive-cur', m_auto_drive_cur).then((data) => {
+		console.log('set auto drive cur', data);
+	});
+}
+function update_auto_drive_waypoints(waypoints) {
+	m_auto_drive_waypoints = waypoints;
+	m_client.set('pserver-auto-drive-waypoints', JSON.stringify(waypoints)).then((data) => {
+		console.log('set auto drive waypoints', data);
+	});
+}
 
 function auto_drive_handler(tmp_img){
 	if(tmp_img.length != 3){
@@ -219,7 +231,7 @@ function auto_drive_handler(tmp_img){
         console.log(`Reached waypoint ${key}@${m_auto_drive_cur} : ${distanceToTarget.toFixed(3)}m`);
         console.log(`                 ${frame_dom['picam360:frame']['passthrough:nmea']}`);
         console.log(`                 ${target_waypoint['nmea']}`);
-        m_auto_drive_cur++;
+        update_auto_drive_cur(m_auto_drive_cur + 1);
         return;
     }
 
@@ -265,10 +277,9 @@ function main() {
 		m_client = client;
 		
 		const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
-		load_auto_drive_waypoints(pif_dirpath, (drive_waypoints) => {
-			client.set('pserver-auto-drive-waypoints', JSON.stringify(drive_waypoints)).then((data) => {
-				console.log('set drive path', data);
-			});
+		load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
+			update_auto_drive_waypoints(waypoints);
+			update_auto_drive_cur(0);
 		});
 	});
 
@@ -355,9 +366,10 @@ function command_handler(cmd) {
 		case "START_AUTO":
 			if(m_drive_mode == "STANBY") {
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
-				load_auto_drive_waypoints(pif_dirpath, (drive_waypoints) => {
+				load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
 					m_drive_mode = "AUTO";
-					m_auto_drive_waypoints = drive_waypoints;
+					update_auto_drive_waypoints(waypoints);
+					update_auto_drive_cur(0);
 					console.log("drive mode", m_drive_mode);
 				});
 			}else{
