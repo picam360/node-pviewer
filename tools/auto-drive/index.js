@@ -1,9 +1,13 @@
 const { J } = require('quaternion');
 console.log("auto-drive");
 var fs = require("fs");
+var path = require("path");
 const nmea = require('nmea-simple');
 const xml2js = require('xml2js');
 const { execSync } = require('child_process');
+const yargs = require('yargs');
+const fxp = require('fast-xml-parser');
+const pif_utils = require('./pif-utils');
 
 var m_options = {
 	"waypoint_threshold_m" : 10,
@@ -33,7 +37,62 @@ function latLonToXY(lat1, lon1, lat2, lon2) {
 	return { x, y };
 }
 
+function load_active_drive_path(dirpath, client){
+	fs.readdir(dirpath, { withFileTypes: true }, (err, entries) => {
+		if (err) {
+			console.error('Error reading directory:', err);
+			return;
+		}
+		const paths = {};
+		entries.forEach(entry => {
+			if (entry.isFile()) {
+				if(path.extname(entry.name) == ".pif"){
+					const fullPath = path.join(dirpath, entry.name);
+					pif_utils.read_pif(fullPath, (file_path, result) => {
+						const meta = result[1].toString('utf-8');
+						const parser = new fxp.XMLParser({
+							ignoreAttributes: false,
+							attributeNamePrefix: "",
+						});
+						const frame_dom = parser.parse(meta);
+
+						const fileNameWithoutExt = path.basename(file_path, path.extname(file_path));
+						paths[fileNameWithoutExt] = {
+							nmea : frame_dom['picam360:frame']['passthrough:nmea'],
+							image : `/active_drive_path/${entry.name}.0.0.jpeg`,
+						};
+					});
+					//console.log(`File: ${entry.name}`);
+				}
+			} else if (entry.isDirectory()) {
+				//console.log(`Directory: ${entry.name}`);
+			}
+		});
+		client.set('pserver-active-drive-path', JSON.stringify(paths)).then((data) => {
+			console.log('set drive path', data);
+		});
+	});
+}
+
 function main() {
+    const argv = yargs
+        .option('dir', {
+            alias: 'd',
+            type: 'string',
+            description: 'directory',
+        })
+        .option('host', {
+            type: 'string',
+            default: 'localhost',
+            description: 'directory',
+        })
+        .help()
+        .alias('help', 'h')
+        .argv;
+
+	if(argv.dir){
+		m_options.data_filepath = argv.dir;
+	}
 
     const redis = require('redis');
     const client = redis.createClient({
@@ -45,6 +104,8 @@ function main() {
     });
     client.connect().then(() => {
         console.log('redis connected:');
+		
+		load_active_drive_path(m_options.data_filepath, client);
 	});
 
 	const subscriber = client.duplicate();
@@ -97,12 +158,6 @@ function main() {
 						const xmlData = data.slice(4, 4 + xmlSize).toString('utf-8');
 						xml2js.parseString(xmlData, (err, result) => {
 							if (err) throw err;
-		
-							const metaSize = parseInt(result["picam360:image"].$.meta_size, 10);
-							const metaString = data.slice(4 + xmlSize, 4 + xmlSize + metaSize).toString('utf-8');
-							xml2js.parseString(metaString, (err, result) => {
-								if (err) throw err;
-							});
 
 							const timestamp = result["picam360:image"].$.timestamp.replace(',', '.');
 							const pif_filepath = `${m_options.data_filepath}/waypoint_images/${timestamp}.pif`;
