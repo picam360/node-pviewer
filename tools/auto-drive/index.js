@@ -7,6 +7,10 @@ const xml2js = require('xml2js');
 const { execSync } = require('child_process');
 const yargs = require('yargs');
 const fxp = require('fast-xml-parser');
+const xml_parser = new fxp.XMLParser({
+	ignoreAttributes: false,
+	attributeNamePrefix: "",
+});
 const pif_utils = require('./pif-utils');
 
 let m_options = {
@@ -55,11 +59,7 @@ function load_auto_drive_waypoints(dirpath, callback){
 						const fullPath = path.join(dirpath, entry.name);
 						pif_utils.read_pif(fullPath, (file_path, result) => {
 							const meta = result[1].toString('utf-8');
-							const parser = new fxp.XMLParser({
-								ignoreAttributes: false,
-								attributeNamePrefix: "",
-							});
-							const frame_dom = parser.parse(meta);
+							const frame_dom = xml_parser.parse(meta);
 	
 							const fileNameWithoutExt = path.basename(file_path, path.extname(file_path));
 							drive_waypoints[fileNameWithoutExt] = {
@@ -86,6 +86,7 @@ function record_waypoints_handler(tmp_img){
 	if(tmp_img.length != 3){
 		return;
 	}
+
 	const data = Buffer.concat([tmp_img[0], tmp_img[1]]);
 	const header = data.slice(0, 2).toString('utf-8');
 	if (header !== 'PI') {
@@ -94,7 +95,7 @@ function record_waypoints_handler(tmp_img){
 
 	const header_size = data.readUInt16BE(2);
 	const xml = data.slice(4, 4 + header_size).toString('utf-8');
-	const img_dom = parser.parse(xml);
+	const img_dom = xml_parser.parse(xml);
 	const timestamp = img_dom["picam360:image"]['timestamp'].replace(',', '.');
 	const pif_filepath = `${m_options.data_filepath}/waypoint_images/${timestamp}.pif`;
 	fs.writeFile(pif_filepath, data, (err) => {
@@ -156,9 +157,9 @@ function radiansToDegrees(radians) {
 function move_forward(distance) {
     console.log(`Moving forward ${distance.toFixed(2)} meters`);
 	if(distance > 0){
-		m_client.publish('pserver-vehicle-wheel', 'CMD MOVE_FOWARD');
+		m_client.publish('pserver-vehicle-wheel', 'CMD move_forward');
 	}else{
-		m_client.publish('pserver-vehicle-wheel', 'CMD MOVE_BACKWARD');
+		m_client.publish('pserver-vehicle-wheel', 'CMD move_backward');
 	}
 }
 
@@ -166,9 +167,9 @@ function rotate_robot(angle) {
     console.log(`Rotating ${angle.toFixed(2)} degrees`);
 
 	if(angle > 0){
-		m_client.publish('pserver-vehicle-wheel', 'CMD TURN_RIGHT');
+		m_client.publish('pserver-vehicle-wheel', 'CMD turn_right');
 	}else{
-		m_client.publish('pserver-vehicle-wheel', 'CMD TURN_LEFT');
+		m_client.publish('pserver-vehicle-wheel', 'CMD turn_left');
 	}
 }
 function update_auto_drive_cur(cur) {
@@ -189,11 +190,6 @@ function auto_drive_handler(tmp_img){
 		return;
 	}
 
-	const parser = new fxp.XMLParser({
-		ignoreAttributes: false,
-		attributeNamePrefix: "",
-	});
-
 	const data = Buffer.concat([tmp_img[0], tmp_img[1]]);
 	const header = data.slice(0, 2).toString('utf-8');
 	if (header !== 'PI') {
@@ -202,11 +198,11 @@ function auto_drive_handler(tmp_img){
 
 	const header_size = data.readUInt16BE(2);
 	const xml = data.slice(4, 4 + header_size).toString('utf-8');
-	const img_dom = parser.parse(xml);
+	const img_dom = xml_parser.parse(xml);
 
 	const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
 	const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
-	const frame_dom = parser.parse(meta);
+	const frame_dom = xml_parser.parse(meta);
 	const current_nmea = nmea.parseNmeaSentence(frame_dom['picam360:frame']['passthrough:nmea']);
 	const current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
 
@@ -253,11 +249,18 @@ function main() {
         .option('host', {
             type: 'string',
             default: 'localhost',
-            description: 'directory',
+            description: 'host',
+        })
+        .option('port', {
+            type: 'number',
+            default: 6379,
+            description: 'port',
         })
         .help()
         .alias('help', 'h')
         .argv;
+	const host = argv.host;
+	const port = argv.port;
 
 	if(argv.dir){
 		m_options.data_filepath = argv.dir;
@@ -265,8 +268,7 @@ function main() {
 
     const redis = require('redis');
     const client = redis.createClient({
-        host: 'localhost',
-        port: 6379,
+        url: `redis://${host}:${port}`
     });
     client.on('error', (err) => {
         console.error('redis error:', err);
