@@ -209,34 +209,56 @@ function auto_drive_handler(tmp_img){
 	const keys = Object.keys(m_auto_drive_waypoints);
     if (m_auto_drive_cur >= keys.length) {
         console.log('All waypoints reached!');
+
+		m_client.publish('pserver-auto-drive-info', JSON.stringify({
+			"mode" : "AUTO",
+			"state" : "DONE",
+			"waypoint_distance" : "-",
+			"heading_error" : "-",
+		}));
         return;
     }
 
-	const key = keys[m_auto_drive_cur];
-	const target_waypoint = m_auto_drive_waypoints[key];
-	const target_nmea = nmea.parseNmeaSentence(target_waypoint['nmea']);
-    const distanceToTarget = calculateDistance(
-		current_nmea.latitude, current_nmea.longitude,
-		target_nmea.latitude, target_nmea.longitude);
-    const targetHeading = calculateBearing(
-		current_nmea.latitude, current_nmea.longitude,
-		target_nmea.latitude, target_nmea.longitude);
-    const headingError = targetHeading - current_imu.heading;
+	let cur = m_auto_drive_cur;
+	while(cur < keys.length){
+		const key = keys[cur];
+		const target_waypoint = m_auto_drive_waypoints[key];
+		const target_nmea = nmea.parseNmeaSentence(target_waypoint['nmea']);
+		const distanceToTarget = calculateDistance(
+			current_nmea.latitude, current_nmea.longitude,
+			target_nmea.latitude, target_nmea.longitude);
+		const targetHeading = calculateBearing(
+			current_nmea.latitude, current_nmea.longitude,
+			target_nmea.latitude, target_nmea.longitude);
+		let headingError = targetHeading - current_imu.heading;
+		if(headingError <= -180){
+			headingError += 360;
+		}else if(headingError > 180){
+			headingError -= 360;
+		}
+	
+		if (distanceToTarget > 0.5) {
+			// Control logic: move forward/backward or rotate
+			if (Math.abs(headingError) > 10) { // 10 degrees threshold
+				rotate_robot(headingError);
+			} else {
+				move_forward(distanceToTarget);
+			}
+	
+			m_client.publish('pserver-auto-drive-info', JSON.stringify({
+				"mode" : "AUTO",
+				"state" : "DRIVING",
+				"waypoint_distance" : distanceToTarget,
+				"heading_error" : headingError,
+			}));
+			break;
+		}
 
-    if (distanceToTarget < 0.5) { // 0.5 meters threshold
-        console.log(`Reached waypoint ${key}@${m_auto_drive_cur} : ${distanceToTarget.toFixed(3)}m`);
-        console.log(`                 ${frame_dom['picam360:frame']['passthrough:nmea']}`);
-        console.log(`                 ${target_waypoint['nmea']}`);
-        update_auto_drive_cur(m_auto_drive_cur + 1);
-        return;
-    }
+		cur++;
+	}
 
-    // Control logic: move forward/backward or rotate
-    if (Math.abs(headingError) > 10) { // 10 degrees threshold
-        rotate_robot(headingError);
-    } else {
-        move_forward(distanceToTarget);
-    }
+	console.log(`Reached waypoint ${cur}`);
+	update_auto_drive_cur(cur);
 }
 
 function main() {
