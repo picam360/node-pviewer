@@ -1,6 +1,7 @@
 #! /usr/bin/env node
 process.chdir(__dirname);
 
+const path = require('path');
 const fs = require("fs");
 const { execSync } = require('child_process');
 
