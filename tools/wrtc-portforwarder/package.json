@@ -1,0 +1,9 @@
+{
+ "name": "wrtc-portforwarder",
+ "version": "1.0.0",
+ "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
+ "license": "MIT",
+ "dependencies": {
+  "wrtc": "*"
+ }
+}

@@ -5,6 +5,7 @@ const net = require('net');
 const yargs = require('yargs');
 const wrtc_utils = require("./wrtc-utils.js");
 
+//usage : node index.js --bind gateway:target
 
 const m_options = {
     
