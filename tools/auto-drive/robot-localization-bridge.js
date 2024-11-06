@@ -1,5 +1,6 @@
+console.log("robot-localization-bridge");
+
 const { J } = require('quaternion');
-console.log("auto-drive");
 const fs = require("fs");
 const path = require("path");
 const nmea = require('nmea-simple');
@@ -99,7 +100,15 @@ function main() {
 	subscriber.connect().then(async () => {
 		console.log('redis connected:');
 
-		await m_ros_msg_pub.initialize();
+		await m_ros_msg_pub.initialize((odometry) => {
+			client.publish('pserver-odometry', JSON.stringify(odometry), (err, reply) => {
+				if (err) {
+					console.error('Error publishing message:', err);
+				} else {
+					//console.log(`Message published to ${reply} subscribers.`);
+				}
+			});
+		});
 
 		let tmp_img = [];
 		subscriber.subscribe('pserver-vslam-pst', (data, key) => {
@@ -109,16 +118,6 @@ function main() {
 			} else {
 				tmp_img.push(Buffer.from(data, 'base64'));
 			}
-		});
-
-		m_ros_msg_pub.subscribeOdometry((odometry) => {
-			client.publish('pserver-odometry', JSON.stringify(odometry), (err, reply) => {
-				if (err) {
-					console.error('Error publishing message:', err);
-				} else {
-					//console.log(`Message published to ${reply} subscribers.`);
-				}
-			});
 		});
 	});
 }

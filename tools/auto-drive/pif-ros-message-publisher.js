@@ -22,11 +22,13 @@ class PifRosMessagePublisher {
         this.gpsNmea = null;
     }
 
-    async initialize() {
+    async initialize(odometry_callback) {
         if (this.isInitialized || this.isInitializing) {
             return;
         }
         this.isInitializing = true;
+
+        this.odometry_callback = odometry_callback;
 
         try {
             await rosnodejs.initNode('/pif_ros_message_publisher', {
@@ -57,6 +59,11 @@ class PifRosMessagePublisher {
         });
         this.gpsPub = this.nh.advertise('/gps_nmea', std_msgs.String, {
             queueSize: 10
+        });
+
+        //Create Subsclibers
+        this.odometrySub = this.nh.subscribe('/odometry/filtered', nav_msgs.Odometry, (data) => {
+            this.odometry_callback(this.convertOdometryToObj(data));
         });
 
         this.publishMessages();
