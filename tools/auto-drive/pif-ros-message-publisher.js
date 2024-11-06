@@ -1,5 +1,6 @@
 const rosnodejs = require('rosnodejs');
 const std_msgs = rosnodejs.require('std_msgs').msg;
+const nav_msgs = rosnodejs.require('nav_msgs').msg;
 
 class PifRosMessagePublisher {
     constructor() {
@@ -112,6 +113,51 @@ class PifRosMessagePublisher {
             };
             this.wheelPub.publish(msg);
         }
+    }
+
+    convertOdometryToObj(data) {
+        return {
+            header: {
+                seq: data.header.seq,
+                stamp: {
+                    secs: data.header.stamp.secs,
+                    nsecs: data.header.stamp.nsecs
+                },
+                frame_id: data.header.frame_id
+            },
+            child_frame_id: data.child_frame_id,
+            pose: {
+                position: {
+                    x: data.pose.pose.position.x,
+                    y: data.pose.pose.position.y,
+                    z: data.pose.pose.position.z
+                },
+                orientation: {
+                    x: data.pose.pose.orientation.x,
+                    y: data.pose.pose.orientation.y,
+                    z: data.pose.pose.orientation.z,
+                    w: data.pose.pose.orientation.w
+                }
+            },
+            twist: {
+                linear: {
+                    x: data.twist.twist.linear.x,
+                    y: data.twist.twist.linear.y,
+                    z: data.twist.twist.linear.z
+                },
+                angular: {
+                    x: data.twist.twist.angular.x,
+                    y: data.twist.twist.angular.y,
+                    z: data.twist.twist.angular.z
+                }
+            }
+        };
+    }
+
+    subscribeOdometry(callback) {
+        this.topic1Sub = this.nh.subscribe('/odometry/filtered', nav_msgs.Odometry, (data) => {
+            callback(this.convertOdometryToObj(data));
+        });
     }
 }
 module.exports = PifRosMessagePublisher;

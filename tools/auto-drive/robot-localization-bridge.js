@@ -17,13 +17,6 @@ let m_options = {
 	"waypoint_threshold_m": 10,
 	"data_filepath": "auto-drive-waypoints"
 };
-let m_socket = null;
-let m_drive_mode = "STANBY";
-let m_averaging_nmea = null;
-let m_averaging_count = 0;
-let m_last_nmea = null;
-let m_auto_drive_waypoints = null;
-let m_auto_drive_cur = 0;
 let m_ros_msg_pub = new PifRosMessagePublisher();
 
 function toSec(timestampText) {
@@ -60,9 +53,6 @@ function auto_drive_handler(tmp_img) {
 
 	console.log(current_nmea, current_imu, current_encoder);
 
-	if(!m_ros_msg_pub.isInitialized){
-		m_ros_msg_pub.initialize();
-	}
 	const timestampSec = toSec(timestamp);
 	m_ros_msg_pub.updateWheelCount(current_encoder.left, current_encoder.right, timestampSec);
 	m_ros_msg_pub.updateGpsNmea(nmea_str, timestampSec);
@@ -73,6 +63,7 @@ function main() {
 
 	process.env.CMAKE_PREFIX_PATH = "/opt/ros/noetic";
 	process.env.ROS_MASTER_URI = "http://localhost:11311";
+	process.env.ROS_PACKAGE_PATH = "/opt/ros/noetic/share";
 
 	const argv = yargs
 		.option('host', {
@@ -105,8 +96,10 @@ function main() {
 	});
 
 	const subscriber = client.duplicate();
-	subscriber.connect().then(() => {
+	subscriber.connect().then(async () => {
 		console.log('redis connected:');
+
+		await m_ros_msg_pub.initialize();
 
 		let tmp_img = [];
 		subscriber.subscribe('pserver-vslam-pst', (data, key) => {
@@ -116,6 +109,16 @@ function main() {
 			} else {
 				tmp_img.push(Buffer.from(data, 'base64'));
 			}
+		});
+
+		m_ros_msg_pub.subscribeOdometry((odometry) => {
+			client.publish('pserver-odometry', JSON.stringify(odometry), (err, reply) => {
+				if (err) {
+					console.error('Error publishing message:', err);
+				} else {
+					//console.log(`Message published to ${reply} subscribers.`);
+				}
+			});
 		});
 	});
 }
