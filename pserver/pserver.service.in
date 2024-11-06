@@ -1,0 +1,23 @@
+##regist service
+#bash setup_service.sh /path/to/config.json
+
+[Unit]
+Description = pserver daemon
+
+[Service]
+# wait for EglDisplay ready
+ExecStartPre = /bin/sleep 10
+ExecStart = /usr/bin/pserver -c @CONFIG_PATH@
+ExecStop = -/usr/bin/docker kill pserver
+
+##docker container type
+#ExecStart = /usr/bin/docker start -a pserver
+
+Environment="DISPLAY=:0"
+
+Restart = always
+RestartSec = 3
+Type = simple
+
+[Install]
+WantedBy = multi-user.target
