@@ -32,12 +32,13 @@ function main() {
 	const fps = argv.fps;
 	const dir = argv.dir;
 	const host = argv.host;
+	const port = 6379;
 
     const redis = require('redis');
     const client = redis.createClient({
-        host,
-        port: 6379,
+        url: `redis://${host}:${port}`
     });
+
     client.on('error', (err) => {
         console.error('redis error:', err);
     });
