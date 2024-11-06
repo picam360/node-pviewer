@@ -96,7 +96,11 @@ function record_waypoints_handler(tmp_img){
 	const header_size = data.readUInt16BE(2);
 	const xml = data.slice(4, 4 + header_size).toString('utf-8');
 	const img_dom = xml_parser.parse(xml);
-	const timestamp = img_dom["picam360:image"]['timestamp'].replace(',', '.');
+	let timestamp = img_dom["picam360:image"]['timestamp'];
+	if(timestamp.includes(',')){
+		const ary = timestamp.split(',');
+		timestamp = `${ary[0]}.${ary[1].padStart(6, '0')}`;
+	}
 	const pif_filepath = `${m_options.data_filepath}/waypoint_images/${timestamp}.pif`;
 	fs.writeFile(pif_filepath, data, (err) => {
 		if (err) {
