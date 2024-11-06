@@ -1,0 +1,1 @@
+docker build -t auto_drive_wheel_odom:latest .

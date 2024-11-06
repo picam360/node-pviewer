@@ -1,0 +1,10 @@
+SideBySideStereoPublisher:
+左右カメラの切り出し画像をpublish
+
+# このリポジトリをworkspaces/isaac_ros-dev/github/ に配置
+# コンテナ起動
+bash scirpts/run_vslam_cont.sh 
+
+#インストール
+cd /workspaces/isaac_ros-dev/github/ros_packages/isaac_vslam/setup/scripts
+bash install_sidebyside_stereo_publisher.sh

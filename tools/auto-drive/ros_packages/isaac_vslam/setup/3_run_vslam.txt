@@ -1,0 +1,52 @@
+USBに画像を配置
+　ディレクトリ
+　　|-frames_left
+　　|-frames_right
+　　　|-連番.jpg(.png)
+
+コンテナのUSBのマウントパスを設定
+./assets/run_dev.sh
+USB_PATH="/media/picam360/KINGSTON"
+
+-----------------------
+
+[ TERMINAL 1]
+# run container
+bash scirpts/run_vslam_cont.sh 
+
+# cd
+cd /workspaces/isaac_ros-dev/github/ros_packages/isaac_vslam/setup/scripts
+
+# istall items (only first time after start container)
+bash run_t0_init.sh
+
+# run vslam
+bash run_t1.sh
+
+
+[ TERMINAL 2]
+# run container
+bash scirpts/run_vslam_cont.sh 
+
+# cd
+cd /workspaces/isaac_ros-dev/github/ros_packages/isaac_vslam/setup/scripts
+
+# run gui
+bash run_t2.sh
+
+[ TERMINAL 3]
+# run container
+bash scirpts/run_vslam_cont.sh 
+
+# cd
+cd /workspaces/isaac_ros-dev/github/ros_packages/isaac_vslam/setup/scripts
+
+# start publish images
+bash run_t3.sh
+
+-----------------------
+# 読み込み画像の切り替え
+/workspaces/isaac_ros-dev/install/sidebyside_stereo_publisher/share/sidebyside_stereo_publisher/launch/sidebyside_stereo_publisher.launch.py
+
+# video_dir
+{'video_dir': '/mnt/usb-in-container/roadside_ab/roadside_ab_0'}
