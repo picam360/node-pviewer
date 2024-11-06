@@ -3,7 +3,6 @@ console.log("auto-drive");
 const fs = require("fs");
 const path = require("path");
 const nmea = require('nmea-simple');
-const xml2js = require('xml2js');
 const { execSync } = require('child_process');
 const yargs = require('yargs');
 const fxp = require('fast-xml-parser');

@@ -3,7 +3,6 @@ console.log("auto-drive");
 const fs = require("fs");
 const path = require("path");
 const nmea = require('nmea-simple');
-const xml2js = require('xml2js');
 const { execSync } = require('child_process');
 const yargs = require('yargs');
 const fxp = require('fast-xml-parser');
@@ -71,6 +70,10 @@ function auto_drive_handler(tmp_img) {
 }
 
 function main() {
+
+	process.env.CMAKE_PREFIX_PATH = "/opt/ros/noetic";
+	process.env.ROS_MASTER_URI = "http://localhost:11311";
+
 	const argv = yargs
 		.option('host', {
 			type: 'string',
