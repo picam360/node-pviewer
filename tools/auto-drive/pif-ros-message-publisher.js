@@ -57,15 +57,15 @@ class PifRosMessagePublisher {
             pose_pub: null,
             path_pub: null
         };
+
+        this.odometry_callbacks = [];
     }
 
-    async initialize(odometry_callback) {
+    async initialize() {
         if (this.isInitialized || this.isInitializing) {
             return;
         }
         this.isInitializing = true;
-
-        this.odometry_callback = odometry_callback;
 
         try {
             await rosnodejs.initNode('/pif_ros_message_publisher', {
@@ -90,7 +90,9 @@ class PifRosMessagePublisher {
 
         //Create Subsclibers
         this.odometrySub = rosnodejs.nh.subscribe('/odometry/filtered', nav_msgs.Odometry, (data) => {
-            this.odometry_callback(this.convertOdometryToObj(data));
+            for(const callback of this.odometry_callbacks){
+                callback(this.convertOdometryToObj(data));
+            }
         });
     }
 
@@ -279,6 +281,10 @@ class PifRosMessagePublisher {
 
     convertOdometryToObj(data) {
         return {
+            origin: {
+                latitude: this.gps.initialLat,
+                longitude: this.gps.initialLon
+            },
             header: {
                 seq: data.header.seq,
                 stamp: {
@@ -314,6 +320,10 @@ class PifRosMessagePublisher {
                 }
             }
         };
+    }
+
+    subscribeOdometry(callback) {
+        this.odometry_callbacks.push(callback);
     }
 }
 module.exports = PifRosMessagePublisher;

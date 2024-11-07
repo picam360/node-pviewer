@@ -3,6 +3,7 @@ console.log("auto-drive");
 const fs = require("fs");
 const path = require("path");
 const nmea = require('nmea-simple');
+const utm = require('utm');
 const { execSync } = require('child_process');
 const yargs = require('yargs');
 const fxp = require('fast-xml-parser');
@@ -23,6 +24,7 @@ let m_averaging_count = 0;
 let m_last_nmea = null;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
+let m_use_odometry = true;
 
 function latLonToXY(lat1, lon1, lat2, lon2) {
 	const R = 6378137; // Earth's radius in meters
@@ -188,7 +190,7 @@ function update_auto_drive_waypoints(waypoints) {
 	});
 }
 
-function auto_drive_handler(tmp_img){
+function auto_drive_handler_pst(tmp_img){
 	if(tmp_img.length != 3){
 		return;
 	}
@@ -209,6 +211,45 @@ function auto_drive_handler(tmp_img){
 	const current_nmea = nmea.parseNmeaSentence(frame_dom['picam360:frame']['passthrough:nmea']);
 	const current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
 
+	auto_drive_handler(current_nmea.latitude, current_nmea.longitude, current_imu.heading);
+}
+
+function addMetersToLatLon(lat, lon, x, y) {
+    // Convert initial latitude and longitude to UTM
+    const utmCoord = utm.fromLatLon(lat, lon);
+
+    // Add the displacement in meters to the UTM coordinates
+    const newEasting = utmCoord.easting + x;
+    const newNorthing = utmCoord.northing + y;
+
+    // Convert the updated UTM coordinates back to latitude and longitude
+    const newLatLon = utm.toLatLon(newEasting, newNorthing, utmCoord.zoneNumber, utmCoord.zoneLetter);
+
+    return newLatLon;
+}
+
+function auto_drive_handler_odometry(odometry){
+	const q = Quaternion(
+		odometry.pose.orientation.x,
+		odometry.pose.orientation.y,
+		odometry.pose.orientation.z,
+		odometry.pose.orientation.w,
+	);
+	const eulerAngles = q.toEuler();
+	const heading = eulerAngles[2] * 180 / Math.PI;  // yaw is the 3rd element in the array
+
+	latlon = addMetersToLatLon(
+		odometry.origin.latitude,
+		odometry.origin.longitude,
+		odometry.pose.position.x,
+		odometry.pose.position.y,
+	);
+
+	auto_drive_handler(latlon.latitude, latlon.longitude, heading);
+}
+
+function auto_drive_handler(latitude, longitude, heading){
+
 	const keys = Object.keys(m_auto_drive_waypoints);
     if (m_auto_drive_cur >= keys.length) {
         console.log('All waypoints reached!');
@@ -228,12 +269,12 @@ function auto_drive_handler(tmp_img){
 		const target_waypoint = m_auto_drive_waypoints[key];
 		const target_nmea = nmea.parseNmeaSentence(target_waypoint['nmea']);
 		const distanceToTarget = calculateDistance(
-			current_nmea.latitude, current_nmea.longitude,
+			latitude, longitude,
 			target_nmea.latitude, target_nmea.longitude);
 		const targetHeading = calculateBearing(
-			current_nmea.latitude, current_nmea.longitude,
+			latitude, longitude,
 			target_nmea.latitude, target_nmea.longitude);
-		let headingError = targetHeading - current_imu.heading;
+		let headingError = targetHeading - heading;
 		if(headingError <= -180){
 			headingError += 360;
 		}else if(headingError > 180){
@@ -352,12 +393,24 @@ function main() {
 					record_waypoints_handler(tmp_img);
 					break;
 				case "AUTO":
-					auto_drive_handler(tmp_img);
+					if(!m_use_odometry){
+						auto_drive_handler_pst(tmp_img);
+					}
 					break;
 				}
 				tmp_img = [];
 			}else{
 				tmp_img.push(Buffer.from(data, 'base64'));
+			}
+		});
+
+		subscriber.subscribe('pserver-odometry', (data, key) => {
+			switch(m_drive_mode){
+			case "AUTO":
+				if(m_use_odometry){
+					auto_drive_handler_odometry(data);
+				}
+				break;
 			}
 		});
 	});

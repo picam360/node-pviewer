@@ -101,7 +101,9 @@ function main() {
 	subscriber.connect().then(async () => {
 		console.log('redis connected:');
 
-		await m_ros_msg_pub.initialize((odometry) => {
+		await m_ros_msg_pub.initialize();
+
+		m_ros_msg_pub.subscribeOdometry((odometry) => {
 			client.publish('pserver-odometry', JSON.stringify(odometry), (err, reply) => {
 				if (err) {
 					console.error('Error publishing message:', err);
