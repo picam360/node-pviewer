@@ -1,14 +1,8 @@
 <launch>
-  <node name="wheel_odometry" pkg="wheel_odometry" type="wheel_odometry_node.py" output="screen">
-   <!-- ログレベルを設定 -->
-    <param name="log_level" value="debug"/>
-  </node>
-  
   <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization" clear_params="true">
     <rosparam command="load" file="$(find wheel_odometry)/config/ekf_params.yaml" />
   </node>
   
-  <node name="gps_node" pkg="wheel_odometry" type="gps_node.py" output="screen"/>
   <node name="ekf_path" pkg="wheel_odometry" type="ekf_path_node.py" output="screen"/>
   
   <node pkg="rviz" type="rviz" name="rviz" args="-d $(find wheel_odometry)/config/wheel_odometry.rviz"/>

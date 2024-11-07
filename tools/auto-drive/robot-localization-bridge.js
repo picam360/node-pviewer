@@ -25,7 +25,7 @@ function toSec(timestampText) {
 	const secondsNumber = parseInt(seconds);
 	const microToSeconds = parseInt(microseconds) / 1000000;
 	const totalSeconds = secondsNumber + microToSeconds;
-	return  totalSeconds;
+	return totalSeconds;
 }
 
 function auto_drive_handler(tmp_img) {
@@ -52,12 +52,13 @@ function auto_drive_handler(tmp_img) {
 	const current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
 	const current_encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
 
-	console.log(current_nmea, current_imu, current_encoder);
+	if (m_options.debug) {
+		console.log(current_nmea, current_imu, current_encoder);
+	}
 
 	const timestampSec = toSec(timestamp);
-	m_ros_msg_pub.updateWheelCount(current_encoder.left, current_encoder.right, timestampSec);
-	m_ros_msg_pub.updateGpsNmea(nmea_str, timestampSec);
-	m_ros_msg_pub.publishMessages();
+	m_ros_msg_pub.publishWheelCount([current_encoder.left, current_encoder.right], timestampSec);
+	m_ros_msg_pub.publishGpsNmea(nmea_str, timestampSec);
 }
 
 function main() {
