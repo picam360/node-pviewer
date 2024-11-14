@@ -16,6 +16,8 @@
             "streams/4khdr-mono-calib.json",
             "streams/8mp-stereo.json",
             "streams/8mp-mono.json",
+            "streams/45mp-stereo.json",
+            "streams/45mp-stereo-imu.json",
             "streams/pantilt.json",
             "streams/pantilt-calib.json",
             "streams/vslam.json",

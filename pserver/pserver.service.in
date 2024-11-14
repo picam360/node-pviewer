@@ -8,10 +8,7 @@ Description = pserver daemon
 # wait for EglDisplay ready
 ExecStartPre = /bin/sleep 10
 ExecStart = /usr/bin/pserver -c @CONFIG_PATH@
-ExecStop = -/usr/bin/docker kill pserver
-
-##docker container type
-#ExecStart = /usr/bin/docker start -a pserver
+#ExecStop = -/usr/bin/docker kill pserver
 
 Environment="DISPLAY=:0"
 

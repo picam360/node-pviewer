@@ -1,4 +1,4 @@
 #!/bin/bash
 
 cd @SCRIPT_DIR@
-@NODE_PATH@ index.js -c @CONFIG_PATH@
+@NODE_PATH@ app.js $@

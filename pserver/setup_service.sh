@@ -12,7 +12,8 @@ sed -e "s%@CONFIG_PATH@%${CONFIG_PATH}%" \
     ${SERVICE_NAME}.in | sudo tee /usr/bin/${SERVICE_NAME}
 sudo chmod +x /usr/bin/${SERVICE_NAME}
 
-sed -e "s%@SCRIPT_DIR@%${SCRIPT_DIR}%" \
+sed -e "s%@CONFIG_PATH@%${CONFIG_PATH}%" \
+    -e "s%@SCRIPT_DIR@%${SCRIPT_DIR}%" \
     -e "s%@SERVICE_NAME@%${SERVICE_NAME}%" \
     ${SERVICE_NAME}.service.in | sudo tee /etc/systemd/system/${SERVICE_NAME}.service
 

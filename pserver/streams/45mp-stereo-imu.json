@@ -1,0 +1,10 @@
+{
+    "base" : "45mp-stereo",
+    "params" : {
+        "mux.vin0" : "redis param_sub=pserver-imu ! tc_capture name=capture zerocopy=1 expo=0 gain=100 binning=1 cam_idx=1",
+        "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" passthrough:imu=\"@GET_PARAM('redis.pserver-imu')@\" />"
+    },
+    "replacements" : {
+    }
+}
+
