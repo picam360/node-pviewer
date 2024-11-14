@@ -121,6 +121,10 @@ function start_webserver(callback) { // start up websocket server
             }
         });
     });
+    express_app.get(['/', '/index.html'], function(req, res) {
+		console.log("start pviewer loading...");
+		res.sendFile(path.resolve('../pviewer/index.html'));
+    });
     express_app.use(express.static('../pviewer')); // this need be set
 	var http_port = 36080;//PICAM360(36000)+HTTP(80)+APPCODE(0)
 	if(m_options['http_port']){
