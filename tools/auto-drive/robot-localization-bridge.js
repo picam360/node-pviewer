@@ -1,5 +1,13 @@
 console.log("robot-localization-bridge");
 
+//ros noetic
+//process.env.CMAKE_PREFIX_PATH = "/opt/ros/noetic";
+//process.env.ROS_MASTER_URI = "http://localhost:11311";
+//process.env.ROS_PACKAGE_PATH = "/opt/ros/noetic/share";
+
+//ros2 humble
+process.env.LD_LIBRARY_PATH = "/opt/ros/humble/lib/aarch64-linux-gnu:/opt/ros/humble/lib:/usr/local/cuda-11.4/lib64";
+
 const { J } = require('quaternion');
 const fs = require("fs");
 const path = require("path");
@@ -12,7 +20,7 @@ const xml_parser = new fxp.XMLParser({
 	attributeNamePrefix: "",
 });
 const pif_utils = require('./pif-utils');
-const PifRosMessagePublisher = require('./pif-ros-message-publisher');
+const PifRosMessagePublisher = require('./pif-ros-message-publisher-humble');
 
 let m_options = {
 	"waypoint_threshold_m": 10,
@@ -28,7 +36,7 @@ function toSec(timestampText) {
 	return totalSeconds;
 }
 
-function auto_drive_handler(tmp_img) {
+async function auto_drive_handler(tmp_img) {
 	if (tmp_img.length != 3) {
 		return;
 	}
@@ -59,13 +67,10 @@ function auto_drive_handler(tmp_img) {
 	const timestampSec = toSec(timestamp);
 	m_ros_msg_pub.publishWheelCount([current_encoder.left, current_encoder.right], timestampSec);
 	m_ros_msg_pub.publishGpsNmea(nmea_str, timestampSec);
+	m_ros_msg_pub.publishVslam(tmp_img[2], timestampSec);
 }
 
 function main() {
-
-	process.env.CMAKE_PREFIX_PATH = "/opt/ros/noetic";
-	process.env.ROS_MASTER_URI = "http://localhost:11311";
-	process.env.ROS_PACKAGE_PATH = "/opt/ros/noetic/share";
 
 	const argv = yargs
 		.option('host', {
