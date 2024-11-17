@@ -46,6 +46,14 @@ class PifRosMessagePublisher {
         this.vslam = {
             leftImagePub: null,
             rightImagePub: null,
+            leftCameraInfoPub: null,
+            rightCameraInfoPub: null,
+            stereoTransformPub: null, // Transform publisher
+            tfPub: null, // Transform publisher
+            baseline: 0.065, // 6.5 cm
+            frameCount: 0, // フレームカウント
+            frameIntervalSec: 1 / 30, // フレーム間隔 (30 FPS)
+            startTimestamp: null, // 初期タイムスタンプ
         };
 
         this.odometry_callbacks = [];
@@ -70,6 +78,10 @@ class PifRosMessagePublisher {
         this.gps.pathPub = node.createPublisher('nav_msgs/msg/Path', '/gps/path');
         this.vslam.leftImagePub = node.createPublisher('sensor_msgs/msg/Image', '/stereo_camera/left/image');
         this.vslam.rightImagePub = node.createPublisher('sensor_msgs/msg/Image', '/stereo_camera/right/image');
+        this.vslam.leftCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/camera_info_left');
+        this.vslam.rightCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/camera_info_right');
+        this.vslam.stereoTransformPub = node.createPublisher('geometry_msgs/msg/TransformStamped', '/stereo_camera/stereo_transform');
+        this.vslam.tfPub = node.createPublisher('tf2_msgs/msg/TFMessage', '/tf');
 
         // Initialize subscribers
         node.createSubscription('nav_msgs/msg/Odometry', '/odometry/filtered', (data) => {
@@ -77,6 +89,8 @@ class PifRosMessagePublisher {
                 callback(this.convertOdometryToObj(data));
             }
         });
+
+        this.vslam.startTimestamp = this.node.getClock().now();
 
         rclnodejs.spin(node);
         this.isInitialized = true;
@@ -229,6 +243,86 @@ class PifRosMessagePublisher {
         }
     }
 
+    createCameraInfo(width, height, fov, baseline = 0) {
+        const fx = (width / 2) / Math.tan((fov * Math.PI / 180) / 2);
+        const fy = fx;
+        const cx = width / 2;
+        const cy = height / 2;
+
+        return {
+            header: {
+                frame_id: 'stereo_camera_frame',
+            },
+            width: width,
+            height: height,
+            distortion_model: 'plumb_bob',
+            d: [0.0, 0.0, 0.0, 0.0, 0.0], // No distortion
+            k: [fx, 0.0, cx,
+                0.0, fy, cy,
+                0.0, 0.0, 1.0], // Intrinsic matrix
+            r: [1.0, 0.0, 0.0,
+                0.0, 1.0, 0.0,
+                0.0, 0.0, 1.0], // Rectification matrix
+            p: [fx, 0.0, cx, -fx * baseline, // tx = -fx * baseline (右カメラ用)
+                0.0, fy, cy, 0.0,
+                0.0, 0.0, 1.0, 0.0], // Projection matrix
+            binning_x: 1,
+            binning_y: 1,
+            roi: {
+                x_offset: 0,
+                y_offset: 0,
+                height: 0,
+                width: 0,
+                do_rectify: false,
+            },
+        };
+    }
+    createStereoTransform(timestampSec) {
+        // 右カメラへの基線距離を持つ変換を作成
+        return {
+            header: {
+                stamp: timestampSec,
+                frame_id: 'stereo_camera_left', // 左カメラを基準
+            },
+            child_frame_id: 'stereo_camera_right', // 右カメラの座標系
+            transform: {
+                translation: {
+                    x: this.vslam.baseline, // X方向に基線距離分だけオフセット
+                    y: 0.0,
+                    z: 0.0,
+                },
+                rotation: {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0, // 回転なし (単位クォータニオン)
+                },
+            },
+        };
+    }
+    createTfTransform(parentFrame, childFrame, translation, rotation, timestampSec) {
+        return {
+            header: {
+                stamp: timestampSec,
+                frame_id: parentFrame,
+            },
+            child_frame_id: childFrame,
+            transform: {
+                translation: {
+                    x: translation.x,
+                    y: translation.y,
+                    z: translation.z,
+                },
+                rotation: {
+                    x: rotation.x,
+                    y: rotation.y,
+                    z: rotation.z,
+                    w: rotation.w,
+                },
+            },
+        };
+    }
+
     /**
      * Publish side-by-side stereo images to /stereo_camera/left/image and /stereo_camera/right/image
      * @param {Buffer} sideBySideImageBuffer - Buffer containing the side-by-side image.
@@ -242,6 +336,7 @@ class PifRosMessagePublisher {
 
             const halfWidth = Math.floor(width / 2);
 
+            //camera image
             const leftROI = new cv.Rect(0, 0, halfWidth, height);
             if (leftROI.width <= 0 || leftROI.height <= 0) {
                 throw new Error('Invalid left ROI dimensions.');
@@ -272,7 +367,21 @@ class PifRosMessagePublisher {
                 data: Array.from(rightImage.getData()),
             };
 
-            const rosTimestamp = this.node.getClock().now();
+            const { seconds, nanoseconds } = (() => {
+                const { seconds, nanoseconds } = this.vslam.startTimestamp.secondsAndNanoseconds;
+                const additionalSeconds = this.vslam.frameCount * this.vslam.frameIntervalSec;
+                const totalNanoseconds = nanoseconds + Math.floor((additionalSeconds % 1) * 1e9);
+                return {
+                    seconds: Math.floor(seconds + additionalSeconds),
+                    nanoseconds: totalNanoseconds % 1e9,
+                };
+            })();
+
+            const rosTimestamp = { sec: seconds, nanosec: nanoseconds };
+            //const rosTimestamp = this.node.getClock().now();
+
+            // フレームカウントをインクリメント
+            this.vslam.frameCount++;
 
             const leftImageMsg = {
                 header: {
@@ -301,6 +410,44 @@ class PifRosMessagePublisher {
                 data: rightImageData.data,
             };
             this.vslam.rightImagePub.publish(rightImageMsg);
+
+            //camera info
+            const leftCameraInfo = this.createCameraInfo(halfWidth, height, 90, 0);
+            const rightCameraInfo = this.createCameraInfo(halfWidth, height, 90, -this.vslam.baseline);
+
+            leftCameraInfo.header.stamp = rosTimestamp;
+            rightCameraInfo.header.stamp = rosTimestamp;
+
+            this.vslam.leftCameraInfoPub.publish(leftCameraInfo);
+            this.vslam.rightCameraInfoPub.publish(rightCameraInfo);
+
+            // Stereo Transformを生成してパブリッシュ
+            //const stereoTransform = this.createStereoTransform(rosTimestamp);
+            //this.vslam.stereoTransformPub.publish(stereoTransform);
+
+            // Transform data for /tf
+            const tfMessage = {
+                transforms: [
+                    // Base to Left Camera
+                    this.createTfTransform(
+                        'base_link',
+                        'stereo_camera_left',
+                        { x: 0.1, y: 0.0, z: 0.5 },
+                        { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+                        rosTimestamp
+                    ),
+                    // Left Camera to Right Camera
+                    this.createTfTransform(
+                        'stereo_camera_left',
+                        'stereo_camera_right',
+                        { x: this.vslam.baseline, y: 0.0, z: 0.0 },
+                        { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+                        rosTimestamp
+                    ),
+                ],
+            };
+            
+            this.vslam.tfPub.publish(tfMessage);
 
             console.log('Published VSLAM images.');
         } catch (err) {
