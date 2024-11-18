@@ -8,7 +8,7 @@ def generate_launch_description():
     """Launch file to bring up Visual SLAM and Robot Localization nodes."""
 
     # Path to the EKF configuration file
-    ekf_config_path = 'config/ekf_params.yaml'
+    ekf_config_path = os.path.join(os.getcwd(), 'config', 'ekf_params.yaml')
 
     # Isaac ROS Visual SLAM node
     visual_slam_node = ComposableNode(
@@ -46,7 +46,7 @@ def generate_launch_description():
     ekf_node = Node(
         package='robot_localization',
         executable='ekf_node',
-        name='ekf_localization',
+        name='ekf_node',
         parameters=[ekf_config_path],
         output='screen',
         arguments=['--ros-args', '--log-level', 'info']
