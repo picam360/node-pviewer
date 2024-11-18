@@ -369,15 +369,16 @@ class PifRosMessagePublisher {
 
             const { seconds, nanoseconds } = (() => {
                 const { seconds, nanoseconds } = this.vslam.startTimestamp.secondsAndNanoseconds;
-                const additionalSeconds = this.vslam.frameCount * this.vslam.frameIntervalSec;
-                const totalNanoseconds = nanoseconds + Math.floor((additionalSeconds % 1) * 1e9);
+                const additionalNanoseconds = Math.floor(this.vslam.frameCount * this.vslam.frameIntervalSec * 1e9);
+                const totalNanoseconds = nanoseconds + additionalNanoseconds;
                 return {
-                    seconds: Math.floor(seconds + additionalSeconds),
+                    seconds: seconds + Math.floor(totalNanoseconds / 1e9),
                     nanoseconds: totalNanoseconds % 1e9,
                 };
             })();
 
             const rosTimestamp = { sec: seconds, nanosec: nanoseconds };
+            console.log(seconds, String(nanoseconds).padStart(9, '0'));
             //const rosTimestamp = this.node.getClock().now();
 
             // フレームカウントをインクリメント
