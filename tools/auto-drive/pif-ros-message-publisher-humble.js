@@ -378,7 +378,7 @@ class PifRosMessagePublisher {
             })();
 
             const rosTimestamp = { sec: seconds, nanosec: nanoseconds };
-            console.log(seconds, String(nanoseconds).padStart(9, '0'));
+            //console.log(seconds, String(nanoseconds).padStart(9, '0'));
             //const rosTimestamp = this.node.getClock().now();
 
             // フレームカウントをインクリメント
