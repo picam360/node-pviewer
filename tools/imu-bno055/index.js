@@ -2,9 +2,9 @@
 const fs = require('fs');
 const i2c = require('i2c-bus');
 let m_options = {
-    bus_num : 0,
+    bus_num : 1,
     calib_path : "/etc/pserver/imu-bno055.calib",
-    fps : 15,
+    fps : 60,
 };
 let m_mode = "CONFIG";
 
@@ -176,18 +176,19 @@ function main(){
                     
                     const heading = quaternionToHeading(quaternion);
 
+                    const timestamp = Date.now() / 1e3;
+
                     const status = getCalibrationStatus(i2cBus);
                     if(m_options.calib_path){
-                        const ts = Date.now();
                         if (status.sys == 3 && status.gyro == 3 && status.accel == 3 && status.mag == 3) {
-                            if (ts - last_calib_saved >= 60000) {
+                            if (timestamp - last_calib_saved >= 60) {
                                 switchConfigMode(i2cBus).then(() => {
                                     saveCalibrationData(i2cBus, m_options.calib_path);
                             
                                     i2cBus.writeByteSync(BNO055_I2C_ADDR, BNO055_OPR_MODE, OPERATION_MODE_NDOF); // Set to NDOF mode
                                     console.log('Calibration data saved successfully');
 
-                                    last_calib_saved = ts;
+                                    last_calib_saved = timestamp;
                                 }).catch((err) => {
                                     reject(err);
                                 });
@@ -196,6 +197,7 @@ function main(){
                     }
 
                     const imu_value = {
+                        timestamp,
                         heading,
                         quaternion,
                         status,

@@ -1,7 +1,7 @@
 const i2c = require('i2c-bus');
 
 // BNO055のI2Cアドレス
-const BNO055_I2C_ADDR = 0x29; // (プライマリアドレス: 0x28, セカンダリ: 0x29)
+const BNO055_I2C_ADDR = 0x28; // (プライマリアドレス: 0x28, セカンダリ: 0x29)
 
 // BNO055のレジスタ
 const BNO055_CHIP_ID = 0x00;
@@ -16,7 +16,7 @@ const BNO055_QUATERNION_DATA_W_LSB = 0x20; // クォータニオンデータの�
 const OPERATION_MODE_NDOF = 0x0C;
 
 // i2cバスを開く
-const i2cBus = i2c.openSync(0);
+const i2cBus = i2c.openSync(1);
 
 
 // 初期化関数

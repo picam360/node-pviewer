@@ -1,11 +1,11 @@
 {
     "def" : "dealer ! v4l2_tegra_encoder name=encoder fps=30 br=@APP.BITRATE_KBPS@ preset=ultrafast",
     "params" : {
-        "dealer.def" : "mux name=mux ! pcuda_remapper name=remapper debalgo=malvar debayer=I420 ml=5 sh=0 ho=1 edge_r=\"0.1\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
+        "dealer.def" : "mux name=mux ! pcuda_remapper name=remapper debalgo=malvar debayer=I420 sh=0 ho=1 edge_r=\"0.1\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
         "renderer.realtime" : "1",
-        "mux.vin0" : "tc_capture name=capture zerocopy=1 expo=0 gain=100 binning=1 cam_idx=1",
+        "mux.vin0" : "tc_capture name=capture zerocopy=1 expo=0 gain=100 binning=1 cam_idx=@APP.CAM_IDX0@",
         "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" />",
-        "mux.vin1" : "tc_capture name=capture zerocopy=1 expo=0 gain=100 binning=1 cam_idx=0",
+        "mux.vin1" : "tc_capture name=capture zerocopy=1 expo=0 gain=100 binning=1 cam_idx=@APP.CAM_IDX1@",
         "mux.vin1.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS1@\" />",
         "encoder.br" : "@APP.BITRATE_KBPS@"
     },
@@ -13,6 +13,8 @@
         "@APP.N_STREAMS@" : "1",
         "@APP.BITRATE_KBPS@" : "2000",
         "@APP.SIZE@" : "2048x1024",
+        "@APP.CAM_IDX0@" : "0",
+        "@APP.CAM_IDX1@" : "1",
         "@CALIB.DEG_OFFSET.X@" : "-90",
         "@CALIB.DEG_OFFSET.Y@" : "0",
         "@CALIB.DEG_OFFSET.Z@" : "0",
