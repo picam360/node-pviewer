@@ -32,6 +32,16 @@ function main() {
         if(isValidPort(nodes[0])){
             const port = nodes[0];
             const wrtckey = nodes[1];
+            
+            wrtc_utils.start_wrtc_host(wrtckey, (dc) => {
+                const socket = net.createConnection({ host: 'localhost', port: port }, () => {
+                    console.log('connection established');
+                });
+                wrtc_utils.bind_wrtc_and_socket(dc, socket);
+            });
+        }else{
+            const port = nodes[1];
+            const wrtckey = nodes[0];
 
             console.log("socket server starting up");
             const server = net.createServer((socket) => {
@@ -43,15 +53,6 @@ function main() {
             
             server.listen(port, () => {
                 console.log('listening socket on *:' + port);
-            });
-        }else{
-            const port = nodes[1];
-            const wrtckey = nodes[0];
-            wrtc_utils.start_wrtc_host(wrtckey, (dc) => {
-                const socket = net.createConnection({ host: 'localhost', port: port }, () => {
-                    console.log('connection established');
-                });
-                wrtc_utils.bind_wrtc_and_socket(dc, socket);
             });
         }
     }

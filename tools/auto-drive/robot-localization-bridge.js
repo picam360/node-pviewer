@@ -1,5 +1,13 @@
 console.log("robot-localization-bridge");
 
+//ros noetic
+//process.env.CMAKE_PREFIX_PATH = "/opt/ros/noetic";
+//process.env.ROS_MASTER_URI = "http://localhost:11311";
+//process.env.ROS_PACKAGE_PATH = "/opt/ros/noetic/share";
+
+//ros2 humble
+//process.env.LD_LIBRARY_PATH = "/opt/ros/humble/lib/aarch64-linux-gnu:/opt/ros/humble/lib:/usr/local/cuda-11.4/lib64";
+
 const { J } = require('quaternion');
 const fs = require("fs");
 const path = require("path");
@@ -12,13 +20,15 @@ const xml_parser = new fxp.XMLParser({
 	attributeNamePrefix: "",
 });
 const pif_utils = require('./pif-utils');
-const PifRosMessagePublisher = require('./pif-ros-message-publisher');
+const PifRosMessagePublisher = require('./pif-ros-message-publisher-humble');
 
 let m_options = {
 	"waypoint_threshold_m": 10,
 	"data_filepath": "auto-drive-waypoints"
 };
 let m_ros_msg_pub = new PifRosMessagePublisher();
+let m_vslam_frame_skip = 0;
+let m_vslam_frame_count = 0;
 
 function toSec(timestampText) {
 	const [seconds, microseconds] = timestampText.split(',');
@@ -28,7 +38,7 @@ function toSec(timestampText) {
 	return totalSeconds;
 }
 
-function auto_drive_handler(tmp_img) {
+async function auto_drive_handler(tmp_img) {
 	if (tmp_img.length != 3) {
 		return;
 	}
@@ -59,13 +69,15 @@ function auto_drive_handler(tmp_img) {
 	const timestampSec = toSec(timestamp);
 	m_ros_msg_pub.publishWheelCount([current_encoder.left, current_encoder.right], timestampSec);
 	m_ros_msg_pub.publishGpsNmea(nmea_str, timestampSec);
+	if((m_vslam_frame_count % (m_vslam_frame_skip + 1)) == 0){
+		m_ros_msg_pub.publishVslam(tmp_img[2], timestampSec);
+	}
+	m_vslam_frame_count++;
+	//console.log(m_vslam_frame_count);
+    //console.log(process.memoryUsage());
 }
 
 function main() {
-
-	process.env.CMAKE_PREFIX_PATH = "/opt/ros/noetic";
-	process.env.ROS_MASTER_URI = "http://localhost:11311";
-	process.env.ROS_PACKAGE_PATH = "/opt/ros/noetic/share";
 
 	const argv = yargs
 		.option('host', {
@@ -78,11 +90,17 @@ function main() {
 			default: 6379,
 			description: 'port',
 		})
+		.option('vslam-frame-skip', {
+			type: 'number',
+			default: 0,
+			description: 'vslam-frame-skip',
+		})
 		.help()
 		.alias('help', 'h')
 		.argv;
 	const host = argv.host;
 	const port = argv.port;
+	m_vslam_frame_skip = argv['vslam-frame-skip'];
 
 	const redis = require('redis');
 	const client = redis.createClient({

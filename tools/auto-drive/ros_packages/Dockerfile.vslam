@@ -1,0 +1,14 @@
+
+ARG BASE_IMAGE="isaac_ros_dev-aarch64:latest"
+FROM ${BASE_IMAGE}
+
+
+RUN rm -f /usr/share/keyrings/kitware-archive-keyring.gpg && \
+    wget -qO - https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg
+    
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    ros-${ROS_DISTRO}-robot-localization \
+    ros-${ROS_DISTRO}-isaac-ros-visual-slam \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
