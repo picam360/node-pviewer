@@ -24,7 +24,7 @@ let m_averaging_count = 0;
 let m_last_nmea = null;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
-let m_use_odometry = true;
+let m_use_odometry = false;
 
 function latLonToXY(lat1, lon1, lat2, lon2) {
 	const R = 6378137; // Earth's radius in meters
@@ -177,10 +177,17 @@ function rotate_robot(angle) {
 		m_client.publish('pserver-vehicle-wheel', 'CMD turn_left');
 	}
 }
+
+function stop_robot() {
+    console.log(`Stop vihecle!!`);
+
+	m_client.publish('pserver-vehicle-wheel', 'CMD stop');
+}
+
 function update_auto_drive_cur(cur) {
 	m_auto_drive_cur = cur;
 	m_client.set('pserver-auto-drive-cur', m_auto_drive_cur).then((data) => {
-		console.log('set auto drive cur', data);
+		console.log('set auto drive cur ' + cur, data);
 	});
 }
 function update_auto_drive_waypoints(waypoints) {
@@ -253,6 +260,7 @@ function auto_drive_handler(latitude, longitude, heading){
 	const keys = Object.keys(m_auto_drive_waypoints);
     if (m_auto_drive_cur >= keys.length) {
         console.log('All waypoints reached!');
+		stop_robot();
 
 		m_client.publish('pserver-auto-drive-info', JSON.stringify({
 			"mode" : "AUTO",
@@ -281,9 +289,9 @@ function auto_drive_handler(latitude, longitude, heading){
 			headingError -= 360;
 		}
 	
-		if (distanceToTarget > 0.5) {
+		if (distanceToTarget > 1.0) {
 			// Control logic: move forward/backward or rotate
-			if (Math.abs(headingError) > 10) { // 10 degrees threshold
+			if (Math.abs(headingError) > 20) { // 20 degrees threshold
 				rotate_robot(headingError);
 			} else {
 				move_forward(distanceToTarget);
@@ -343,6 +351,8 @@ function main() {
     client.connect().then(() => {
         console.log('redis connected:');
 		m_client = client;
+
+		stop_robot();
 		
 		const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 		load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
@@ -444,6 +454,7 @@ function command_handler(cmd) {
 			console.log("drive mode", m_drive_mode);
 			break;
 		case "START_AUTO":
+			stop_robot();
 			if(m_drive_mode == "STANBY") {
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
