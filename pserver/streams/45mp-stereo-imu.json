@@ -1,7 +1,7 @@
 {
     "base" : "45mp-stereo",
     "params" : {
-        "mux.vin0" : "tc_capture name=capture zerocopy=1 expo=0 gain=100 binning=1 cam_idx=@APP.CAM_IDX0@ startup_delay_ms=0 ! redis delay_ms=0 param_sub=pserver-imu",
+        "mux.vin0" : "tc_capture name=capture zerocopy=1 expo=0 gain=100 binning=1 cam_idx=@APP.CAM_IDX0@ ! redis delay_ms=0 param_sub=pserver-imu",
         "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" imu=\"@REDIS_SUB('pserver-imu')@\" />"
     },
     "replacements" : {
