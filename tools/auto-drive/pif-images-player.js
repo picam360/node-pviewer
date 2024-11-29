@@ -17,6 +17,7 @@ function main() {
         .option('dir', {
             alias: 'd',
             type: 'string',
+			default: "auto-drive-waypoints/waypoint_images",
             description: 'directory',
         })
         .option('host', {
