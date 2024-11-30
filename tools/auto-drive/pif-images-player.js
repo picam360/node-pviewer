@@ -25,6 +25,11 @@ function main() {
             default: 'localhost',
             description: 'directory',
         })
+        .option('port', {
+            type: 'number',
+            default: 6379,
+            description: 'port',
+        })
         .help()
         .alias('help', 'h')
         .argv;
@@ -32,7 +37,7 @@ function main() {
 	const fps = argv.fps;
 	const dir = argv.dir;
 	const host = argv.host;
-	const port = 6379;
+	const port = argv.port;
 
     const redis = require('redis');
     const client = redis.createClient({

@@ -56,3 +56,6 @@ docker run -it --rm \
     $BASE_NAME \
     /bin/bash
 
+#NOTE:
+#$ros2 launch isaac_ros_visual_slam isaac_ros_visual_slam.launch.py
+#$rviz2 -d src/isaac_ros_visual_slam/isaac_ros_visual_slam/rviz/default.cfg.rviz
