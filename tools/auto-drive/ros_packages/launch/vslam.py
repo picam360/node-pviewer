@@ -18,10 +18,12 @@ def generate_launch_description():
         remappings=[('/stereo_camera/left/camera_info', '/camera_info_left'),
                     ('/stereo_camera/right/camera_info', '/camera_info_right')],
         parameters=[{
+            'num_cameras': 2,
             'use_sim_time': False,
             'denoise_input_images': True,
             'rectified_images': False,
             #'rectified_images': True,
+            #'enable_planar_mode' : True,
             'enable_slam_visualization': True,
             'enable_observations_view': True,
             'enable_landmarks_view': True,
