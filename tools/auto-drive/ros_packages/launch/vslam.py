@@ -20,7 +20,8 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': False,
             'denoise_input_images': True,
-            'rectified_images': True,
+            'rectified_images': False,
+            #'rectified_images': True,
             'enable_slam_visualization': True,
             'enable_observations_view': True,
             'enable_landmarks_view': True,
@@ -28,6 +29,10 @@ def generate_launch_description():
             'debug_dump_path': '/tmp/cuvslam',
             'map_frame': 'map',
             'odom_frame': 'odom',
+            'camera_optical_frames': [
+                'front_stereo_camera_left_optical',
+                'front_stereo_camera_right_optical'
+            ],
             'base_frame': 'base_link'
         }]
     )

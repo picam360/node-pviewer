@@ -144,5 +144,9 @@ function main() {
 }
 
 if (require.main === module) {
+	process.on('SIGINT', () => {
+		console.log('Ctrl+C detected! Gracefully exiting...');
+		process.exit(0);
+	});
 	main();
 }

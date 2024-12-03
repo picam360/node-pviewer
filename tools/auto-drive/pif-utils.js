@@ -25,7 +25,7 @@ function read_pif(file_path, callback) {
 
         const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
         const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
-        const jpeg_filepath = file_path + ".0.0.jpeg";
+        const jpeg_filepath = file_path + ".0.0.JPEG";
         const jpeg_data = fs.readFileSync(jpeg_filepath);
         callback(file_path, [header, meta, jpeg_data]);
 	}catch(err){
