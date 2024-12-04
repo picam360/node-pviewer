@@ -30,6 +30,11 @@ function main() {
             default: 6379,
             description: 'port',
         })
+        .option('reverse', {
+            type: 'boolean',
+            default: false,
+            description: 'reverse',
+        })
         .help()
         .alias('help', 'h')
         .argv;
@@ -38,6 +43,7 @@ function main() {
 	const dir = argv.dir;
 	const host = argv.host;
 	const port = argv.port;
+	const reverse = argv.reverse;
 
     const redis = require('redis');
     const client = redis.createClient({
@@ -67,6 +73,10 @@ function main() {
 					//console.log(`Directory: ${entry.name}`);
 				}
 			});
+			if(reverse){
+				console.log("reverse");
+				pifs.reverse();
+			}
 			let cur = 0;
 			setInterval(() => {
 				if(cur >= Object.keys(pifs).length){
