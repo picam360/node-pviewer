@@ -107,7 +107,7 @@ class PifRosMessagePublisher {
 
         this.vslam.startTimestamp = this.node.getClock().now();
 
-        const camera_orientation = Quaternion.fromEuler(0 * Math.PI / 180, 0 * Math.PI / 180, 0, "ZXY");
+        const camera_orientation = Quaternion.fromEuler(-90 * Math.PI / 180, -90 * Math.PI / 180, 0 * Math.PI / 180, "ZXY");
         // Transform data for /tf_static
         const tfStaticMessage = {
             transforms: [
@@ -115,8 +115,8 @@ class PifRosMessagePublisher {
                 this.createTfTransform(
                     'base_link',
                     'front_stereo_camera',
-                    { x: 0.0, y: 0.0, z: 0.5 },
-                    { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+                    { x: 0.0, y: 0.0, z: 1.0 },
+                    camera_orientation,
                     this.vslam.startTimestamp
                 ),
                 // Front Camera to Front Left Camera
@@ -124,7 +124,7 @@ class PifRosMessagePublisher {
                     'front_stereo_camera',
                     'front_stereo_camera_left_optical',
                     { x: 0.0, y: 0.0, z: 0.0 },
-                    camera_orientation,
+                    { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
                     this.vslam.startTimestamp
                 ),
                 // Front Camera to Front Right Camera
@@ -132,7 +132,7 @@ class PifRosMessagePublisher {
                     'front_stereo_camera',
                     'front_stereo_camera_right_optical',
                     { x: 0.0, y: -this.vslam.baseline, z: 0.0 },
-                    camera_orientation,
+                    { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
                     this.vslam.startTimestamp
                 ),
             ],

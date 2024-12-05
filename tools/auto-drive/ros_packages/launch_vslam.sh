@@ -56,6 +56,27 @@ docker run -it --rm \
     $BASE_NAME \
     /bin/bash
 
-#NOTE:
-#$ros2 launch isaac_ros_visual_slam isaac_ros_visual_slam.launch.py
-#$rviz2 -d src/isaac_ros_visual_slam/isaac_ros_visual_slam/rviz/default.cfg.rviz
+: <<'NOTE'
+ros2 launch ./launch/vslam.py
+
+rviz2 -d ./rviz/default.cfg.rviz
+
+rviz2 -d $(ros2 pkg prefix isaac_ros_visual_slam --share)/rviz/default.cfg.rviz
+
+#sample launch
+sudo apt-get update && sudo apt-get install -y ros-humble-isaac-ros-examples
+
+ros2 launch isaac_ros_examples isaac_ros_examples.launch.py launch_fragments:=visual_slam \
+interface_specs_file:=./isaac_ros_assets/isaac_ros_visual_slam/quickstart_interface_specs.json \
+rectified_images:=false
+
+ros2 bag play ./isaac_ros_assets/isaac_ros_visual_slam/quickstart_bag --remap  \
+/front_stereo_camera/left/image_raw:=/left/image_rect \
+/front_stereo_camera/left/camera_info:=/left/camera_info_rect \
+/front_stereo_camera/right/image_raw:=/right/image_rect \
+/front_stereo_camera/right/camera_info:=/right/camera_info_rect \
+/back_stereo_camera/left/image_raw:=/rear_left/image_rect \
+/back_stereo_camera/left/camera_info:=/rear_left/camera_info_rect \
+/back_stereo_camera/right/image_raw:=/rear_right/image_rect \
+/back_stereo_camera/right/camera_info:=/rear_right/camera_info_rect
+NOTE
