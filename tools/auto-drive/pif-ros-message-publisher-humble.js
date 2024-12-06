@@ -8,6 +8,7 @@ class PifRosMessagePublisher {
     constructor() {
         this.isInitialized = false;
 
+        this.vslam_scale = 0.5;
         this.gps = {
             initialLat: null,
             initialLon: null,
@@ -25,14 +26,16 @@ class PifRosMessagePublisher {
         this.encoder = {
             left_counts: 0,
             right_counts: 0,
-            offset_left_counts: null,
-            offset_right_counts: null,
-            wheel_separation: 0.11,
-            wheel_radius: 0.03,
-            ticks_per_revolution: 1920,
+            left_direction: 1,
+            right_direction: -1,
+            last_left_counts: null,
+            last_right_counts: null,
+            //wheel_separation: 0.11,
+            wheel_separation: 2.5,
+            meter_per_pulse: 0.0075,
             x: 0.0,
             y: 0.0,
-            theta: 0.0,
+            heading: 0.0,
             last_time: null,
             path: {
                 header: { frame_id: 'odom' },
@@ -50,7 +53,7 @@ class PifRosMessagePublisher {
             rightCameraInfoPub: null,
             tfPub: null, // Transform publisher
             tfStaticPub: null, // Transform publisher
-            baseline: 0.065, // 6.5 cm
+            baseline: 0.065, // parallax
             frameCount: 0, // フレームカウント
             frameIntervalSec: 1 / 30, // フレーム間隔 (30 FPS)
             startTimestamp: null, // 初期タイムスタンプ
@@ -107,6 +110,7 @@ class PifRosMessagePublisher {
 
         this.vslam.startTimestamp = this.node.getClock().now();
 
+        //const camera_orientation = { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
         const camera_orientation = Quaternion.fromEuler(-90 * Math.PI / 180, -90 * Math.PI / 180, 0 * Math.PI / 180, "ZXY");
         // Transform data for /tf_static
         const tfStaticMessage = {
@@ -123,7 +127,7 @@ class PifRosMessagePublisher {
                 this.createTfTransform(
                     'front_stereo_camera',
                     'front_stereo_camera_left_optical',
-                    { x: 0.0, y: 0.0, z: 0.0 },
+                    { x: 0.0, y: this.vslam.baseline, z: 0.0 },
                     { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
                     this.vslam.startTimestamp
                 ),
@@ -131,7 +135,7 @@ class PifRosMessagePublisher {
                 this.createTfTransform(
                     'front_stereo_camera',
                     'front_stereo_camera_right_optical',
-                    { x: 0.0, y: -this.vslam.baseline, z: 0.0 },
+                    { x: 0.0, y: 0.0, z: 0.0 },
                     { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
                     this.vslam.startTimestamp
                 ),
@@ -152,12 +156,12 @@ class PifRosMessagePublisher {
 
             const { easting, northing } = utm.fromLatLon(nmea.latitude, nmea.longitude);
             if (this.gps.initialLat === null) {
-                const { easting: initialEasting, northing: initialNorthing } = utm.fromLatLon(nmea.latitude, nmea.longitude);
                 this.gps.initialLat = nmea.latitude;
                 this.gps.initialLon = nmea.longitude;
-                this.gps.currentX = easting - initialEasting;
-                this.gps.currentY = northing - initialNorthing;
             }
+            const { easting: initialEasting, northing: initialNorthing } = utm.fromLatLon(this.gps.initialLat, this.gps.initialLon);
+            this.gps.currentX = easting - initialEasting;
+            this.gps.currentY = northing - initialNorthing;
 
             const odom = {
                 header: {
@@ -168,8 +172,8 @@ class PifRosMessagePublisher {
                 pose: {
                     pose: {
                         position: {
-                            x: this.gps.currentX,
-                            y: this.gps.currentY,
+                            x: this.gps.currentX * this.vslam_scale,
+                            y: this.gps.currentY * this.vslam_scale,
                             z: 0.0,
                         },
                         orientation: { x: 0, y: 0, z: 0, w: 1 },
@@ -198,50 +202,59 @@ class PifRosMessagePublisher {
         }
     }
     
-    publishWheelCount(data, timestamp_sec) {
+    publishWheelCount(data, heading, timestamp_sec) {
         try {
             const rosTimestamp = this.node.getClock().now();
     
-            this.encoder.left_counts = Math.floor(data[0]);
-            this.encoder.right_counts = Math.floor(data[1]);
+            this.encoder.left_counts = Math.floor(data[0]) * this.encoder.left_direction;
+            this.encoder.right_counts = Math.floor(data[1]) * this.encoder.right_direction;
     
-            if (this.encoder.offset_left_counts === null) {
-                this.encoder.offset_left_counts = this.encoder.left_counts;
-                this.encoder.offset_right_counts = this.encoder.right_counts;
+            if (this.encoder.last_left_counts === null) {
+                this.encoder.last_left_counts = this.encoder.left_counts;
+                this.encoder.last_right_counts = this.encoder.right_counts;
                 this.encoder.last_time = timestamp_sec;
+                this.encoder.heading = heading + 20;
             }
-    
-            this.encoder.left_counts -= this.encoder.offset_left_counts;
-            this.encoder.right_counts -= this.encoder.offset_right_counts;
     
             let dt = timestamp_sec - this.encoder.last_time;
     
-            if (dt === 0 || this.encoder.offset_left_counts === null) {
+            if (dt === 0 || this.encoder.last_left_counts === null) {
                 return;
             }
     
             let delta_left = this.encoder.left_counts - this.encoder.last_left_counts;
             let delta_right = this.encoder.right_counts - this.encoder.last_right_counts;
     
-            let distance_left = 2 * Math.PI * this.encoder.wheel_radius * delta_left / this.encoder.ticks_per_revolution;
-            let distance_right = 2 * Math.PI * this.encoder.wheel_radius * delta_right / this.encoder.ticks_per_revolution;
+            let distance_left = delta_left * this.encoder.meter_per_pulse;
+            let distance_right = delta_right * this.encoder.meter_per_pulse;
     
             let distance = (distance_left + distance_right) / 2;
             let dtheta = (distance_right - distance_left) / this.encoder.wheel_separation;
+
+            if (distance === 0 && dtheta === 0) {
+                return;
+            }
     
             let dx, dy;
+            const theta = -this.encoder.heading * Math.PI / 180 + Math.PI / 2;
             if (Math.abs(dtheta) < 1e-6) {
-                dx = distance * Math.cos(this.encoder.theta);
-                dy = distance * Math.sin(this.encoder.theta);
+                dx = distance * Math.cos(theta);
+                dy = distance * Math.sin(theta);
             } else {
                 let radius = distance / dtheta;
-                dx = radius * (Math.sin(this.encoder.theta + dtheta) - Math.sin(this.encoder.theta));
-                dy = radius * (Math.cos(this.encoder.theta) - Math.cos(this.encoder.theta + dtheta));
+                dx = radius * (Math.sin(theta + dtheta) - Math.sin(theta));
+                dy = radius * (Math.cos(theta) - Math.cos(theta + dtheta));
             }
     
             this.encoder.x += dx;
             this.encoder.y += dy;
-            this.encoder.theta += dtheta;
+            this.encoder.heading += -dtheta * 180 / Math.PI;
+
+            const gps_distance = Math.sqrt(this.gps.currentX * this.gps.currentX + this.gps.currentY * this.gps.currentY);
+            const pulse_distance = Math.sqrt(this.encoder.x * this.encoder.x + this.encoder.y * this.encoder.y) / this.encoder.meter_per_pulse;
+            const meter_per_pulse_candidate = gps_distance / pulse_distance;
+
+            console.log(this.encoder.left_counts, this.encoder.right_counts, delta_left,  delta_right, this.encoder.x, this.encoder.y, this.encoder.heading, meter_per_pulse_candidate);
     
             let odom = {
                 header: {
@@ -252,11 +265,11 @@ class PifRosMessagePublisher {
                 pose: {
                     pose: {
                         position: {
-                            x: this.encoder.x,
-                            y: this.encoder.y,
+                            x: this.encoder.x * this.vslam_scale,
+                            y: this.encoder.y * this.vslam_scale,
                             z: 0.0,
                         },
-                        orientation: Quaternion.fromEuler(0, 0, this.encoder.theta),
+                        orientation: Quaternion.fromEuler(0, 0, theta),
                     },
                     covariance: Array(36).fill(0.01), // Adjust as needed
                 },
