@@ -1,4 +1,7 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, LogInfo
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.actions import ComposableNodeContainer
@@ -6,6 +9,10 @@ import os
 
 def generate_launch_description():
     """Launch file to bring up Visual SLAM and Robot Localization nodes."""
+
+    display_rviz = DeclareLaunchArgument(
+        'display_rviz', default_value='false', description='Flag to display RViz'
+    )
 
     # Path to the EKF configuration file
     ekf_config_path = os.path.join(os.getcwd(), 'config', 'ekf_params.yaml')
@@ -59,7 +66,18 @@ def generate_launch_description():
         arguments=['--ros-args', '--log-level', 'info']
     )
 
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz',
+        output='screen',
+        arguments=['-d', './rviz/vslam.cfg.rviz'],
+        condition=IfCondition(LaunchConfiguration('display_rviz'))
+    )
+
     return LaunchDescription([
         visual_slam_launch_container,
-        ekf_node
+        ekf_node,
+        display_rviz,
+        rviz_node
     ])
