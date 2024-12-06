@@ -67,7 +67,7 @@ async function auto_drive_handler(tmp_img) {
 	}
 
 	const timestampSec = toSec(timestamp);
-	m_ros_msg_pub.publishWheelCount([current_encoder.left, current_encoder.right], timestampSec);
+	m_ros_msg_pub.publishWheelCount([current_encoder.left, current_encoder.right], current_imu.heading, timestampSec);
 	m_ros_msg_pub.publishGpsNmea(nmea_str, timestampSec);
 	if((m_vslam_frame_count % (m_vslam_frame_skip + 1)) == 0){
 		m_ros_msg_pub.publishVslam(tmp_img[2], timestampSec);

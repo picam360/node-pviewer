@@ -87,7 +87,6 @@ class PifRosMessagePublisher {
         // this.vslam.rightCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/right/camera_info_rect');
         this.vslam.leftCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/visual_slam/camera_info_0');
         this.vslam.rightCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/visual_slam/camera_info_1');
-        //this.vslam.stereoTransformPub = node.createPublisher('geometry_msgs/msg/TransformStamped', '/stereo_camera/stereo_transform');
         this.vslam.tfPub = node.createPublisher('tf2_msgs/msg/TFMessage', '/tf');
 
 
