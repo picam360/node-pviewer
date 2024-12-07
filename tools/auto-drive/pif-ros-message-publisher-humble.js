@@ -5,9 +5,10 @@ const Quaternion = require('quaternion');
 const cv = require('opencv4nodejs');
 
 class PifRosMessagePublisher {
-    constructor() {
+    constructor(is_mono = false) {
         this.isInitialized = false;
 
+        this.is_mono = is_mono;
         this.vslam_scale = 0.5;
         this.gps = {
             initialLat: null,
@@ -79,14 +80,20 @@ class PifRosMessagePublisher {
         this.encoder.pathPub = node.createPublisher('nav_msgs/msg/Path', '/wheel/path');
         this.gps.odomPub = node.createPublisher('nav_msgs/msg/Odometry', '/gps/odometry');
         this.gps.pathPub = node.createPublisher('nav_msgs/msg/Path', '/gps/path');
-        // this.vslam.leftImagePub = node.createPublisher('sensor_msgs/msg/Image', '/left/image_rect');
-        // this.vslam.rightImagePub = node.createPublisher('sensor_msgs/msg/Image', '/right/image_rect');
-        this.vslam.leftImagePub = node.createPublisher('sensor_msgs/msg/Image', '/visual_slam/image_0');
-        this.vslam.rightImagePub = node.createPublisher('sensor_msgs/msg/Image', '/visual_slam/image_1');
-        // this.vslam.leftCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/left/camera_info_rect');
-        // this.vslam.rightCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/right/camera_info_rect');
-        this.vslam.leftCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/visual_slam/camera_info_0');
-        this.vslam.rightCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/visual_slam/camera_info_1');
+        if(this.is_mono){
+            this.vslam.leftImagePub = node.createPublisher('sensor_msgs/msg/Image', '/visual_slam/image_0');
+            this.vslam.rightImagePub = node.createPublisher('sensor_msgs/msg/Image', '/visual_slam/image_1');
+        }else{
+            this.vslam.leftImagePub = node.createPublisher('sensor_msgs/msg/Image', '/left/image_rect');
+            this.vslam.rightImagePub = node.createPublisher('sensor_msgs/msg/Image', '/right/image_rect');
+        }
+        if(this.is_mono){
+            this.vslam.leftCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/visual_slam/camera_info_0');
+            this.vslam.rightCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/visual_slam/camera_info_1');
+        }else{
+            this.vslam.leftCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/left/camera_info_rect');
+            this.vslam.rightCameraInfoPub = node.createPublisher('sensor_msgs/msg/CameraInfo', '/right/camera_info_rect');
+        }
         this.vslam.tfPub = node.createPublisher('tf2_msgs/msg/TFMessage', '/tf');
 
 
@@ -119,14 +126,14 @@ class PifRosMessagePublisher {
                     'base_link',
                     'front_stereo_camera',
                     { x: 0.0, y: 0.0, z: 1.0 },
-                    camera_orientation,
+                    { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
                     this.vslam.startTimestamp
                 ),
                 // Front Camera to Front Left Camera
                 this.createTfTransform(
                     'front_stereo_camera',
                     'front_stereo_camera_left_optical',
-                    { x: 0.0, y: this.vslam.baseline, z: 0.0 },
+                    { x: 0.0, y: 0.0, z: 0.0 },
                     { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
                     this.vslam.startTimestamp
                 ),
@@ -134,7 +141,7 @@ class PifRosMessagePublisher {
                 this.createTfTransform(
                     'front_stereo_camera',
                     'front_stereo_camera_right_optical',
-                    { x: 0.0, y: 0.0, z: 0.0 },
+                    { x: 0.0, y: -this.vslam.baseline, z: 0.0 },
                     { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
                     this.vslam.startTimestamp
                 ),
@@ -171,9 +178,9 @@ class PifRosMessagePublisher {
                 pose: {
                     pose: {
                         position: {
-                            x: this.gps.currentX * this.vslam_scale,
-                            y: this.gps.currentY * this.vslam_scale,
-                            z: 0.0,
+                            z: this.gps.currentX * this.vslam_scale,
+                            x: -this.gps.currentY * this.vslam_scale,
+                            y: 0.0,
                         },
                         orientation: { x: 0, y: 0, z: 0, w: 1 },
                     },
@@ -264,9 +271,9 @@ class PifRosMessagePublisher {
                 pose: {
                     pose: {
                         position: {
-                            x: this.encoder.x * this.vslam_scale,
-                            y: this.encoder.y * this.vslam_scale,
-                            z: 0.0,
+                            z: this.encoder.x * this.vslam_scale,
+                            x: -this.encoder.y * this.vslam_scale,
+                            y: 0.0,
                         },
                         orientation: Quaternion.fromEuler(0, 0, theta),
                     },
@@ -374,15 +381,13 @@ class PifRosMessagePublisher {
 
             const halfWidth = Math.floor(width / 2);
 
-            const is_mono = true;
-
             //camera image
             const leftROI = new cv.Rect(0, 0, halfWidth, height);
             if (leftROI.width <= 0 || leftROI.height <= 0) {
                 throw new Error('Invalid left ROI dimensions.');
             }
             let leftImage = image.getRegion(leftROI).copy();
-            if(is_mono){
+            if(this.is_mono){
                 leftImage = leftImage.bgrToGray();
             }
 
@@ -391,25 +396,25 @@ class PifRosMessagePublisher {
                 throw new Error('Invalid right ROI dimensions.');
             }
             let rightImage = image.getRegion(rightROI).copy();
-            if(is_mono){
+            if(this.is_mono){
                 rightImage = rightImage.bgrToGray();
             }
 
             const leftImageData = {
                 height: height,
                 width: halfWidth,
-                encoding: (is_mono ? 'mono8' : 'bgr8'),
+                encoding: (this.is_mono ? 'mono8' : 'bgr8'),
                 is_bigendian: 0,
-                step: (is_mono ? halfWidth : halfWidth * 3),
+                step: (this.is_mono ? halfWidth : halfWidth * 3),
                 data: Array.from(leftImage.getData()),
             };
 
             const rightImageData = {
                 height: height,
                 width: halfWidth,
-                encoding: (is_mono ? 'mono8' : 'bgr8'),
+                encoding: (this.is_mono ? 'mono8' : 'bgr8'),
                 is_bigendian: 0,
-                step: (is_mono ? halfWidth : halfWidth * 3),
+                step: (this.is_mono ? halfWidth : halfWidth * 3),
                 data: Array.from(rightImage.getData()),
             };
 
@@ -427,29 +432,29 @@ class PifRosMessagePublisher {
             //console.log(seconds, String(nanoseconds).padStart(9, '0'));
             //const rosTimestamp = this.node.getClock().now();
 
-            // // Transform data for /tf
-            // const tfMessage = {
-            //     transforms: [
-            //         // Front Camera to Front Left Camera
-            //         this.createTfTransform(
-            //             'front_stereo_camera',
-            //             'front_stereo_camera_left_optical',
-            //             { x: -this.vslam.baseline / 2, y: 0.0, z: 0.0 },
-            //             { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            //             rosTimestamp
-            //         ),
-            //         // Front Camera to Front Right Camera
-            //         this.createTfTransform(
-            //             'front_stereo_camera',
-            //             'front_stereo_camera_right_optical',
-            //             { x: this.vslam.baseline / 2, y: 0.0, z: 0.0 },
-            //             { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            //             rosTimestamp
-            //         ),
-            //     ],
-            // };
+            // Transform data for /tf
+            const tfMessage = {
+                transforms: [
+                    // Front Camera to Front Left Camera
+                    this.createTfTransform(
+                        'front_stereo_camera',
+                        'front_stereo_camera_left_optical',
+                        { x: 0.0, y: 0.0, z: 0.0 },
+                        { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+                        rosTimestamp
+                    ),
+                    // Front Camera to Front Right Camera
+                    this.createTfTransform(
+                        'front_stereo_camera',
+                        'front_stereo_camera_right_optical',
+                        { x: 0.0, y: -this.vslam.baseline, z: 0.0 },
+                        { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+                        rosTimestamp
+                    ),
+                ],
+            };
             
-            // this.vslam.tfPub.publish(tfMessage);
+            this.vslam.tfPub.publish(tfMessage);
 
             // フレームカウントをインクリメント
             this.vslam.frameCount++;
