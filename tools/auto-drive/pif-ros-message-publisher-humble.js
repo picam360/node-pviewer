@@ -5,7 +5,7 @@ const Quaternion = require('quaternion');
 const cv = require('opencv4nodejs');
 
 class PifRosMessagePublisher {
-    constructor(is_mono = false) {
+    constructor(is_mono = true) {
         this.isInitialized = false;
 
         this.is_mono = is_mono;
@@ -54,6 +54,7 @@ class PifRosMessagePublisher {
             rightCameraInfoPub: null,
             tfPub: null, // Transform publisher
             tfStaticPub: null, // Transform publisher
+            imuPub: null, // imu publisher
             baseline: 0.065, // parallax
             frameCount: 0, // フレームカウント
             frameIntervalSec: 1 / 30, // フレーム間隔 (30 FPS)
@@ -96,7 +97,6 @@ class PifRosMessagePublisher {
         }
         this.vslam.tfPub = node.createPublisher('tf2_msgs/msg/TFMessage', '/tf');
 
-
         const qosProfile = new rclnodejs.QoS(
             rclnodejs.QoS.HistoryPolicy.RMW_QOS_POLICY_HISTORY_SYSTEM_DEFAULT,  // 履歴のポリシー
             10,  // キューの深さ
@@ -104,6 +104,7 @@ class PifRosMessagePublisher {
             rclnodejs.QoS.DurabilityPolicy.RMW_QOS_POLICY_DURABILITY_SYSTEM_DEFAULT,  // メッセージの耐久性
         );
         this.vslam.tfStaticPub = node.createPublisher('tf2_msgs/msg/TFMessage', '/tf_static', {qos : qosProfile});
+        this.vslam.imuPub = node.createPublisher('sensor_msgs/msg/Imu', '/visual_slam/imu');
 
         // Initialize subscribers
         node.createSubscription('nav_msgs/msg/Odometry', '/odometry/filtered', (data) => {
@@ -126,7 +127,8 @@ class PifRosMessagePublisher {
                     'base_link',
                     'front_stereo_camera',
                     { x: 0.0, y: 0.0, z: 1.0 },
-                    { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+                    //{ x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+                    camera_orientation,
                     this.vslam.startTimestamp
                 ),
                 // Front Camera to Front Left Camera
@@ -145,6 +147,14 @@ class PifRosMessagePublisher {
                     { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
                     this.vslam.startTimestamp
                 ),
+                // Base to imu
+                this.createTfTransform(
+                    'base_link',
+                    'imu_frame',
+                    { x: 0.0, y: 0.0, z: 1.0 },
+                    { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+                    this.vslam.startTimestamp
+                ),
             ],
         };
         
@@ -153,7 +163,7 @@ class PifRosMessagePublisher {
         this.isInitialized = true;
     }
 
-    publishGpsNmea(nmea_str, timestamp_sec) {
+    publishGpsNmea(nmea_str, rosTimestamp) {
         try {
             const nmea = nmeaParse.parseNmeaSentence(nmea_str);
             if (!nmea || nmea.sentenceId !== 'GGA') {
@@ -171,7 +181,7 @@ class PifRosMessagePublisher {
 
             const odom = {
                 header: {
-                    stamp: this.node.getClock().now(),
+                    stamp: rosTimestamp,
                     frame_id: 'odom',
                 },
                 child_frame_id: 'base_link',
@@ -208,21 +218,25 @@ class PifRosMessagePublisher {
         }
     }
     
-    publishWheelCount(data, heading, timestamp_sec) {
+    publishWheelCount(data, heading, rosTimestamp) {
         try {
-            const rosTimestamp = this.node.getClock().now();
-    
             this.encoder.left_counts = Math.floor(data[0]) * this.encoder.left_direction;
             this.encoder.right_counts = Math.floor(data[1]) * this.encoder.right_direction;
-    
+
             if (this.encoder.last_left_counts === null) {
                 this.encoder.last_left_counts = this.encoder.left_counts;
                 this.encoder.last_right_counts = this.encoder.right_counts;
-                this.encoder.last_time = timestamp_sec;
+                this.encoder.last_time = rosTimestamp;
                 this.encoder.heading = heading + 20;
             }
-    
-            let dt = timestamp_sec - this.encoder.last_time;
+
+            function rostimestamp_diff(time1, time2) {
+                const secDiff = time2.sec - time1.sec;
+                const nanosecDiff = (time2.nanosec - time1.nanosec) / 1e9;
+                return secDiff + nanosecDiff;
+            }
+
+            let dt = rostimestamp_diff(rosTimestamp, this.encoder.last_time);
     
             if (dt === 0 || this.encoder.last_left_counts === null) {
                 return;
@@ -303,7 +317,7 @@ class PifRosMessagePublisher {
     
             this.encoder.last_left_counts = this.encoder.left_counts;
             this.encoder.last_right_counts = this.encoder.right_counts;
-            this.encoder.last_time = timestamp_sec;
+            this.encoder.last_time = rosTimestamp;
         } catch (err) {
             console.error("Error in publishWheelCount:", err);
         }
@@ -345,10 +359,10 @@ class PifRosMessagePublisher {
         };
     }
     
-    createTfTransform(parentFrame, childFrame, translation, rotation, timestampSec) {
+    createTfTransform(parentFrame, childFrame, translation, rotation, rosTimestamp) {
         return {
             header: {
-                stamp: timestampSec,
+                stamp: rosTimestamp,
                 frame_id: parentFrame,
             },
             child_frame_id: childFrame,
@@ -368,12 +382,42 @@ class PifRosMessagePublisher {
         };
     }
 
+    async publishImu(imu, rosTimestamp) {
+        try {
+            const imuMsg = {
+                header: {
+                    stamp: rosTimestamp,
+                    frame_id: 'imu_frame'
+                },
+                orientation: imu.quaternion,
+                orientation_covariance: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                angular_velocity: {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0
+                },
+                angular_velocity_covariance: [-1, 0, 0, 0, 0, 0, 0, 0, 0],
+                linear_acceleration: {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0
+                },
+                linear_acceleration_covariance: [-1, 0, 0, 0, 0, 0, 0, 0, 0]
+            };
+            this.vslam.imuPub.publish(imuMsg);
+
+            console.log('Published IMU data.');
+        } catch (err) {
+            console.error('Error in publishImu:', err);
+        }
+    }
+
     /**
      * Publish side-by-side stereo images to /stereo_camera/left/image and /stereo_camera/right/image
      * @param {Buffer} sideBySideImageBuffer - Buffer containing the side-by-side image.
      * @param {number} timestampSec - Timestamp in seconds.
      */
-    async publishVslam(sideBySideImageBuffer, timestampSec) {
+    async publishVslam(sideBySideImageBuffer, rosTimestamp) {
         try {
             const image = cv.imdecode(sideBySideImageBuffer);
 
@@ -417,20 +461,6 @@ class PifRosMessagePublisher {
                 step: (this.is_mono ? halfWidth : halfWidth * 3),
                 data: Array.from(rightImage.getData()),
             };
-
-            const { seconds, nanoseconds } = (() => {
-                const { seconds, nanoseconds } = this.vslam.startTimestamp.secondsAndNanoseconds;
-                const additionalNanoseconds = Math.floor(this.vslam.frameCount * this.vslam.frameIntervalSec * 1e9);
-                const totalNanoseconds = nanoseconds + additionalNanoseconds;
-                return {
-                    seconds: seconds + Math.floor(totalNanoseconds / 1e9),
-                    nanoseconds: totalNanoseconds % 1e9,
-                };
-            })();
-
-            const rosTimestamp = { sec: seconds, nanosec: nanoseconds };
-            //console.log(seconds, String(nanoseconds).padStart(9, '0'));
-            //const rosTimestamp = this.node.getClock().now();
 
             // Transform data for /tf
             const tfMessage = {

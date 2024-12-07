@@ -29,6 +29,7 @@ let m_options = {
 let m_ros_msg_pub = new PifRosMessagePublisher();
 let m_vslam_frame_skip = 0;
 let m_vslam_frame_count = 0;
+const m_ros_timestamp_base_ms = Date.now();
 
 function toSec(timestampText) {
 	const [seconds, microseconds] = timestampText.split(',');
@@ -66,11 +67,23 @@ async function auto_drive_handler(tmp_img) {
 		console.log(current_nmea, current_imu, current_encoder);
 	}
 
-	const timestampSec = toSec(timestamp);
-	m_ros_msg_pub.publishWheelCount([current_encoder.left, current_encoder.right], current_imu.heading, timestampSec);
-	m_ros_msg_pub.publishGpsNmea(nmea_str, timestampSec);
+	//const timestampSec = toSec(timestamp);
+
+	const rosTimestamp = (() => {
+		const { seconds, nanoseconds } = { seconds : Math.floor(m_ros_timestamp_base_ms / 1e3), nanoseconds : 0 };
+		const additionalNanoseconds = Math.floor(m_vslam_frame_count * (1 / 30) * 1e9);
+		const totalNanoseconds = nanoseconds + additionalNanoseconds;
+		return {
+			sec: seconds + Math.floor(totalNanoseconds / 1e9),
+			nanosec: totalNanoseconds % 1e9,
+		};
+	})();
+
+	m_ros_msg_pub.publishWheelCount([current_encoder.left, current_encoder.right], current_imu.heading, rosTimestamp);
+	m_ros_msg_pub.publishGpsNmea(nmea_str, rosTimestamp);
+	m_ros_msg_pub.publishImu(current_imu, rosTimestamp);
 	if((m_vslam_frame_count % (m_vslam_frame_skip + 1)) == 0){
-		m_ros_msg_pub.publishVslam(tmp_img[2], timestampSec);
+		m_ros_msg_pub.publishVslam(tmp_img[2], rosTimestamp);
 	}
 	m_vslam_frame_count++;
 	//console.log(m_vslam_frame_count);
