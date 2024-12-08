@@ -12,6 +12,7 @@ const xml_parser = new fxp.XMLParser({
 	attributeNamePrefix: "",
 });
 const pif_utils = require('./pif-utils');
+const gps_odometry = require('./odometry-handlers/gps-odometry');
 
 let m_options = {
 	"waypoint_threshold_m" : 10,
@@ -24,7 +25,13 @@ let m_averaging_count = 0;
 let m_last_nmea = null;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
-let m_use_odometry = false;
+const ODOMETRY_TYPE = {
+	GPS : 0,
+	ENCODER : 0,
+	VSLAM : 0,
+};
+let m_odometry_type = ODOMETRY_TYPE.GPS;
+let m_odometry_handler = null;
 
 function latLonToXY(lat1, lon1, lat2, lon2) {
 	const R = 6378137; // Earth's radius in meters
@@ -120,45 +127,6 @@ function record_waypoints_handler(tmp_img){
 	}
 }
 
-// Calculate the distance using the Haversine formula
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371000; // Radius of the Earth in meters
-    const φ1 = degreesToRadians(lat1);
-    const φ2 = degreesToRadians(lat2);
-    const Δφ = degreesToRadians(lat2 - lat1);
-    const Δλ = degreesToRadians(lon2 - lon1);
-
-    const a = Math.sin(Δφ / 2) ** 2 +
-              Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c; // Distance in meters
-}
-
-// Calculate the bearing from the current location to the target
-function calculateBearing(lat1, lon1, lat2, lon2) {
-    const φ1 = degreesToRadians(lat1);
-    const φ2 = degreesToRadians(lat2);
-    const Δλ = degreesToRadians(lon2 - lon1);
-
-    const y = Math.sin(Δλ) * Math.cos(φ2);
-    const x = Math.cos(φ1) * Math.sin(φ2) -
-              Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
-    const θ = Math.atan2(y, x);
-
-    return (radiansToDegrees(θ) + 360) % 360; // Bearing in degrees
-}
-
-// Convert degrees to radians
-function degreesToRadians(degrees) {
-    return degrees * (Math.PI / 180);
-}
-
-// Convert radians to degrees
-function radiansToDegrees(radians) {
-    return radians * (180 / Math.PI);
-}
-
 function move_forward(distance) {
     console.log(`Moving forward ${distance.toFixed(2)} meters`);
 	if(distance > 0){
@@ -197,7 +165,7 @@ function update_auto_drive_waypoints(waypoints) {
 	});
 }
 
-function auto_drive_handler_pst(tmp_img){
+function auto_drive_handler(tmp_img){
 	if(tmp_img.length != 3){
 		return;
 	}
@@ -214,48 +182,8 @@ function auto_drive_handler_pst(tmp_img){
 
 	const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
 	const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
-	const frame_dom = xml_parser.parse(meta);
-	const current_nmea = nmea.parseNmeaSentence(frame_dom['picam360:frame']['passthrough:nmea']);
-	const current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
 
-	auto_drive_handler(current_nmea.latitude, current_nmea.longitude, current_imu.heading);
-}
-
-function addMetersToLatLon(lat, lon, x, y) {
-    // Convert initial latitude and longitude to UTM
-    const utmCoord = utm.fromLatLon(lat, lon);
-
-    // Add the displacement in meters to the UTM coordinates
-    const newEasting = utmCoord.easting + x;
-    const newNorthing = utmCoord.northing + y;
-
-    // Convert the updated UTM coordinates back to latitude and longitude
-    const newLatLon = utm.toLatLon(newEasting, newNorthing, utmCoord.zoneNumber, utmCoord.zoneLetter);
-
-    return newLatLon;
-}
-
-function auto_drive_handler_odometry(odometry){
-	const q = Quaternion(
-		odometry.pose.orientation.x,
-		odometry.pose.orientation.y,
-		odometry.pose.orientation.z,
-		odometry.pose.orientation.w,
-	);
-	const eulerAngles = q.toEuler();
-	const heading = eulerAngles[2] * 180 / Math.PI;  // yaw is the 3rd element in the array
-
-	latlon = addMetersToLatLon(
-		odometry.origin.latitude,
-		odometry.origin.longitude,
-		odometry.pose.position.x,
-		odometry.pose.position.y,
-	);
-
-	auto_drive_handler(latlon.latitude, latlon.longitude, heading);
-}
-
-function auto_drive_handler(latitude, longitude, heading){
+	m_odometry_handler.push(header, meta, tmp_img[2]);
 
 	const keys = Object.keys(m_auto_drive_waypoints);
     if (m_auto_drive_cur >= keys.length) {
@@ -273,21 +201,8 @@ function auto_drive_handler(latitude, longitude, heading){
 
 	let cur = m_auto_drive_cur;
 	while(cur < keys.length){
-		const key = keys[cur];
-		const target_waypoint = m_auto_drive_waypoints[key];
-		const target_nmea = nmea.parseNmeaSentence(target_waypoint['nmea']);
-		const distanceToTarget = calculateDistance(
-			latitude, longitude,
-			target_nmea.latitude, target_nmea.longitude);
-		const targetHeading = calculateBearing(
-			latitude, longitude,
-			target_nmea.latitude, target_nmea.longitude);
-		let headingError = targetHeading - heading;
-		if(headingError <= -180){
-			headingError += 360;
-		}else if(headingError > 180){
-			headingError -= 360;
-		}
+		const distanceToTarget = m_odometry_handler.calculateDistance(cur);
+		const headingError = m_odometry_handler.calculateHeadingError(cur);
 	
 		if (distanceToTarget > 1.0) {
 			// Control logic: move forward/backward or rotate
@@ -403,24 +318,12 @@ function main() {
 					record_waypoints_handler(tmp_img);
 					break;
 				case "AUTO":
-					if(!m_use_odometry){
-						auto_drive_handler_pst(tmp_img);
-					}
+					auto_drive_handler(tmp_img);
 					break;
 				}
 				tmp_img = [];
 			}else{
 				tmp_img.push(Buffer.from(data, 'base64'));
-			}
-		});
-
-		subscriber.subscribe('pserver-odometry', (data, key) => {
-			switch(m_drive_mode){
-			case "AUTO":
-				if(m_use_odometry){
-					auto_drive_handler_odometry(data);
-				}
-				break;
 			}
 		});
 	});
@@ -458,10 +361,17 @@ function command_handler(cmd) {
 			if(m_drive_mode == "STANBY") {
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
-					m_drive_mode = "AUTO";
-					update_auto_drive_waypoints(waypoints);
-					update_auto_drive_cur(0);
-					console.log("drive mode", m_drive_mode);
+					switch(m_odometry_type){
+						case ODOMETRY_TYPE.GPS:
+							m_odometry_handler = new gps_odometry.GpsOdometry();
+							break;
+					}
+					m_odometry_handler.init(waypoints, () => {
+						m_drive_mode = "AUTO";
+						update_auto_drive_waypoints(waypoints);
+						update_auto_drive_cur(0);
+						console.log("drive mode", m_drive_mode);
+					})
 				});
 			}else{
 				console.log("drive mode", m_drive_mode);

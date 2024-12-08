@@ -54,8 +54,8 @@ function main() {
 	const host = argv.host;
 	const port = argv.port;
 	const reverse = argv.reverse;
-	const start_cur = argv.start_cur;
-	const end_cur = argv.end_cur;
+	let start_cur = argv.start_cur;
+	let end_cur = argv.end_cur;
 
     const redis = require('redis');
     const client = redis.createClient({
