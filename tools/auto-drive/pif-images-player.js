@@ -35,7 +35,7 @@ function main() {
             default: false,
             description: 'reverse',
         })
-        .option('sart_cur', {
+        .option('start_cur', {
             type: 'number',
             default: 0,
             description: 'start cursol',
@@ -54,7 +54,7 @@ function main() {
 	const host = argv.host;
 	const port = argv.port;
 	const reverse = argv.reverse;
-	const sart_cur = argv.sart_cur;
+	const start_cur = argv.start_cur;
 	const end_cur = argv.end_cur;
 
     const redis = require('redis');
@@ -85,9 +85,16 @@ function main() {
 					//console.log(`Directory: ${entry.name}`);
 				}
 			});
+			if(end_cur <= 0){
+				end_cur = Object.keys(pifs).length + end_cur;
+			}
 			if(reverse){
 				console.log("reverse");
 				pifs.reverse();
+				const start_cur_tmp = Object.keys(pifs).length - end_cur;
+				const end_cur2_tmp = Object.keys(pifs).length - start_cur;
+				start_cur = start_cur_tmp;
+				end_cur = end_cur2_tmp;
 			}
 			let cur = start_cur;
 			setInterval(() => {
