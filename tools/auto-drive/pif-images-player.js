@@ -35,6 +35,16 @@ function main() {
             default: false,
             description: 'reverse',
         })
+        .option('sart_cur', {
+            type: 'number',
+            default: 0,
+            description: 'start cursol',
+        })
+        .option('end_cur', {
+            type: 'number',
+            default: 0,
+            description: 'start cursol',
+        })
         .help()
         .alias('help', 'h')
         .argv;
@@ -44,6 +54,8 @@ function main() {
 	const host = argv.host;
 	const port = argv.port;
 	const reverse = argv.reverse;
+	const sart_cur = argv.sart_cur;
+	const end_cur = argv.end_cur;
 
     const redis = require('redis');
     const client = redis.createClient({
@@ -77,9 +89,9 @@ function main() {
 				console.log("reverse");
 				pifs.reverse();
 			}
-			let cur = 0;
+			let cur = start_cur;
 			setInterval(() => {
-				if(cur >= Object.keys(pifs).length){
+				if(cur >= Math.min(Object.keys(pifs).length, end_cur)){
 					console.log(cur, "done");
 					process.exit(0);
 				}
