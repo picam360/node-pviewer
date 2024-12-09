@@ -1,5 +1,6 @@
 
 const nmea = require('nmea-simple');
+const utm = require('utm');
 const fxp = require('fast-xml-parser');
 const xml_parser = new fxp.XMLParser({
 	ignoreAttributes: false,
@@ -58,6 +59,21 @@ class GpsOdometry {
         if(callback){
             callback();
         }
+    }
+
+    static cal_xy(waypoints){
+        const positions = {};
+        const keys = Object.keys(waypoints);
+        for(const key of keys){
+            const current_nmea = nmea.parseNmeaSentence(waypoints[key].nmea);
+            const { easting, northing } = 
+                utm.fromLatLon(current_nmea.latitude, current_nmea.longitude);
+            positions[key] = {
+                x : easting,
+                y : northing,
+            }
+        }
+        return positions;
     }
   
     push(header, meta, jpeg_data) {

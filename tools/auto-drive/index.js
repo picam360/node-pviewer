@@ -13,6 +13,7 @@ const xml_parser = new fxp.XMLParser({
 });
 const pif_utils = require('./pif-utils');
 const gps_odometry = require('./odometry-handlers/gps-odometry');
+const encoder_odometry = require('./odometry-handlers/encoder-odometry');
 
 let m_options = {
 	"waypoint_threshold_m" : 10,
@@ -27,10 +28,11 @@ let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
 const ODOMETRY_TYPE = {
 	GPS : 0,
-	ENCODER : 0,
-	VSLAM : 0,
+	ENCODER : 1,
+	VSLAM : 2,
 };
-let m_odometry_type = ODOMETRY_TYPE.GPS;
+//let m_odometry_type = ODOMETRY_TYPE.GPS;
+let m_odometry_type = ODOMETRY_TYPE.ENCODER;
 let m_odometry_handler = null;
 
 function latLonToXY(lat1, lon1, lat2, lon2) {
@@ -202,9 +204,10 @@ function auto_drive_handler(tmp_img){
 	let cur = m_auto_drive_cur;
 	while(cur < keys.length){
 		const distanceToTarget = m_odometry_handler.calculateDistance(cur);
-		const headingError = m_odometry_handler.calculateHeadingError(cur);
-	
 		if (distanceToTarget > 1.0) {
+		
+			const headingError = m_odometry_handler.calculateHeadingError(cur);
+
 			// Control logic: move forward/backward or rotate
 			if (Math.abs(headingError) > 20) { // 20 degrees threshold
 				rotate_robot(headingError);
@@ -364,6 +367,9 @@ function command_handler(cmd) {
 					switch(m_odometry_type){
 						case ODOMETRY_TYPE.GPS:
 							m_odometry_handler = new gps_odometry.GpsOdometry();
+							break;
+						case ODOMETRY_TYPE.ENCODER:
+							m_odometry_handler = new encoder_odometry.EncoderOdometry();
 							break;
 					}
 					m_odometry_handler.init(waypoints, () => {
