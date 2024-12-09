@@ -39,7 +39,7 @@ class EncoderOdometry {
         this.calib_enabled = true;
 
         this.settings = {
-            meter_per_pulse: 0.0075,
+            meter_per_pulse: 0.0078445,
             wheel_separation: 2.5,
             imu_heading_error: 0.0,
         };
@@ -118,6 +118,13 @@ class EncoderOdometry {
         {
             function createErrorFunction(waypoints, gps_positions, settings, types) {
                 return (solving_params) => {
+                    let gain = 1.0;
+                    if (settings.meter_per_pulse < 0 || settings.meter_per_pulse > 100) {
+                        gain = Math.abs(settings.meter_per_pulse + 1);
+                    }
+                    if (settings.wheel_separation < 0 || settings.wheel_separation > 100) {
+                        gain = Math.abs(settings.wheel_separation + 1);
+                    }
                     for(const i in types){
                         settings[types[i]] = solving_params[i];
                     }
@@ -131,7 +138,7 @@ class EncoderOdometry {
                         totalError += error_X + error_Y;
                     }
                 
-                    return totalError;
+                    return totalError * gain;
                 }
             }
             
@@ -152,14 +159,32 @@ class EncoderOdometry {
             let result = numeric.uncmin(
                 createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["imu_heading_error"]),
                 [this.settings.imu_heading_error]);
-
-            this.settings.imu_heading_error = result.solution[0];
+            this.settings.imu_heading_error = result.solution[0] % 360;
+            console.log(result.message, result.f, result.iterations);
             console.log('imu_heading_error:', result.solution[0]);
             
             if(this.calib_enabled){
                 result = numeric.uncmin(
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["meter_per_pulse"]),
+                    [this.settings.meter_per_pulse]);
+                this.settings.meter_per_pulse = result.solution[0];
+                console.log(result.message, result.f, result.iterations);
+                console.log('meter_per_pulse:', result.solution[0]);
+
+                result = numeric.uncmin(
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["wheel_separation"]),
+                    [this.settings.wheel_separation]);
+                this.settings.wheel_separation = result.solution[0];
+                console.log(result.message, result.f, result.iterations);
+                console.log('wheel_separation:', result.solution[0]);
+
+                result = numeric.uncmin(
                     createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["meter_per_pulse", "wheel_separation", "imu_heading_error"]),
                     [this.settings.meter_per_pulse, this.settings.wheel_separation, this.settings.imu_heading_error]);
+                this.settings.meter_per_pulse = result.solution[0];
+                this.settings.wheel_separation = result.solution[1];
+                this.settings.imu_heading_error = result.solution[2] % 360;
+                console.log(result.message, result.f, result.iterations);
                 console.log('meter_per_pulse:', result.solution[0]);
                 console.log('wheel_separation:', result.solution[1]);
                 console.log('imu_heading_error:', result.solution[2]);

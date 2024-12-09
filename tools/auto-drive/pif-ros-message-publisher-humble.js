@@ -31,9 +31,10 @@ class PifRosMessagePublisher {
             right_direction: -1,
             last_left_counts: null,
             last_right_counts: null,
-            meter_per_pulse: 0.0075,
+            meter_per_pulse: 0.007512237883246996,
             //wheel_separation: 0.11,
-            wheel_separation: 2.5,
+            wheel_separation: 2.5785047010989204,
+            imu_heading_error: 19.48381320843465,
             x: 0.0,
             y: 0.0,
             heading: 0.0,
@@ -227,7 +228,7 @@ class PifRosMessagePublisher {
                 this.encoder.last_left_counts = this.encoder.left_counts;
                 this.encoder.last_right_counts = this.encoder.right_counts;
                 this.encoder.last_time = rosTimestamp;
-                this.encoder.heading = heading + 20;
+                this.encoder.heading = heading + this.encoder.imu_heading_error;
             }
 
             function rostimestamp_diff(time1, time2) {
