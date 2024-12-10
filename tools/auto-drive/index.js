@@ -12,8 +12,6 @@ const xml_parser = new fxp.XMLParser({
 	attributeNamePrefix: "",
 });
 const pif_utils = require('./pif-utils');
-const gps_odometry = require('./odometry-handlers/gps-odometry');
-const encoder_odometry = require('./odometry-handlers/encoder-odometry');
 
 let m_options = {
 	"waypoint_threshold_m" : 10,
@@ -32,7 +30,7 @@ const ODOMETRY_TYPE = {
 	VSLAM : 2,
 };
 //let m_odometry_type = ODOMETRY_TYPE.GPS;
-let m_odometry_type = ODOMETRY_TYPE.ENCODER;
+let m_odometry_type = ODOMETRY_TYPE.VSLAM;
 let m_odometry_handler = null;
 
 function latLonToXY(lat1, lon1, lat2, lon2) {
@@ -73,10 +71,11 @@ function load_auto_drive_waypoints(dirpath, callback){
 	
 							const fileNameWithoutExt = path.basename(file_path, path.extname(file_path));
 							drive_waypoints[fileNameWithoutExt] = {
+								meta,
 								nmea : frame_dom['picam360:frame']['passthrough:nmea'],
 								encoder : frame_dom['picam360:frame']['passthrough:encoder'],
 								imu : frame_dom['picam360:frame']['passthrough:imu'],
-								image : `/auto_drive_waypoints/${entry.name}.0.0.jpeg`,
+								jpeg_filepath : `${dirpath}/${entry.name}.0.0.JPEG`,
 							};
 						});
 						//console.log(`File: ${entry.name}`);
@@ -366,10 +365,16 @@ function command_handler(cmd) {
 				load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
 					switch(m_odometry_type){
 						case ODOMETRY_TYPE.GPS:
+							const gps_odometry = require('./odometry-handlers/gps-odometry');
 							m_odometry_handler = new gps_odometry.GpsOdometry();
 							break;
 						case ODOMETRY_TYPE.ENCODER:
+							const encoder_odometry = require('./odometry-handlers/encoder-odometry');
 							m_odometry_handler = new encoder_odometry.EncoderOdometry();
+							break;
+						case ODOMETRY_TYPE.VSLAM:
+							const vslam_odometry = require('./odometry-handlers/vslam-odometry');
+							m_odometry_handler = new vslam_odometry.VslamOdometry();
 							break;
 					}
 					m_odometry_handler.init(waypoints, () => {
@@ -405,4 +410,8 @@ function push_nmea(nmea){
 
 if (require.main === module) {
     main();
+	process.on('SIGINT', () => {
+		console.log('Ctrl+C detected! Gracefully exiting...');
+		process.exit(0);
+	});
 }

@@ -233,8 +233,7 @@ class EncoderOdometry {
         const dx = target_position.x - this.encoder_params.x;
         const dy = target_position.y - this.encoder_params.y;
         const θ = Math.atan2(dy, dx);
-        const bearing = (Math.PI / 2 - θ); // 北を基準に時計回り
-    
+        const bearing = (Math.PI / 2 - θ)
         return (radiansToDegrees(bearing) + 360) % 360; // Bearing in degrees
     }
     calculateHeadingError(cur){
