@@ -65,10 +65,12 @@ class PifRosMessagePublisher {
         this.odometry_callbacks = [];
     }
 
-    async initialize() {
+    async initialize(params) {
         if (this.isInitialized) {
             return;
         }
+
+        params = params || {};
 
         await rclnodejs.init();
         const node = rclnodejs.createNode('pif_ros_message_publisher');
@@ -108,7 +110,7 @@ class PifRosMessagePublisher {
         this.vslam.imuPub = node.createPublisher('sensor_msgs/msg/Imu', '/visual_slam/imu');
 
         // Initialize subscribers
-        node.createSubscription('nav_msgs/msg/Odometry', '/odometry/filtered', (data) => {
+        node.createSubscription('nav_msgs/msg/Odometry', '/visual_slam/tracking/odometry', (data) => {
             for (const callback of this.odometry_callbacks) {
                 callback(this.convertOdometryToObj(data));
             }
@@ -118,8 +120,10 @@ class PifRosMessagePublisher {
 
         this.vslam.startTimestamp = this.node.getClock().now();
 
+        const bearing_orientation = Quaternion.fromEuler((90 - (params.heading || 0)) * Math.PI / 180, 0, 0, "ZXY");
         //const camera_orientation = { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
-        const camera_orientation = Quaternion.fromEuler(-90 * Math.PI / 180, -90 * Math.PI / 180, 0 * Math.PI / 180, "ZXY");
+        let camera_orientation = Quaternion.fromEuler(-90 * Math.PI / 180, -90 * Math.PI / 180, 0 * Math.PI / 180, "ZXY");
+        camera_orientation = bearing_orientation.mul(camera_orientation);
         // Transform data for /tf_static
         const tfStaticMessage = {
             transforms: [

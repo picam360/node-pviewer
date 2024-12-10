@@ -138,6 +138,11 @@ function main() {
 			default: false,
 			description: 'disable launch isaac ros vslam',
 		})
+		.option('heading', {
+			type: 'number',
+			default: 0,
+			description: 'number',
+		})
 		.option('vslam-frame-skip', {
 			type: 'number',
 			default: 0,
@@ -149,6 +154,7 @@ function main() {
 	const host = argv.host;
 	const port = argv.port;
 	const disable_launch = argv['disable-launch'];
+	const heading = argv.heading;
 	m_vslam_frame_skip = argv['vslam-frame-skip'];
 
 	const redis = require('redis');
@@ -168,10 +174,10 @@ function main() {
 	subscriber.connect().then(async () => {
 		console.log('redis connected:');
 
-		await m_ros_msg_pub.initialize();
+		await m_ros_msg_pub.initialize({ heading });
 
 		m_ros_msg_pub.subscribeOdometry((odometry) => {
-			client.publish('pserver-odometry', JSON.stringify(odometry), (err, reply) => {
+			client.publish('pserver-vslam-odom', JSON.stringify(odometry), (err, reply) => {
 				if (err) {
 					console.error('Error publishing message:', err);
 				} else {
