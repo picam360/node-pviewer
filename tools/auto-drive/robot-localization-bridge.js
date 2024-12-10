@@ -19,6 +19,8 @@ const xml_parser = new fxp.XMLParser({
 	ignoreAttributes: false,
 	attributeNamePrefix: "",
 });
+const { spawn } = require('child_process');
+const { exec } = require('child_process');
 const pif_utils = require('./pif-utils');
 const PifRosMessagePublisher = require('./pif-ros-message-publisher-humble');
 
@@ -90,6 +92,34 @@ async function auto_drive_handler(tmp_img) {
     //console.log(process.memoryUsage());
 }
 
+function launchDockerContainer() {
+	const vslam_process = spawn('bash', ['launch_vslam.sh'], { cwd: path.resolve(__dirname, './ros_packages') });
+	vslam_process.stdout.on('data', (data) => {
+	  console.log(`ISAAC_ROS_VSLAM STDOUT: ${data}`);
+	});
+	
+	vslam_process.stderr.on('data', (data) => {
+	  console.error(`ISAAC_ROS_VSLAM STDERR: ${data}`);
+	});
+	
+	vslam_process.on('close', (code) => {
+	  console.log(`ISAAC_ROS_VSLAM STDOUT CLOSED(: ${code})`);
+	});
+}
+function killDockerContainer() {
+	exec('docker kill vslam-container', (error, stdout, stderr) => {
+	  if (error) {
+		console.error(`Error occurred: ${error.message}`);
+		return;
+	  }
+	  if (stderr) {
+		console.error(`Standard error output: ${stderr}`);
+		return;
+	  }
+	  console.log(`Standard output: ${stdout}`);
+	});
+}
+
 function main() {
 
 	const argv = yargs
@@ -103,6 +133,11 @@ function main() {
 			default: 6379,
 			description: 'port',
 		})
+		.option('disable-launch', {
+			type: 'boolean',
+			default: false,
+			description: 'disable launch isaac ros vslam',
+		})
 		.option('vslam-frame-skip', {
 			type: 'number',
 			default: 0,
@@ -113,6 +148,7 @@ function main() {
 		.argv;
 	const host = argv.host;
 	const port = argv.port;
+	const disable_launch = argv['disable-launch'];
 	m_vslam_frame_skip = argv['vslam-frame-skip'];
 
 	const redis = require('redis');
@@ -154,6 +190,30 @@ function main() {
 			}
 		});
 	});
+
+	if(!disable_launch){
+		launchDockerContainer();
+
+		// Execute when the process is about to exit
+		process.on('exit', () => {
+		  console.log('Process exiting: Executing docker kill vslam...');
+		  killDockerContainer();
+		});
+		
+		// Execute when Ctrl+C (SIGINT) is pressed
+		process.on('SIGINT', () => {
+		  console.log('SIGINT received: Executing docker kill vslam...');
+		  killDockerContainer();
+		  process.exit(0); // Explicitly exit the process
+		});
+		
+		// Handle other signals like SIGTERM
+		process.on('SIGTERM', () => {
+		  console.log('SIGTERM received: Executing docker kill vslam...');
+		  killDockerContainer();
+		  process.exit(0); // Explicitly exit the process
+		});
+	}
 }
 
 if (require.main === module) {

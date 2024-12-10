@@ -80,7 +80,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         visual_slam_launch_container,
-        ekf_node,
+        #ekf_node,
         display_rviz,
         rviz_node
     ])

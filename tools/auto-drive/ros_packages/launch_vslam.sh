@@ -36,11 +36,14 @@ DOCKER_ARGS+=("--pid=host")
 DOCKER_ARGS+=("-v /opt/nvidia/vpi2:/opt/nvidia/vpi2")
 DOCKER_ARGS+=("-v /usr/share/vpi2:/usr/share/vpi2")
 
+#DOCKER_ARGS+=("-it")
+
 ISAAC_ROS_DEV_DIR=$(pwd)
 
 # Run container from image
 echo "Running $CONTAINER_NAME"
-docker run -it --rm \
+docker run \
+    --rm \
     --privileged \
     --network host \
     ${DOCKER_ARGS[@]} \
@@ -54,7 +57,8 @@ docker run -it --rm \
     --workdir /workspaces/isaac_ros-dev \
     $@ \
     $BASE_NAME \
-    /bin/bash
+    ros2 launch ./launch/vslam.py  display_rviz:=true
+#    /bin/bash
 
 : <<'NOTE'
 ros2 launch ./launch/vslam.py
