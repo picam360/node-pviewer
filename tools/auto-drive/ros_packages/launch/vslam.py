@@ -32,7 +32,7 @@ def generate_launch_description():
             #'rectified_images': True,
             #'enable_ground_constraint_in_odometry' : True,
             #'enable_ground_constraint_in_slam' : True,
-            'enable_imu_fusion': True,
+            #'enable_imu_fusion': True,
             'imu_frame': 'imu_frame',
             'enable_slam_visualization': True,
             'enable_observations_view': True,

@@ -23,6 +23,12 @@ function radiansToDegrees(radians) {
     return radians * (180 / Math.PI);
 }
 
+function quaternionToYaw(orientation) {
+  const { x, y, z, w } = orientation;
+  const yaw = Math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
+  return yaw;
+}
+
 function launchDockerContainer() {
 	const vslam_process = spawn('bash', ['launch_vslam.sh'], { cwd: path.resolve(__dirname, '../ros_packages') });
 	vslam_process.stdout.on('data', (data) => {
@@ -67,16 +73,17 @@ class VslamOdometry {
 		launchDockerContainer();
 
         setTimeout(() => {
-            let positions_cur = 0;
             this.positions = {};
 
             this.publisher = new PifRosMessagePublisher();
             this.publisher.subscribeOdometry((odom) => {
                 this.current_odom = odom;
                 if(!this.initialized){
-                    this.positions[keys[positions_cur]] = odom;
-                    positions_cur++;
-                    if(positions_cur >= keys.length){
+                    const push_cur = Math.round((odom.header.stamp.sec * 1e3 + odom.header.stamp.nanosec / 1e6) / (1e3 / 30));
+                    if(push_cur < keys.length){
+                        const cur = keys.length - 1 - push_cur;//reverse
+                        this.positions[keys[cur]] = odom;
+                    }else{
                         this.initialized = true;
                         clearInterval(push_timer);
                         if(callback){
@@ -90,7 +97,8 @@ class VslamOdometry {
             this.publisher.initialize({ heading });
 
             const push_timer = setInterval(() => {
-                const waypoint = waypoints[keys[Math.min(this.push_cur, keys.length - 1)]];
+                const cur = keys.length - 1 - this.push_cur;//reverse
+                const waypoint = waypoints[keys[Math.max(cur, 0)]];
                 const jpeg_filepath = waypoint.jpeg_filepath;
                 console.log(jpeg_filepath);
                 const jpeg_data = fs.readFileSync(jpeg_filepath);
@@ -110,7 +118,7 @@ class VslamOdometry {
         this.current_jpeg_data = jpeg_data;
 
         const rosTimestamp = (() => {
-            const { seconds, nanoseconds } = { seconds : Math.floor(this.m_ros_timestamp_base_ms / 1e3), nanoseconds : 0 };
+            const { seconds, nanoseconds } = { seconds : Math.floor(0 / 1e3), nanoseconds : 0 };
             const additionalNanoseconds = Math.floor(this.push_cur * (1 / 30) * 1e9);
             const totalNanoseconds = nanoseconds + additionalNanoseconds;
             return {
@@ -127,23 +135,30 @@ class VslamOdometry {
 
     calculateDistance(cur){
         const key = this.waypoints_keys[cur];
+        if(this.positions[key] === undefined){
+            return 0;
+        }
         const target_position = this.positions[key];
-        const dx = this.current_odom.pose.position.x - target_position.pose.position.x;
-        const dy = this.current_odom.pose.position.y - target_position.pose.position.y;
+        const dx = target_position.pose.position.x - this.current_odom.pose.position.x;
+        const dy = target_position.pose.position.y - this.current_odom.pose.position.y;
         return Math.sqrt(dx * dx + dy * dy);
     }
     calculateBearing(cur){
         const key = this.waypoints_keys[cur];
+        if(this.positions[key] === undefined){
+            return 0;
+        }
         const target_position = this.positions[key];
-        const dx = this.current_odom.pose.position.x - target_position.pose.position.x;
-        const dy = this.current_odom.pose.position.y - target_position.pose.position.y;
+        const dx = target_position.pose.position.x - this.current_odom.pose.position.x;
+        const dy = target_position.pose.position.y - this.current_odom.pose.position.y;
         const θ = Math.atan2(dy, dx);
         const bearing = (Math.PI / 2 - θ);
         return (radiansToDegrees(bearing) + 360) % 360; // Bearing in degrees
     }
     calculateHeadingError(cur){
+        const heading = 90 - radiansToDegrees(quaternionToYaw(this.current_odom.pose.orientation));
         const targetHeading = this.calculateBearing(cur);
-		let headingError = targetHeading - this.current_imu.heading;
+		let headingError = targetHeading - heading;
 		if(headingError <= -180){
 			headingError += 360;
 		}else if(headingError > 180){

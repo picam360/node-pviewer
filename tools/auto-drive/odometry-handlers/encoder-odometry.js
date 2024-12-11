@@ -223,8 +223,8 @@ class EncoderOdometry {
     calculateDistance(cur){
         const key = this.waypoints_keys[cur];
         const target_position = this.positions[key];
-        const dx = this.encoder_params.x - target_position.x;
-        const dy = this.encoder_params.y - target_position.y;
+        const dx = target_position.x - this.encoder_params.x;
+        const dy = target_position.y - this.encoder_params.y;
         return Math.sqrt(dx * dx + dy * dy);
     }
     calculateBearing(cur){
