@@ -456,7 +456,8 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /left/image_rect
+        Value: /visual_slam/image_0
+#        Value: /left/image_rect
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
@@ -470,7 +471,8 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /right/image_rect
+        Value: /visual_slam/image_1
+#        Value: /right/image_rect
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: false

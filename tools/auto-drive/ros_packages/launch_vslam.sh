@@ -57,7 +57,7 @@ docker run \
     --workdir /workspaces/isaac_ros-dev \
     $@ \
     $BASE_NAME \
-    ros2 launch ./launch/vslam.py  display_rviz:=true
+    ros2 launch ./launch/vslam.py display_rviz:=true
 #    /bin/bash
 
 : <<'NOTE'
