@@ -26,6 +26,8 @@ let m_averaging_count = 0;
 let m_last_nmea = null;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
+let m_auto_drive_last_state = 0;
+let m_auto_drive_last_lastdistance = 0;
 const ODOMETRY_TYPE = {
 	GPS : 0,
 	ENCODER : 1,
@@ -164,6 +166,10 @@ function stop_robot() {
 
 function update_auto_drive_cur(cur) {
 	m_auto_drive_cur = cur;
+	if(cur == 0){
+		m_auto_drive_last_state = 0;
+		m_auto_drive_last_lastdistance = 0;
+	}
 	m_client.set('pserver-auto-drive-cur', m_auto_drive_cur).then((data) => {
 		console.log('set auto drive cur ' + cur, data);
 	});
@@ -196,39 +202,52 @@ function auto_drive_handler(tmp_img){
 	m_odometry_handler.push(header, meta, tmp_img[2]);
 
 	const keys = Object.keys(m_auto_drive_waypoints);
-    if (m_auto_drive_cur >= keys.length) {
-        console.log('All waypoints reached!');
-		stop_robot();
-
-		m_client.publish('pserver-auto-drive-info', JSON.stringify({
-			"mode" : "AUTO",
-			"state" : "DONE",
-			"waypoint_distance" : "-",
-			"heading_error" : "-",
-		}));
-        return;
-    }
 
 	let cur = m_auto_drive_cur;
 	while(cur < keys.length){
 		let distanceToTarget = m_odometry_handler.calculateDistance(cur);
-		if (Math.abs(distanceToTarget) > 1.0) {
-		
-			let headingError = m_odometry_handler.calculateHeadingError(cur);
+		let headingError = m_odometry_handler.calculateHeadingError(cur);
 
-			if(m_options.backward){
-				distanceToTarget *= -1;
-				headingError = 180 - headingError;
-				if(headingError <= -180){
-					headingError += 360;
-				}else if(headingError > 180){
-					headingError -= 360;
-				}
-				headingError *= -1;
+		if(m_options.backward){
+			distanceToTarget *= -1;
+			headingError = 180 - headingError;
+			if(headingError <= -180){
+				headingError += 360;
+			}else if(headingError > 180){
+				headingError -= 360;
 			}
+			headingError *= -1;
+		}
+
+		let tolerance_distance = 1.0;
+		let tolerance_heading = 20;
+		if(cur == keys.length - 1){
+			tolerance_distance = 0.01;
+			switch(m_auto_drive_last_state){
+			case 0:
+				tolerance_heading = 1.0;
+				if(Math.abs(headingError) < 1.0){
+					m_auto_drive_last_state = 1;
+				}
+				break;
+			case 1:
+				if(Math.abs(distanceToTarget) < 0.1){
+					m_auto_drive_last_state = 2;
+					m_auto_drive_last_lastdistance = distanceToTarget;
+				}
+				break;
+			case 2:
+				if(Math.abs(distanceToTarget) > Math.abs(m_auto_drive_last_lastdistance)){//forcibly done
+					tolerance_distance = Math.abs(distanceToTarget) + 1.0;
+				}
+				m_auto_drive_last_lastdistance = distanceToTarget;
+				break;
+			}
+		}
+		if (Math.abs(distanceToTarget) > tolerance_distance) {
 
 			// Control logic: move forward/backward or rotate
-			if (Math.abs(headingError) > 20) { // 20 degrees threshold
+			if (Math.abs(headingError) > tolerance_heading) { // 20 degrees threshold
 				rotate_robot(headingError);
 			} else {
 				move_robot(distanceToTarget);
@@ -246,8 +265,21 @@ function auto_drive_handler(tmp_img){
 		cur++;
 	}
 
-	console.log(`Reached waypoint ${cur}`);
-	update_auto_drive_cur(cur);
+	if(cur != m_auto_drive_cur){
+		console.log(`Reached waypoint ${cur}`);
+		update_auto_drive_cur(cur);
+	}
+    if (m_auto_drive_cur >= keys.length) {
+        console.log('All waypoints reached!');
+		stop_robot();
+
+		m_client.publish('pserver-auto-drive-info', JSON.stringify({
+			"mode" : "AUTO",
+			"state" : "DONE",
+			"waypoint_distance" : "-",
+			"heading_error" : "-",
+		}));
+    }
 }
 
 function main() {

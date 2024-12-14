@@ -125,6 +125,17 @@ class EncoderOdometry {
         this.waypoints = waypoints;
         this.waypoints_keys = Object.keys(waypoints);
 
+        // {
+        //     const points = [];
+        //     for(const waypoint of waypoints){
+        //         const parsedData = nmea.parseNmeaSentence(waypoint.nmea);
+        //         const { easting, northing } = 
+        //         	utm.fromLatLon(parsedData.latitude, parsedData.longitude);
+        //         points.push([easting, northing]);
+        //     }
+        //     const simplify = require('simplify-geometry');
+        //     console.log(simplify(points, 1.0));
+        // }
         {
             function createErrorFunction(waypoints, gps_positions, settings, types) {
                 return (solving_params) => {
