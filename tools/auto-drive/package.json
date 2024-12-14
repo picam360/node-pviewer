@@ -1,19 +1,21 @@
 {
- "name": "auto-drive",
- "version": "1.0.0",
- "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
- "license": "MIT",
- "dependencies": {
-  "fast-xml-parser": "^4.5.0",
-  "jsonc-parser": "^3.3.1",
-  "nmea-simple": "^3.3.0",
-  "opencv4nodejs": "^5.6.0",
-  "quaternion": "^2.0.1",
-  "rclnodejs": "^0.27.4",
-  "redis": "^4.7.0",
-  "rosnodejs": "^3.1.0",
-  "utm": "^1.1.1",
-  "xmlhttprequest": "^1.8.0",
-  "yargs": "^17.7.2"
- }
-}
+    "name": "auto-drive",
+    "version": "1.0.0",
+    "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
+    "license": "MIT",
+    "dependencies": {
+     "fast-xml-parser": "^4.5.0",
+     "jsonc-parser": "^3.3.1",
+     "nmea-simple": "^3.3.0",
+     "numeric": "^1.2.6",
+     "opencv4nodejs": "^5.6.0",
+     "quaternion": "^2.0.1",
+     "rclnodejs": "^0.27.4",
+     "redis": "^4.7.0",
+     "simplify-js": "^1.2.4",
+     "utm": "^1.1.1",
+     "xmlhttprequest": "^1.8.0",
+     "yargs": "^17.7.2"
+    }
+   }
+   

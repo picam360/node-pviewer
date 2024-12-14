@@ -15,7 +15,9 @@ const pif_utils = require('./pif-utils');
 
 let m_options = {
 	"waypoint_threshold_m" : 10,
-	"data_filepath" : "auto-drive-waypoints"
+	"data_filepath" : "auto-drive-waypoints",
+	"backward" : false,
+	"reverse" : false,
 };
 let m_socket = null;
 let m_drive_mode = "STANBY";
@@ -30,7 +32,8 @@ const ODOMETRY_TYPE = {
 	VSLAM : 2,
 };
 //let m_odometry_type = ODOMETRY_TYPE.GPS;
-let m_odometry_type = ODOMETRY_TYPE.VSLAM;
+let m_odometry_type = ODOMETRY_TYPE.ENCODER;
+//let m_odometry_type = ODOMETRY_TYPE.VSLAM;
 let m_odometry_handler = null;
 
 function latLonToXY(lat1, lon1, lat2, lon2) {
@@ -85,7 +88,13 @@ function load_auto_drive_waypoints(dirpath, callback){
 				}
 			});
 			if(callback){
-				callback(drive_waypoints);
+				const waypoints = {};
+				const keys = Object.keys(drive_waypoints);
+				for(let i=0;i<keys.length;i++){
+					const index = (m_options.reverse ? keys.length - 1 - i : i);
+					waypoints[i] = drive_waypoints[keys[index]];
+				}
+				callback(waypoints);
 			}
 		});
 	}
@@ -128,7 +137,7 @@ function record_waypoints_handler(tmp_img){
 	}
 }
 
-function move_forward(distance) {
+function move_robot(distance) {
     console.log(`Moving forward ${distance.toFixed(2)} meters`);
 	if(distance > 0){
 		m_client.publish('pserver-vehicle-wheel', 'CMD move_forward');
@@ -202,16 +211,27 @@ function auto_drive_handler(tmp_img){
 
 	let cur = m_auto_drive_cur;
 	while(cur < keys.length){
-		const distanceToTarget = m_odometry_handler.calculateDistance(cur);
-		if (distanceToTarget > 1.0) {
+		let distanceToTarget = m_odometry_handler.calculateDistance(cur);
+		if (Math.abs(distanceToTarget) > 1.0) {
 		
-			const headingError = m_odometry_handler.calculateHeadingError(cur);
+			let headingError = m_odometry_handler.calculateHeadingError(cur);
+
+			if(m_options.backward){
+				distanceToTarget *= -1;
+				headingError = 180 - headingError;
+				if(headingError <= -180){
+					headingError += 360;
+				}else if(headingError > 180){
+					headingError -= 360;
+				}
+				headingError *= -1;
+			}
 
 			// Control logic: move forward/backward or rotate
 			if (Math.abs(headingError) > 20) { // 20 degrees threshold
 				rotate_robot(headingError);
 			} else {
-				move_forward(distanceToTarget);
+				move_robot(distanceToTarget);
 			}
 	
 			m_client.publish('pserver-auto-drive-info', JSON.stringify({
@@ -247,14 +267,28 @@ function main() {
             default: 6379,
             description: 'port',
         })
+        .option('backward', {
+            type: 'boolean',
+            description: 'move backward',
+        })
+        .option('reverse', {
+            type: 'boolean',
+            description: 'reverse',
+        })
         .help()
         .alias('help', 'h')
         .argv;
 	const host = argv.host;
 	const port = argv.port;
 
-	if(argv.dir){
+	if(argv.dir !== undefined){
 		m_options.data_filepath = argv.dir;
+	}
+	if(argv.backward !== undefined){
+		m_options.backward = argv.backward;
+	}
+	if(argv.reverse !== undefined){
+		m_options.reverse = argv.reverse;
 	}
 
     const redis = require('redis');

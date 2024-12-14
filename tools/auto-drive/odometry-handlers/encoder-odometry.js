@@ -20,7 +20,7 @@ function radiansToDegrees(radians) {
 
 class EncoderOdometry {
     static left_direction = 1;
-    static right_direction = -1;
+    static right_direction = 1;
     constructor() {
         this.waypoints = null;
         this.positions = null;
@@ -38,10 +38,17 @@ class EncoderOdometry {
 
         this.calib_enabled = true;
 
+        // this.settings = {
+        //     right_gain: 1.0,
+        //     meter_per_pulse: 0.0078445,
+        //     wheel_separation: 2.5,
+        //     imu_heading_error: 0.0,
+        // };
         this.settings = {
-            meter_per_pulse: 0.0078445,
-            wheel_separation: 2.5,
-            imu_heading_error: 0.0,
+            right_gain: 0.9299863819615063,
+            meter_per_pulse: 0.000045879703712042854,
+            wheel_separation: 0.28712089481288977,
+            imu_heading_error: -16.79000670316058,
         };
     }
 
@@ -50,6 +57,8 @@ class EncoderOdometry {
         try {
             let delta_left = left_counts - encoder_params.last_left_counts;
             let delta_right = right_counts - encoder_params.last_right_counts;
+
+            delta_right *= encoder_params.right_gain;
     
             let distance_left = delta_left * encoder_params.meter_per_pulse;
             let distance_right = delta_right * encoder_params.meter_per_pulse;
@@ -89,6 +98,7 @@ class EncoderOdometry {
         const base_encoder = JSON.parse(waypoints[keys[0]].encoder);
         const base_imu = JSON.parse(waypoints[keys[0]].imu);
         const encoder_params = {
+            right_gain : settings.right_gain,
             meter_per_pulse : settings.meter_per_pulse,
             wheel_separation : settings.wheel_separation,
             last_left_counts : base_encoder.left * EncoderOdometry.left_direction,
@@ -165,6 +175,13 @@ class EncoderOdometry {
             
             if(this.calib_enabled){
                 result = numeric.uncmin(
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["right_gain"]),
+                    [this.settings.right_gain]);
+                this.settings.right_gain = result.solution[0];
+                console.log(result.message, result.f, result.iterations);
+                console.log('right_gain:', result.solution[0]);
+
+                result = numeric.uncmin(
                     createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["meter_per_pulse"]),
                     [this.settings.meter_per_pulse]);
                 this.settings.meter_per_pulse = result.solution[0];
@@ -179,15 +196,17 @@ class EncoderOdometry {
                 console.log('wheel_separation:', result.solution[0]);
 
                 result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["meter_per_pulse", "wheel_separation", "imu_heading_error"]),
-                    [this.settings.meter_per_pulse, this.settings.wheel_separation, this.settings.imu_heading_error]);
-                this.settings.meter_per_pulse = result.solution[0];
-                this.settings.wheel_separation = result.solution[1];
-                this.settings.imu_heading_error = result.solution[2] % 360;
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["right_gain", "meter_per_pulse", "wheel_separation", "imu_heading_error"]),
+                    [this.settings.right_gain, this.settings.meter_per_pulse, this.settings.wheel_separation, this.settings.imu_heading_error]);
+                this.settings.right_gain = result.solution[0];
+                this.settings.meter_per_pulse = result.solution[1];
+                this.settings.wheel_separation = result.solution[2];
+                this.settings.imu_heading_error = result.solution[3] % 360;
                 console.log(result.message, result.f, result.iterations);
-                console.log('meter_per_pulse:', result.solution[0]);
-                console.log('wheel_separation:', result.solution[1]);
-                console.log('imu_heading_error:', result.solution[2]);
+                console.log('right_gain:', result.solution[0]);
+                console.log('meter_per_pulse:', result.solution[1]);
+                console.log('wheel_separation:', result.solution[2]);
+                console.log('imu_heading_error:', result.solution[3]);
             }
         }
         this.positions = EncoderOdometry.cal_xy(waypoints, this.settings);
@@ -205,6 +224,7 @@ class EncoderOdometry {
 
         if(this.encoder_params.last_left_counts === null){
             this.encoder_params = {
+                right_gain : this.settings.right_gain,
                 meter_per_pulse : this.settings.meter_per_pulse,
                 wheel_separation : this.settings.wheel_separation,
                 last_left_counts : this.current_encoder.left * EncoderOdometry.left_direction,
