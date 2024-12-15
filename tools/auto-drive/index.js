@@ -16,7 +16,6 @@ const pif_utils = require('./pif-utils');
 let m_options = {
 	"waypoint_threshold_m" : 10,
 	"data_filepath" : "auto-drive-waypoints",
-	"backward" : false,
 	"reverse" : false,
 };
 let m_socket = null;
@@ -29,14 +28,21 @@ let m_auto_drive_cur = 0;
 let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
 const ODOMETRY_TYPE = {
-	GPS : 0,
-	ENCODER : 1,
-	VSLAM : 2,
+	GPS : "GPS",
+	ENCODER : "ENCODER",
+	VSLAM : "VSLAM",
 };
-//let m_odometry_type = ODOMETRY_TYPE.GPS;
-let m_odometry_type = ODOMETRY_TYPE.ENCODER;
-//let m_odometry_type = ODOMETRY_TYPE.VSLAM;
-let m_odometry_handler = null;
+let m_odometry_conf = {
+	GPS : {
+		enabled : true
+	},
+	ENCODER : {
+		enabled : true
+	},
+	VSLAM : {
+		enabled : false
+	},
+};
 
 function latLonToXY(lat1, lon1, lat2, lon2) {
 	const R = 6378137; // Earth's radius in meters
@@ -199,25 +205,46 @@ function auto_drive_handler(tmp_img){
 	const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
 	const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
 
-	m_odometry_handler.push(header, meta, tmp_img[2]);
+	const conf_keys = Object.keys(m_odometry_conf)
+	for(const key of conf_keys){
+		const conf = m_odometry_conf[key];
+		if(conf.handler){
+			conf.handler.push(header, meta, tmp_img[2]);
+			const { x, y, heading} = conf.handler.getPosition();
+			conf.x = x;
+			conf.y = y;
+			conf.heading = heading;
+		}
+	}
 
 	const keys = Object.keys(m_auto_drive_waypoints);
 
 	let cur = m_auto_drive_cur;
 	while(cur < keys.length){
-		let distanceToTarget = m_odometry_handler.calculateDistance(cur);
-		let headingError = m_odometry_handler.calculateHeadingError(cur);
+		for(const key of conf_keys){
+			const conf = m_odometry_conf[key];
+			if(conf.handler){
+				let distanceToTarget = conf.handler.calculateDistance(cur);
+				let headingError = conf.handler.calculateHeadingError(cur);
 
-		if(m_options.backward){
-			distanceToTarget *= -1;
-			headingError = 180 - headingError;
-			if(headingError <= -180){
-				headingError += 360;
-			}else if(headingError > 180){
-				headingError -= 360;
+				if(Math.abs(headingError) > 90){//backward
+					distanceToTarget *= -1;
+					headingError = 180 - headingError;
+					if(headingError <= -180){
+						headingError += 360;
+					}else if(headingError > 180){
+						headingError -= 360;
+					}
+					headingError *= -1;
+				}
+				
+				conf.distanceToTarget = distanceToTarget;
+				conf.headingError = headingError;
 			}
-			headingError *= -1;
 		}
+
+		let distanceToTarget = m_odometry_conf[ODOMETRY_TYPE.ENCODER].distanceToTarget;
+		let headingError = m_odometry_conf[ODOMETRY_TYPE.ENCODER].headingError;
 
 		let tolerance_distance = 1.0;
 		let tolerance_heading = 20;
@@ -253,11 +280,23 @@ function auto_drive_handler(tmp_img){
 				move_robot(distanceToTarget);
 			}
 	
+			const handlers = {};
+			for(const key of conf_keys){
+				const conf = m_odometry_conf[key];
+				handlers[key] = {
+					"x" : conf.x,
+					"y" : conf.y,
+					"heading" : conf.heading,
+					"waypoint_distance" : conf.distanceToTarget,
+					"heading_error" : conf.headingError,
+				}
+			}
 			m_client.publish('pserver-auto-drive-info', JSON.stringify({
 				"mode" : "AUTO",
 				"state" : "DRIVING",
 				"waypoint_distance" : distanceToTarget,
 				"heading_error" : headingError,
+				handlers,
 			}));
 			break;
 		}
@@ -299,10 +338,6 @@ function main() {
             default: 6379,
             description: 'port',
         })
-        .option('backward', {
-            type: 'boolean',
-            description: 'move backward',
-        })
         .option('reverse', {
             type: 'boolean',
             description: 'reverse',
@@ -315,9 +350,6 @@ function main() {
 
 	if(argv.dir !== undefined){
 		m_options.data_filepath = argv.dir;
-	}
-	if(argv.backward !== undefined){
-		m_options.backward = argv.backward;
 	}
 	if(argv.reverse !== undefined){
 		m_options.reverse = argv.reverse;
@@ -429,26 +461,40 @@ function command_handler(cmd) {
 			if(m_drive_mode == "STANBY") {
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
-					switch(m_odometry_type){
-						case ODOMETRY_TYPE.GPS:
-							const gps_odometry = require('./odometry-handlers/gps-odometry');
-							m_odometry_handler = new gps_odometry.GpsOdometry();
-							break;
-						case ODOMETRY_TYPE.ENCODER:
-							const encoder_odometry = require('./odometry-handlers/encoder-odometry');
-							m_odometry_handler = new encoder_odometry.EncoderOdometry();
-							break;
-						case ODOMETRY_TYPE.VSLAM:
-							const vslam_odometry = require('./odometry-handlers/vslam-odometry');
-							m_odometry_handler = new vslam_odometry.VslamOdometry();
-							break;
+					const keys = Object.keys(m_odometry_conf);
+					function build_odometry_handler(cur){
+						const key = keys[cur];
+						const next_cb = () => {
+							if(cur == keys.length - 1){
+								m_drive_mode = "AUTO";
+								update_auto_drive_waypoints(waypoints);
+								update_auto_drive_cur(0);
+								console.log("drive mode", m_drive_mode);
+							}else{
+								build_odometry_handler(cur + 1);
+							}
+						};
+						if(!m_odometry_conf[key].enabled){
+							next_cb();
+							return;
+						}
+						switch(key){
+							case ODOMETRY_TYPE.GPS:
+								const gps_odometry = require('./odometry-handlers/gps-odometry');
+								m_odometry_conf[key].handler = new gps_odometry.GpsOdometry();
+								break;
+							case ODOMETRY_TYPE.ENCODER:
+								const encoder_odometry = require('./odometry-handlers/encoder-odometry');
+								m_odometry_conf[key].handler = new encoder_odometry.EncoderOdometry();
+								break;
+							case ODOMETRY_TYPE.VSLAM:
+								const vslam_odometry = require('./odometry-handlers/vslam-odometry');
+								m_odometry_conf[key].handler = new vslam_odometry.VslamOdometry();
+								break;
+						}
+						m_odometry_conf[key].handler.init(waypoints, next_cb);
 					}
-					m_odometry_handler.init(waypoints, () => {
-						m_drive_mode = "AUTO";
-						update_auto_drive_waypoints(waypoints);
-						update_auto_drive_cur(0);
-						console.log("drive mode", m_drive_mode);
-					})
+					build_odometry_handler(0);
 				});
 			}else{
 				console.log("drive mode", m_drive_mode);

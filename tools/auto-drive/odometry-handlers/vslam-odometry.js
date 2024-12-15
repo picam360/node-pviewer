@@ -133,6 +133,22 @@ class VslamOdometry {
         this.push_cur++;
     }
 
+    getPosition(){
+        if(this.current_odom){
+            return {
+                x : this.current_odom.pose.position.x,
+                y : this.current_odom.pose.position.y,
+                heading : 90 - radiansToDegrees(quaternionToYaw(this.current_odom.pose.orientation)),
+            };
+        }else{
+            return {
+                x : 0,
+                y : 0,
+                heading : 0,
+            };
+        }
+    }
+
     calculateDistance(cur){
         const key = this.waypoints_keys[cur];
         if(this.positions[key] === undefined){

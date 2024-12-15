@@ -36,7 +36,7 @@ class EncoderOdometry {
             heading : null,
         };
 
-        this.calib_enabled = true;
+        this.calib_enabled = false;
 
         // this.settings = {
         //     right_gain: 1.0,
@@ -48,7 +48,7 @@ class EncoderOdometry {
             right_gain: 0.9299863819615063,
             meter_per_pulse: 0.000045879703712042854,
             wheel_separation: 0.28712089481288977,
-            imu_heading_error: -16.79000670316058,
+            imu_heading_error: 0,
         };
     }
 
@@ -80,10 +80,13 @@ class EncoderOdometry {
                 dx = radius * (Math.sin(theta + dtheta) - Math.sin(theta));
                 dy = radius * (Math.cos(theta) - Math.cos(theta + dtheta));
             }
+
+            //console.log("update encoder_params", distance_left, distance_right, encoder_params.x, dx, encoder_params.y, dy, encoder_params.heading, -dtheta * 180 / Math.PI);
     
             encoder_params.x += dx;
             encoder_params.y += dy;
             encoder_params.heading += -dtheta * 180 / Math.PI;
+            encoder_params.heading = encoder_params.heading % 360;
     
             encoder_params.last_left_counts = left_counts;
             encoder_params.last_right_counts = right_counts;
@@ -140,11 +143,17 @@ class EncoderOdometry {
             function createErrorFunction(waypoints, gps_positions, settings, types) {
                 return (solving_params) => {
                     let gain = 1.0;
-                    if (settings.meter_per_pulse < 0 || settings.meter_per_pulse > 100) {
-                        gain = Math.abs(settings.meter_per_pulse + 1);
+                    if (settings.meter_per_pulse < 0){
+                        gain = Math.abs(settings.meter_per_pulse + 1) * 100;
                     }
-                    if (settings.wheel_separation < 0 || settings.wheel_separation > 100) {
-                        gain = Math.abs(settings.wheel_separation + 1);
+                    if (settings.meter_per_pulse > 100) {
+                        gain = Math.abs(settings.meter_per_pulse);
+                    }
+                    if (settings.wheel_separation < 0){
+                        gain = Math.abs(settings.wheel_separation + 1) * 100;
+                    }
+                    if (settings.wheel_separation > 100) {
+                        gain = Math.abs(settings.wheel_separation);
                     }
                     for(const i in types){
                         settings[types[i]] = solving_params[i];
@@ -234,6 +243,7 @@ class EncoderOdometry {
         this.current_encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
 
         if(this.encoder_params.last_left_counts === null){
+            const base_imu = JSON.parse(this.waypoints[this.waypoints_keys[0]].imu);
             this.encoder_params = {
                 right_gain : this.settings.right_gain,
                 meter_per_pulse : this.settings.meter_per_pulse,
@@ -242,13 +252,22 @@ class EncoderOdometry {
                 last_right_counts : this.current_encoder.right * EncoderOdometry.right_direction,
                 x : 0,
                 y : 0,
-                heading : this.current_imu.heading + this.settings.imu_heading_error,
+                //heading : this.current_imu.heading + this.settings.imu_heading_error,
+                heading : base_imu.heading + this.settings.imu_heading_error,
             };
         }
         EncoderOdometry.inclement_xy(
             this.encoder_params,
             this.current_encoder.left * EncoderOdometry.left_direction,
             this.current_encoder.right * EncoderOdometry.right_direction);
+    }
+
+    getPosition(){
+        return {
+            x : this.encoder_params.x,
+            y : this.encoder_params.y,
+            heading : this.encoder_params.heading,
+        };
     }
 
     calculateDistance(cur){

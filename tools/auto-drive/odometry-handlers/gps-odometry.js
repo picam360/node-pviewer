@@ -82,6 +82,21 @@ class GpsOdometry {
         this.current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
     }
 
+    getPosition(){
+        const key = this.waypoints_keys[0];
+        const base_waypoint = this.waypoints[key];
+		const base_nmea = nmea.parseNmeaSentence(base_waypoint['nmea']);
+        const base_pos = 
+            utm.fromLatLon(base_nmea.latitude, base_nmea.longitude);
+        const current_post = 
+            utm.fromLatLon(this.current_nmea.latitude, this.current_nmea.longitude);
+        return {
+            x : current_post.easting - base_pos.easting,
+            y : current_post.northing - base_pos.northing,
+            heading : this.current_imu.heading,
+        };
+    }
+
     calculateDistance(cur){
         const key = this.waypoints_keys[cur];
         const target_waypoint = this.waypoints[key];
