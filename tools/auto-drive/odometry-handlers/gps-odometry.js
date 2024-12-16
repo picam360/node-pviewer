@@ -46,6 +46,14 @@ function radiansToDegrees(radians) {
     return radians * (180 / Math.PI);
 }
 
+function toWebMercator(lat, lon) {
+    const R = 6378137; // 地球の赤道半径 (メートル)
+    const x = R * lon * Math.PI / 180;
+    const y = R * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI / 180) / 2));
+    return { easting : x, northing : y }
+    //return [x, y];
+}
+
 class GpsOdometry {
     constructor() {
         this.waypoints = null;
@@ -67,7 +75,8 @@ class GpsOdometry {
         for(const key of keys){
             const current_nmea = nmea.parseNmeaSentence(waypoints[key].nmea);
             const { easting, northing } = 
-                utm.fromLatLon(current_nmea.latitude, current_nmea.longitude);
+                toWebMercator(current_nmea.latitude, current_nmea.longitude);
+                //utm.fromLatLon(current_nmea.latitude, current_nmea.longitude);
             positions[key] = {
                 x : easting,
                 y : northing,
@@ -87,9 +96,11 @@ class GpsOdometry {
         const base_waypoint = this.waypoints[key];
 		const base_nmea = nmea.parseNmeaSentence(base_waypoint['nmea']);
         const base_pos = 
-            utm.fromLatLon(base_nmea.latitude, base_nmea.longitude);
+            toWebMercator(base_nmea.latitude, base_nmea.longitude);
+            //utm.fromLatLon(base_nmea.latitude, base_nmea.longitude);
         const current_post = 
-            utm.fromLatLon(this.current_nmea.latitude, this.current_nmea.longitude);
+            toWebMercator(this.current_nmea.latitude, this.current_nmea.longitude);
+            //utm.fromLatLon(this.current_nmea.latitude, this.current_nmea.longitude);
         return {
             x : current_post.easting - base_pos.easting,
             y : current_post.northing - base_pos.northing,
