@@ -150,7 +150,13 @@ class VslamOdometry {
     }
 
     calculateDistance(cur){
-        const key = this.waypoints_keys[cur];
+        let key;
+        for(;cur<this.waypoints_keys.length;cur++){
+            key = this.waypoints_keys[cur];
+            if(this.positions[key] !== undefined){
+                break;
+            }
+        }
         if(this.positions[key] === undefined){
             return 0;
         }
@@ -160,7 +166,13 @@ class VslamOdometry {
         return Math.sqrt(dx * dx + dy * dy);
     }
     calculateBearing(cur){
-        const key = this.waypoints_keys[cur];
+        let key;
+        for(;cur<this.waypoints_keys.length;cur++){
+            key = this.waypoints_keys[cur];
+            if(this.positions[key] !== undefined){
+                break;
+            }
+        }
         if(this.positions[key] === undefined){
             return 0;
         }
@@ -172,6 +184,16 @@ class VslamOdometry {
         return (radiansToDegrees(bearing) + 360) % 360; // Bearing in degrees
     }
     calculateHeadingError(cur){
+        let key;
+        for(;cur<this.waypoints_keys.length;cur++){
+            key = this.waypoints_keys[cur];
+            if(this.positions[key] !== undefined){
+                break;
+            }
+        }
+        if(this.positions[key] === undefined){
+            return 0;
+        }
         const heading = 90 - radiansToDegrees(quaternionToYaw(this.current_odom.pose.orientation));
         const targetHeading = this.calculateBearing(cur);
 		let headingError = targetHeading - heading;
