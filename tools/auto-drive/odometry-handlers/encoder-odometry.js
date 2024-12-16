@@ -20,7 +20,7 @@ function radiansToDegrees(radians) {
 
 class EncoderOdometry {
     static left_direction = 1;
-    static right_direction = 1;
+    static right_direction = -1;
     constructor() {
         this.waypoints = null;
         this.positions = null;
@@ -38,18 +38,18 @@ class EncoderOdometry {
 
         this.calib_enabled = false;
 
-        // this.settings = {
-        //     right_gain: 1.0,
-        //     meter_per_pulse: 0.0078445,
-        //     wheel_separation: 2.5,
-        //     imu_heading_error: 0.0,
-        // };
         this.settings = {
-            right_gain: 1.0148108360301102,
-            meter_per_pulse: 0.000051365457364540345,
-            wheel_separation: 0.3254187353986605,
-            imu_heading_error: 0,
+            right_gain: 1.0,
+            meter_per_pulse: 0.00902127575039515,
+            wheel_separation: 3.093597564134178,
+            imu_heading_error: 0.0,
         };
+        // this.settings = {
+        //     right_gain: 1.0148108360301102,
+        //     meter_per_pulse: 0.000051365457364540345,
+        //     wheel_separation: 0.3254187353986605,
+        //     imu_heading_error: 0,
+        // };
     }
 
     static inclement_xy(encoder_params, left_counts, right_counts) {
@@ -203,7 +203,7 @@ class EncoderOdometry {
                 result = numeric.uncmin(
                     createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["right_gain"]),
                     [this.settings.right_gain]);
-                this.settings.right_gain = result.solution[0];
+                //this.settings.right_gain = result.solution[0];
                 console.log(result.message, result.f, result.iterations);
                 console.log('right_gain:', result.solution[0]);
 
