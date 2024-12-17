@@ -19,8 +19,8 @@ function radiansToDegrees(radians) {
 }
 
 class EncoderOdometry {
-    static left_direction = 1;
-    static right_direction = -1;
+    static left_direction = -1;
+    static right_direction = 1;
     constructor() {
         this.waypoints = null;
         this.positions = null;
@@ -69,6 +69,8 @@ class EncoderOdometry {
             if (distance === 0 && dtheta === 0) {
                 return;
             }
+
+            dtheta *= -1;//for jikki
     
             let dx, dy;
             const theta = -encoder_params.heading * Math.PI / 180 + Math.PI / 2;

@@ -143,6 +143,12 @@ function record_waypoints_handler(tmp_img){
 	if(m_options.debug){
 		console.log(`${pif_filepath} recorded.`);
 	}
+
+	m_client.publish('pserver-auto-drive-info', JSON.stringify({
+		"mode" : "RECORD",
+		"state" : "RECORDING",
+		"pif_filepath" : pif_filepath,
+	}));
 }
 
 function move_robot(distance) {
@@ -237,7 +243,7 @@ function auto_drive_handler(tmp_img){
 					}
 					headingError *= -1;
 				}
-				
+
 				conf.distanceToTarget = distanceToTarget;
 				conf.headingError = headingError;
 			}
@@ -253,12 +259,12 @@ function auto_drive_handler(tmp_img){
 			switch(m_auto_drive_last_state){
 			case 0:
 				tolerance_heading = 1.0;
-				if(Math.abs(headingError) < 1.0){
+				if(Math.abs(headingError) < 5.0){
 					m_auto_drive_last_state = 1;
 				}
 				break;
 			case 1:
-				if(Math.abs(distanceToTarget) < 0.1){
+				if(Math.abs(distanceToTarget) < 0.3){
 					m_auto_drive_last_state = 2;
 					m_auto_drive_last_lastdistance = distanceToTarget;
 				}
