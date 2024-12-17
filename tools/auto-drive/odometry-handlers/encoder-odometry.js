@@ -190,18 +190,19 @@ class EncoderOdometry {
                     gps_positions[key].y -= gps_base_y;
                 }
             }
-            //types
-            //    meter_per_pulse
-            //    wheel_separation
-            //    imu_heading_error
-            let result = numeric.uncmin(
-                createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["imu_heading_error"]),
-                [this.settings.imu_heading_error]);
-            this.settings.imu_heading_error = result.solution[0] % 360;
-            console.log(result.message, result.f, result.iterations);
-            console.log('imu_heading_error:', result.solution[0]);
             
             if(this.calib_enabled){
+                //types
+                //    meter_per_pulse
+                //    wheel_separation
+                //    imu_heading_error
+                let result = numeric.uncmin(
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["imu_heading_error"]),
+                    [this.settings.imu_heading_error]);
+                this.settings.imu_heading_error = result.solution[0] % 360;
+                console.log(result.message, result.f, result.iterations);
+                console.log('imu_heading_error:', result.solution[0]);
+                
                 result = numeric.uncmin(
                     createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["right_gain"]),
                     [this.settings.right_gain]);

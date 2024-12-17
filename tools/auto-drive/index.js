@@ -25,6 +25,7 @@ let m_averaging_count = 0;
 let m_last_nmea = null;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
+let m_auto_drive_heading_tuning = false;
 let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
 const ODOMETRY_TYPE = {
@@ -160,6 +161,19 @@ function move_robot(distance) {
 	}
 }
 
+function move_pwm_robot(distance, angle) {
+	const max = 5;
+	if(distance > 0){
+		const left_pwd = 50 - Math.floor(Math.min(max, angle < 0 ? max * angle / 10 : 0));
+		const right_pwd = 50 -Math.floor(Math.min(max, angle > 0 ? max * angle / 10 : 0));
+		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd} ${right_pwd}`);
+	}else{
+		const left_pwd = 45 - Math.floor(Math.min(max, angle > 0 ? max * angle / 10 : 0));
+		const right_pwd = 45 - Math.floor(Math.min(max, angle < 0 ? max * angle / 10 : 0));
+		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd} ${right_pwd}`);
+	}
+}
+
 function rotate_robot(angle) {
     console.log(`Rotating ${angle.toFixed(2)} degrees`);
 
@@ -258,37 +272,40 @@ function auto_drive_handler(tmp_img){
 		let headingError = m_odometry_conf[ODOMETRY_TYPE.ENCODER].headingError;
 
 		let tolerance_distance = 1.0;
-		let tolerance_heading = 20;
+		let tolerance_heading = (m_auto_drive_heading_tuning ? 20 : 30);
 		if(cur == keys.length - 1){
-			tolerance_distance = 0.01;
-			switch(m_auto_drive_last_state){
-			case 0:
-				tolerance_heading = 1.0;
-				if(Math.abs(headingError) < 5.0){
-					m_auto_drive_last_state = 1;
-				}
-				break;
-			case 1:
-				if(Math.abs(distanceToTarget) < 0.3){
-					m_auto_drive_last_state = 2;
-					m_auto_drive_last_lastdistance = distanceToTarget;
-				}
-				break;
-			case 2:
-				if(Math.abs(distanceToTarget) > Math.abs(m_auto_drive_last_lastdistance)){//forcibly done
-					tolerance_distance = Math.abs(distanceToTarget) + 1.0;
-				}
-				m_auto_drive_last_lastdistance = distanceToTarget;
-				break;
-			}
+			tolerance_distance = 0.5;
+			// switch(m_auto_drive_last_state){
+			// case 0:
+			// 	tolerance_heading = 1.0;
+			// 	if(Math.abs(headingError) < 10.0){
+			// 		m_auto_drive_last_state++;
+			// 	}
+			// 	break;
+			// case 1:
+			// 	if(Math.abs(distanceToTarget) < 0.3){
+			// 		m_auto_drive_last_state++;
+			// 		m_auto_drive_last_lastdistance = distanceToTarget;
+			// 	}
+			// 	break;
+			// case 2:
+			// 	if(Math.abs(distanceToTarget) > Math.abs(m_auto_drive_last_lastdistance)){//forcibly done
+			// 		tolerance_distance = Math.abs(distanceToTarget) + 1.0;
+			// 	}
+			// 	m_auto_drive_last_lastdistance = distanceToTarget;
+			// 	break;
+			// }
 		}
 		if (Math.abs(distanceToTarget) > tolerance_distance) {
 
 			// Control logic: move forward/backward or rotate
-			if (Math.abs(headingError) > tolerance_heading) { // 20 degrees threshold
+			if (Math.abs(headingError) > tolerance_heading) {
 				rotate_robot(headingError);
+				m_auto_drive_heading_tuning = true;
 			} else {
-				move_robot(distanceToTarget);
+				move_pwm_robot(distanceToTarget, headingError);
+				//move_robot(distanceToTarget);
+				m_auto_drive_heading_tuning = false;
 			}
 	
 			const handlers = {};
@@ -494,7 +511,7 @@ function command_handler(cmd) {
 			stop_robot();
 			if(m_drive_mode == "STANBY") {
 				m_options.reverse = (split[1] == "REVERSE");
-				
+
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
 					const keys = Object.keys(m_odometry_conf);
