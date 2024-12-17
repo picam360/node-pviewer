@@ -191,6 +191,11 @@ function update_auto_drive_waypoints(waypoints) {
 	m_client.set('pserver-auto-drive-waypoints', JSON.stringify(waypoints)).then((data) => {
 		console.log('set auto drive waypoints', data);
 	});
+
+	m_client.publish('pserver-auto-drive-info', JSON.stringify({
+		"mode" : "INFO",
+		"state" : "WAYPOINT_UPDATED",
+	}));
 }
 
 function auto_drive_handler(tmp_img){
@@ -441,6 +446,22 @@ function command_handler(cmd) {
 			if(m_drive_mode == "STANBY") {
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				let succeeded = false;
+				if (fs.existsSync(pif_dirpath)) {
+					const now = new Date();
+					const formattedDate = now.getFullYear() +
+						String(now.getMonth() + 1).padStart(2, '0') +
+						String(now.getDate()).padStart(2, '0') + "_" +
+						String(now.getHours()).padStart(2, '0') +
+						String(now.getMinutes()).padStart(2, '0') + "_" +
+						String(now.getSeconds()).padStart(2, '0');
+					try {
+						// フォルダを同期的にリネームして移動
+						fs.renameSync(pif_dirpath, `${pif_dirpath}.${formattedDate}`);
+						console.log(`folder moved to${pif_dirpath}.${formattedDate}`);
+					} catch (err) {
+						console.error('folder move faild:', err);
+					}
+				}
 				if (!fs.existsSync(pif_dirpath)) {
 					try {
 						fs.mkdirSync(pif_dirpath, { recursive: true });
