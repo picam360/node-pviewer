@@ -164,12 +164,12 @@ function move_robot(distance) {
 function move_pwm_robot(distance, angle) {
 	const max = 5;
 	if(distance > 0){
-		const left_pwd = 50 - Math.floor(Math.min(max, angle < 0 ? max * angle / 10 : 0));
-		const right_pwd = 50 - Math.floor(Math.min(max, angle > 0 ? max * angle / 10 : 0));
+		const left_pwd = 50 - Math.floor(Math.min(max, angle < 0 ? max * Math.abs(angle) / 10 : 0));
+		const right_pwd = 50 - Math.floor(Math.min(max, angle > 0 ? max * Math.abs(angle) / 10 : 0));
 		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd} ${right_pwd}`);
 	}else{
-		const left_pwd = 45 - Math.floor(Math.min(max, angle < 0 ? max * angle / 10 : 0));
-		const right_pwd = 45 - Math.floor(Math.min(max, angle > 0 ? max * angle / 10 : 0));
+		const left_pwd = 45 - Math.floor(Math.min(max, angle > 0 ? max * Math.abs(angle) / 10 : 0));
+		const right_pwd = 45 - Math.floor(Math.min(max, angle < 0 ? max * Math.abs(angle) / 10 : 0));
 		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd} ${right_pwd}`);
 	}
 }
