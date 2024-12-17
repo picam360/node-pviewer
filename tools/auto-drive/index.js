@@ -478,14 +478,23 @@ function command_handler(cmd) {
 			}
 			console.log("drive mode", m_drive_mode);
 			break;
-		case "STOP_RECORD":
+		case "STOP_RECORD":{
 			m_drive_mode = "STANBY";
 			execSync('sync');
+			const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
+			load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
+				update_auto_drive_waypoints(waypoints);
+				update_auto_drive_cur(0);
+			});
 			console.log("drive mode", m_drive_mode);
+
 			break;
+		}
 		case "START_AUTO":
 			stop_robot();
 			if(m_drive_mode == "STANBY") {
+				m_options.reverse = (split[1] == "REVERSE");
+				
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
 					const keys = Object.keys(m_odometry_conf);
