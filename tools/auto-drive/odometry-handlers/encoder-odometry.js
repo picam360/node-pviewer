@@ -21,6 +21,18 @@ function radiansToDegrees(radians) {
 class EncoderOdometry {
     static left_direction = -1;
     static right_direction = 1;
+    static settings = {
+        right_gain: 1.0,
+        meter_per_pulse: 0.00902127575039515,
+        wheel_separation: 3.093597564134178,
+        imu_heading_error: 0.0,
+    };
+    //static settings = {
+    //     right_gain: 1.0148108360301102,
+    //     meter_per_pulse: 0.000051365457364540345,
+    //     wheel_separation: 0.3254187353986605,
+    //     imu_heading_error: 0,
+    // };
     constructor() {
         this.waypoints = null;
         this.positions = null;
@@ -37,19 +49,6 @@ class EncoderOdometry {
         };
 
         this.calib_enabled = false;
-
-        this.settings = {
-            right_gain: 1.0,
-            meter_per_pulse: 0.00902127575039515,
-            wheel_separation: 3.093597564134178,
-            imu_heading_error: 0.0,
-        };
-        // this.settings = {
-        //     right_gain: 1.0148108360301102,
-        //     meter_per_pulse: 0.000051365457364540345,
-        //     wheel_separation: 0.3254187353986605,
-        //     imu_heading_error: 0,
-        // };
     }
 
     static inclement_xy(encoder_params, left_counts, right_counts) {
@@ -197,46 +196,46 @@ class EncoderOdometry {
                 //    wheel_separation
                 //    imu_heading_error
                 let result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["imu_heading_error"]),
-                    [this.settings.imu_heading_error]);
-                this.settings.imu_heading_error = result.solution[0] % 360;
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["imu_heading_error"]),
+                    [EncoderOdometry.settings.imu_heading_error]);
+                EncoderOdometry.settings.imu_heading_error = result.solution[0] % 360;
                 console.log(result.message, result.f, result.iterations);
                 console.log('imu_heading_error:', result.solution[0]);
                 
                 result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["right_gain"]),
-                    [this.settings.right_gain]);
-                //this.settings.right_gain = result.solution[0];
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["right_gain"]),
+                    [EncoderOdometry.settings.right_gain]);
+                //EncoderOdometry.settings.right_gain = result.solution[0];
                 console.log(result.message, result.f, result.iterations);
                 console.log('right_gain:', result.solution[0]);
 
                 result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["meter_per_pulse"]),
-                    [this.settings.meter_per_pulse]);
-                this.settings.meter_per_pulse = result.solution[0];
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["meter_per_pulse"]),
+                    [EncoderOdometry.settings.meter_per_pulse]);
+                EncoderOdometry.settings.meter_per_pulse = result.solution[0];
                 console.log(result.message, result.f, result.iterations);
                 console.log('meter_per_pulse:', result.solution[0]);
 
                 result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["wheel_separation"]),
-                    [this.settings.wheel_separation]);
-                this.settings.wheel_separation = result.solution[0];
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["wheel_separation"]),
+                    [EncoderOdometry.settings.wheel_separation]);
+                EncoderOdometry.settings.wheel_separation = result.solution[0];
                 console.log(result.message, result.f, result.iterations);
                 console.log('wheel_separation:', result.solution[0]);
 
                 result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, this.settings), ["meter_per_pulse", "wheel_separation", "imu_heading_error"]),
-                    [this.settings.meter_per_pulse, this.settings.wheel_separation, this.settings.imu_heading_error]);
-                this.settings.meter_per_pulse = result.solution[0];
-                this.settings.wheel_separation = result.solution[1];
-                this.settings.imu_heading_error = result.solution[2] % 360;
+                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["meter_per_pulse", "wheel_separation", "imu_heading_error"]),
+                    [EncoderOdometry.settings.meter_per_pulse, EncoderOdometry.settings.wheel_separation, EncoderOdometry.settings.imu_heading_error]);
+                EncoderOdometry.settings.meter_per_pulse = result.solution[0];
+                EncoderOdometry.settings.wheel_separation = result.solution[1];
+                EncoderOdometry.settings.imu_heading_error = result.solution[2] % 360;
                 console.log(result.message, result.f, result.iterations);
                 console.log('meter_per_pulse:', result.solution[0]);
                 console.log('wheel_separation:', result.solution[1]);
                 console.log('imu_heading_error:', result.solution[2]);
             }
         }
-        this.positions = EncoderOdometry.cal_xy(waypoints, this.settings);
+        this.positions = EncoderOdometry.cal_xy(waypoints, EncoderOdometry.settings);
 
         if(callback){
             callback();
@@ -252,15 +251,15 @@ class EncoderOdometry {
         if(this.encoder_params.last_left_counts === null){
             const base_imu = JSON.parse(this.waypoints[this.waypoints_keys[0]].imu);
             this.encoder_params = {
-                right_gain : this.settings.right_gain,
-                meter_per_pulse : this.settings.meter_per_pulse,
-                wheel_separation : this.settings.wheel_separation,
+                right_gain : EncoderOdometry.settings.right_gain,
+                meter_per_pulse : EncoderOdometry.settings.meter_per_pulse,
+                wheel_separation : EncoderOdometry.settings.wheel_separation,
                 last_left_counts : this.current_encoder.left * EncoderOdometry.left_direction,
                 last_right_counts : this.current_encoder.right * EncoderOdometry.right_direction,
                 x : 0,
                 y : 0,
-                //heading : this.current_imu.heading + this.settings.imu_heading_error,
-                heading : base_imu.heading + this.settings.imu_heading_error,
+                //heading : this.current_imu.heading + EncoderOdometry.settings.imu_heading_error,
+                heading : base_imu.heading + EncoderOdometry.settings.imu_heading_error,
             };
         }
         EncoderOdometry.inclement_xy(

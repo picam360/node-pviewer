@@ -11,7 +11,7 @@ const path = require("path");
 const { execSync } = require('child_process');
 const { spawn } = require('child_process');
 
-const encoder_odometry = require('./encoder-odometry');
+const PifRosMessagePublisher = require('../pif-ros-message-publisher-humble');
 
 // Convert degrees to radians
 function degreesToRadians(degrees) {
@@ -30,47 +30,23 @@ function quaternionToYaw(orientation) {
 }
 
 function launchDockerContainer() {
-    return;
-
-    const vslam_path = '/home/picam360/github/picam360-vslam';
-	const vslam_process = spawn('python', [`${vslam_path}/vslam.py`], { cwd: path.resolve(vslam_path) });
+	const vslam_process = spawn('bash', ['launch_vslam.sh'], { cwd: path.resolve(__dirname, '../ros_packages') });
 	vslam_process.stdout.on('data', (data) => {
-	  console.log(`PICAM360_VSLAM STDOUT: ${data}`);
+	  console.log(`ISAAC_ROS_VSLAM STDOUT: ${data}`);
 	});
 	
 	vslam_process.stderr.on('data', (data) => {
-	  console.error(`PICAM360_VSLAM STDERR: ${data}`);
+	  console.error(`ISAAC_ROS_VSLAM STDERR: ${data}`);
 	});
 	
 	vslam_process.on('close', (code) => {
-	  console.log(`PICAM360_VSLAM STDOUT CLOSED(: ${code})`);
+	  console.log(`ISAAC_ROS_VSLAM STDOUT CLOSED(: ${code})`);
 	});
 }
 function killDockerContainer() {
-    return;
-
-    const processName = "picam360-vslam"; // プロセス名を指定
-
     try {
-        // プロセスIDを取得
-        const output = execSync(`pgrep ${processName}`, { encoding: "utf-8" }); // 出力を文字列で取得
-        const pids = output.split("\n").filter(pid => pid); // 改行で分割し、空行を削除
-    
-        if (pids.length === 0) {
-            console.log(`No process found with name: ${processName}`);
-        } else {
-            // 各PIDを終了
-            pids.forEach(pid => {
-                try {
-                    execSync(`kill ${pid}`);
-                    console.log(`Process ${pid} (${processName}) killed successfully.`);
-                } catch (killError) {
-                    console.error(`Error killing process ${pid}: ${killError.message}`);
-                }
-            });
-        }
-    } catch (error) {
-        console.error(`Error finding process: ${error.message}`);
+        execSync('docker kill vslam-container');
+    } catch (err) {
     }
 }
 
@@ -84,7 +60,7 @@ class VslamOdometry {
         this.current_odom = null;
         this.publisher = null;
         this.push_cur = 0;
-        this.m_client = null;
+        this.m_ros_timestamp_base_ms = Date.now();
     }
 
     init(waypoints, callback){
@@ -96,75 +72,39 @@ class VslamOdometry {
         killDockerContainer();
 		launchDockerContainer();
 
-        const host = "localhost";
-        const port = 6379;
-        const redis = require('redis');
-        const client = redis.createClient({
-            url: `redis://${host}:${port}`
-        });
-        client.on('error', (err) => {
-            console.error('redis error:', err);
-            this.m_client = null;
-        });
-        client.connect().then(() => {
-            console.log('redis connected:');
-            this.m_client = client;
-        });
-        const subscriber = client.duplicate();
-        subscriber.connect().then(() => {
-            console.log('redis connected:');
-    
+        setTimeout(() => {
             this.positions = {};
-            subscriber.subscribe('picam360-vslam-odom', (data, key) => {
-                console.log(data);
-                // this.current_odom = odom;
-                // if(!this.initialized){
-                //     const push_cur = Math.round((odom.header.stamp.sec * 1e3 + odom.header.stamp.nanosec / 1e6) / (1e3 / 30));
-                //     if(push_cur < keys.length){
-                //         const cur = keys.length - 1 - push_cur;//reverse
-                //         this.positions[keys[cur]] = odom;
-                //     }else{
-                //         this.initialized = true;
-                //         clearInterval(push_timer);
-                //         if(callback){
-                //             callback();
-                //         }
-                //     }
-                // }
-            });
-            const enc_positions = encoder_odometry.EncoderOdometry.cal_xy(waypoints, encoder_odometry.EncoderOdometry.settings);
 
-            let ref_cur = keys.length - 1;
-
-            for(let cur=keys.length - 1;cur>=0;cur--){
-                const pos = enc_positions[cur];
-                let is_keyframe = false;
-                if(cur == 0 || cur == keys.length - 1){
-                    is_keyframe = true;
-                }else{
-                    const threashold = 1;
-                    const ref_pos = enc_positions[ref_cur];
-                    const dx = pos.x - ref_pos.x;
-                    const dy = pos.y - ref_pos.y;
-                    const d = Math.sqrt(dx*dx + dy*dy);
-                    if(d > threashold){
-                        is_keyframe = true;
+            this.publisher = new PifRosMessagePublisher();
+            this.publisher.subscribeOdometry((odom) => {
+                this.current_odom = odom;
+                if(!this.initialized){
+                    const push_cur = Math.round((odom.header.stamp.sec * 1e3 + odom.header.stamp.nanosec / 1e6) / (1e3 / 30));
+                    if(push_cur < keys.length){
+                        const cur = keys.length - 1 - push_cur;//reverse
+                        this.positions[keys[cur]] = odom;
+                    }else{
+                        this.initialized = true;
+                        clearInterval(push_timer);
+                        if(callback){
+                            callback();
+                        }
                     }
                 }
+            });
 
-                if(!is_keyframe){
-                    continue;
-                }
+            let heading = 0;
+            this.publisher.initialize({ heading });
 
-                const waypoint = waypoints[keys[cur]];
+            const push_timer = setInterval(() => {
+                const cur = keys.length - 1 - this.push_cur;//reverse
+                const waypoint = waypoints[keys[Math.max(cur, 0)]];
                 const jpeg_filepath = waypoint.jpeg_filepath;
                 console.log(jpeg_filepath);
                 const jpeg_data = fs.readFileSync(jpeg_filepath);
                 this.push(null, waypoint.meta, jpeg_data);
-
-                ref_cur = cur;
-            }
-        });
+            }, 200);//5fps
+        }, 10000);
     }
 
     static cal_xy(waypoints){
@@ -177,11 +117,18 @@ class VslamOdometry {
         this.current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
         this.current_jpeg_data = jpeg_data;
 
-        m_client.publish('picam360-vslam', JSON.stringify({
-            "cmd" : "track",
-            "timestamp" : `${this.push_cur}`,
-            "jpeg_data" : jpeg_data.toString("base64"),
-        }));
+        const rosTimestamp = (() => {
+            const { seconds, nanoseconds } = { seconds : Math.floor(0 / 1e3), nanoseconds : 0 };
+            const additionalNanoseconds = Math.floor(this.push_cur * (1 / 30) * 1e9);
+            const totalNanoseconds = nanoseconds + additionalNanoseconds;
+            return {
+                sec: seconds + Math.floor(totalNanoseconds / 1e9),
+                nanosec: totalNanoseconds % 1e9,
+            };
+        })();
+
+        this.publisher.publishImu(this.current_imu, rosTimestamp);
+        this.publisher.publishVslam(this.current_jpeg_data, rosTimestamp);
 
         this.push_cur++;
     }

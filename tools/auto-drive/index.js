@@ -41,7 +41,7 @@ let m_odometry_conf = {
 		enabled : true
 	},
 	VSLAM : {
-		enabled : false
+		enabled : true
 	},
 };
 
