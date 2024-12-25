@@ -46,15 +46,18 @@ async function auto_drive_handler(tmp_img) {
 		throw new Error('Invalid left ROI dimensions.');
 	}
 	const leftImage = image.getRegion(leftROI).copy();
+	const leftImage_filepath = `${m_options.data_filepath}/frames_left/frame_${String(m_vslam_frame_count + 1).padStart(6, '0')}.png`;
+	cv.imwrite(leftImage_filepath, leftImage);
+	console.log(leftImage_filepath);
 
 	const rightROI = new cv.Rect(halfWidth, 0, halfWidth, height);
 	if (rightROI.width <= 0 || rightROI.height <= 0) {
 		throw new Error('Invalid right ROI dimensions.');
 	}
 	const rightImage = image.getRegion(rightROI).copy();
-
-	cv.imwrite(`./frames_left/frame_${String(m_vslam_frame_count + 1).padStart(6, '0')}.png`, leftImage);
-	cv.imwrite(`./frames_right/frame_${String(m_vslam_frame_count + 1).padStart(6, '0')}.png`, rightImage);
+	const rightImage_filepath = `${m_options.data_filepath}/frames_right/frame_${String(m_vslam_frame_count + 1).padStart(6, '0')}.png`;
+	cv.imwrite(rightImage_filepath, rightImage);
+	console.log(rightImage_filepath);
 
 	m_vslam_frame_count++;
 }
