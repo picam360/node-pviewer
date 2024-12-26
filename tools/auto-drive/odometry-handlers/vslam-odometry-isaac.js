@@ -107,6 +107,10 @@ class VslamOdometry {
         }, 10000);
     }
 
+    is_ready() {
+        return true;
+    }
+
     static cal_xy(waypoints){
         return null;
     }

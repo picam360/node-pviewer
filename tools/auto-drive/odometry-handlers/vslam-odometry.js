@@ -11,7 +11,7 @@ const path = require("path");
 const { execSync } = require('child_process');
 const { spawn } = require('child_process');
 
-const encoder_odometry = require('./encoder-odometry');
+const { EncoderOdometry } = require('./encoder-odometry');
 
 // Convert degrees to radians
 function degreesToRadians(degrees) {
@@ -27,6 +27,20 @@ function quaternionToYaw(orientation) {
     const { x, y, z, w } = orientation;
     const yaw = Math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
     return yaw;
+}
+function quaternionToYXZ(orientation) {
+    const { x, y, z, w } = orientation;
+
+    // Yaw (Y軸周りの回転)
+    const yaw = Math.atan2(2.0 * (w * y - z * x), 1.0 - 2.0 * (x * x + y * y));
+
+    // Pitch (X軸周りの回転)
+    const pitch = Math.asin(2.0 * (w * x + y * z));
+
+    // Roll (Z軸周りの回転)
+    const roll = Math.atan2(2.0 * (w * z - x * y), 1.0 - 2.0 * (x * x + z * z));
+
+    return { yaw, pitch, roll };
 }
 
 function launchDockerContainer() {
@@ -85,6 +99,9 @@ class VslamOdometry {
         this.publisher = null;
         this.push_cur = 0;
         this.m_client = null;
+        this.push_nodes = null;
+        this.last_pushVslam_cur = 0;
+        this.last_odom_cur = 0;
     }
 
     init(waypoints, callback) {
@@ -125,27 +142,37 @@ class VslamOdometry {
                             this.positions[keys[cur]] = odom;
                         }
                         this.initialized = true;
+                        this.current_odom = null;
+                        this.push_cur = keys.length;
+                        this.last_pushVslam_cur = keys.length;
+                        this.last_odom_cur = keys.length;
                         if(callback){
                             callback();
                         }
                     }
                 }else{
                     this.current_odom = params['odom'][0];
+                    const odom_cur = this.current_odom['timestamp'];
+                    for(let i=this.last_odom_cur;i<odom_cur;i++){
+                        const key = this.numToKey(i);
+                        delete this.push_nodes[key];
+                    }
+                    this.last_odom_cur = odom_cur;
                 }
             });
-            const enc_positions = encoder_odometry.EncoderOdometry.cal_xy(waypoints, encoder_odometry.EncoderOdometry.settings);
+            this.enc_positions = EncoderOdometry.cal_xy(waypoints, EncoderOdometry.settings);
 
             let ref_cur = keys.length - 1;
 
             for (let i = 0; i < keys.length; i++) {
                 const cur = keys.length - 1 - i;//reverse
-                const pos = enc_positions[cur];
+                const pos = this.enc_positions[cur];
                 let is_keyframe = false;
                 if (cur == 0 || cur == keys.length - 1) {
                     is_keyframe = true;
                 } else {
                     const threashold = 1;
-                    const ref_pos = enc_positions[ref_cur];
+                    const ref_pos = this.enc_positions[ref_cur];
                     const dx = pos.x - ref_pos.x;
                     const dy = pos.y - ref_pos.y;
                     const d = Math.sqrt(dx * dx + dy * dy);
@@ -158,12 +185,10 @@ class VslamOdometry {
                     continue;
                 }
 
-                this.push_cur = i;
-
                 const waypoint = waypoints[keys[cur]];
                 const jpeg_filepath = waypoint.jpeg_filepath;
                 const jpeg_data = fs.readFileSync(jpeg_filepath);
-                this.push(null, waypoint.meta, jpeg_data);
+                this.pushVslam(`${i}`, jpeg_data);
 
                 console.log(`timestamp ${i} : ${jpeg_filepath}`);
 
@@ -177,134 +202,243 @@ class VslamOdometry {
         });
     }
 
+    is_ready() {
+        return (this.current_odom != null);
+    }
+
     static cal_xy(waypoints) {
         return null;
+    }
+
+    pushVslam(timestamp, jpeg_data) {
+        m_client.publish('picam360-vslam', JSON.stringify({
+            "cmd": "track",
+            "timestamp": `${timestamp}`,
+            "jpeg_data": jpeg_data.toString("base64"),
+        }));
+    }
+
+    numToKey(num) {
+        return num.toString().padStart(10, '0');
     }
 
     push(header, meta, jpeg_data) {
         const frame_dom = xml_parser.parse(meta);
         this.current_nmea = nmea.parseNmeaSentence(frame_dom['picam360:frame']['passthrough:nmea']);
         this.current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
-        this.current_jpeg_data = jpeg_data;
+        this.current_encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
 
-        m_client.publish('picam360-vslam', JSON.stringify({
-            "cmd": "track",
-            "timestamp": `${this.push_cur}`,
-            "jpeg_data": jpeg_data.toString("base64"),
-        }));
+        if(this.push_nodes == null){
+            this.pushVslam(`${this.push_cur}`, jpeg_data);
+            this.last_pushVslam_cur = this.push_cur;
+            this.push_nodes = {};
+        }
+
+        this.push_nodes[this.numToKey(this.push_cur)] = {
+            nmea : this.current_nmea,
+            imu : this.current_imu,
+            encoder : this.current_encoder,
+        };
+
+        {
+            const threashold = 1;
+            const nodes = [];
+            for(let i=this.last_pushVslam_cur;i<this.push_cur+1;i++){
+                const key = this.numToKey(i);
+                nodes.push(this.push_nodes[key]);
+            }
+    
+            const pos = this.appendEncoderPosition({
+                x:0, y:0, heading:0
+            }, nodes);
+
+            const d = Math.sqrt(pos.x*pos.x + pos.y*pos.y);
+            if(d > threashold){
+                this.pushVslam(`${this.push_cur}`, jpeg_data);
+                this.last_pushVslam_cur = this.push_cur;
+            }
+        }
 
         this.push_cur++;
     }
-
-    /**
-     * Computes the transformation between two coordinate systems
-     * @param {Array} points1 - Corresponding points in coordinate system 1 [[x1, y1], [x2, y2]]
-     * @param {Array} points2 - Corresponding points in coordinate system 2 [[x1', y1'], [x2', y2']]
-     * @param {Array} point - An arbitrary point in coordinate system 1 [x, y]
-     * @returns {Array} - The corresponding point in coordinate system 2 [x', y']
-     */
-    transformCoordinates(points1, points2, point) {
+    
+    static transformCoordinates(points1, points2, point) {
         // Retrieve the corresponding points
-        const [p1, p2] = points1;
-        const [q1, q2] = points2;
-
+        const [p1, p2] = points1; // p1, p2 are objects with {x, y}
+        const [q1, q2] = points2; // q1, q2 are objects with {x, y}
+    
         // Compute vectors
-        const deltaP = [p2[0] - p1[0], p2[1] - p1[1]];
-        const deltaQ = [q2[0] - q1[0], q2[1] - q1[1]];
-
+        const deltaP = { x: p2.x - p1.x, y: p2.y - p1.y };
+        const deltaQ = { x: q2.x - q1.x, y: q2.y - q1.y };
+    
         // Scale factor
-        const scale = math.norm(deltaQ) / math.norm(deltaP);
-
+        const normDeltaP = Math.sqrt(deltaP.x ** 2 + deltaP.y ** 2);
+        const normDeltaQ = Math.sqrt(deltaQ.x ** 2 + deltaQ.y ** 2);
+        const scale = normDeltaQ / normDeltaP;
+    
         // Rotation angle
-        const angleP = Math.atan2(deltaP[1], deltaP[0]);
-        const angleQ = Math.atan2(deltaQ[1], deltaQ[0]);
+        const angleP = Math.atan2(deltaP.y, deltaP.x);
+        const angleQ = Math.atan2(deltaQ.y, deltaQ.x);
         const rotation = angleQ - angleP;
-
+    
         // Rotation matrix
         const rotationMatrix = [
             [Math.cos(rotation), -Math.sin(rotation)],
             [Math.sin(rotation), Math.cos(rotation)],
         ];
-
+    
         // Translation vector
-        const translation = [
-            q1[0] - scale * (rotationMatrix[0][0] * p1[0] + rotationMatrix[0][1] * p1[1]),
-            q1[1] - scale * (rotationMatrix[1][0] * p1[0] + rotationMatrix[1][1] * p1[1]),
-        ];
-
+        const translation = {
+            x: q1.x - scale * (rotationMatrix[0][0] * p1.x + rotationMatrix[0][1] * p1.y),
+            y: q1.y - scale * (rotationMatrix[1][0] * p1.x + rotationMatrix[1][1] * p1.y),
+        };
+    
         // Transform the given point
-        const pointTransformed = [
-            scale * (rotationMatrix[0][0] * point[0] + rotationMatrix[0][1] * point[1]) + translation[0],
-            scale * (rotationMatrix[1][0] * point[0] + rotationMatrix[1][1] * point[1]) + translation[1],
-        ];
-
+        const pointTransformed = {
+            x: scale * (rotationMatrix[0][0] * point.x + rotationMatrix[0][1] * point.y) + translation.x,
+            y: scale * (rotationMatrix[1][0] * point.x + rotationMatrix[1][1] * point.y) + translation.y,
+        };
+    
         return pointTransformed;
     }
 
-    getPosition() {
-        if (this.current_odom) {
-            return {
-                x: this.current_odom.pose.position.x,
-                y: this.current_odom.pose.position.y,
-                heading: 90 - radiansToDegrees(quaternionToYaw(this.current_odom.pose.orientation)),
-            };
-        } else {
+    getKeyframePosition(cur) {
+        let cur1 = -1;
+        for (let i=cur; i >= 0; i--) {
+            const key = this.waypoints_keys[i];
+            if (this.positions[key] !== undefined) {
+                cur1 = i;
+                break;
+            }
+        }
+        if(cur1 < 0){
+            for (let i=cur; i < this.waypoints_keys.length; i++) {
+                const key = this.waypoints_keys[i];
+                if (this.positions[key] !== undefined) {
+                    cur1 = i;
+                    break;
+                }
+            }
+        }
+        let cur2 = -1;
+        for (let i=cur1 + 1; i < this.waypoints_keys.length; i++) {
+            const key = this.waypoints_keys[i];
+            if (this.positions[key] !== undefined) {
+                cur2 = i;
+                break;
+            }
+        }
+        if(cur2 < 0){
+            cur2 = cur1;
+            cur1 = -1;
+            for (let i=cur2 - 1; i >= 0; i--) {
+                const key = this.waypoints_keys[i];
+                if (this.positions[key] !== undefined) {
+                    cur1 = i;
+                    break;
+                }
+            }
+        }
+        if(cur1 < 0 || cur2 < 0 || this.current_odom == null){
             return {
                 x: 0,
                 y: 0,
                 heading: 0,
             };
         }
+        const vslam_pos1 = {
+            x : this.positions[cur1].pose[0],
+            y : this.positions[cur1].pose[2],
+        }
+        const vslam_pos2 = {
+            x : this.positions[cur2].pose[0],
+            y : this.positions[cur2].pose[2],
+        }
+        const vslam_pos = {
+            x: this.current_odom.pose[0],
+            y: this.current_odom.pose[2],
+        }
+        const enc_pos = VslamOdometry.transformCoordinates(
+            [vslam_pos1, this.enc_positions[cur1]],
+            [vslam_pos2, this.enc_positions[cur2]],
+            vslam_pos);
+
+        enc_pos.heading = 0;
+
+        return enc_pos;
     }
 
+    appendEncoderPosition(pos, nodes) {
+            
+        const encoder_params = {
+            right_gain : EncoderOdometry.settings.right_gain,
+            meter_per_pulse : EncoderOdometry.settings.meter_per_pulse,
+            wheel_separation : EncoderOdometry.settings.wheel_separation,
+            last_left_counts : nodes[0].encoder.left * EncoderOdometry.left_direction,
+            last_right_counts : nodes[0].encoder.right * EncoderOdometry.right_direction,
+            x : pos.x,
+            y : pos.y,
+            heading : pos.heading,
+        };
+        for (let i=1; i < nodes.length; i++) {
+            EncoderOdometry.inclement_xy(
+                encoder_params,
+                nodes[i].encoder.left * EncoderOdometry.left_direction,
+                nodes[i].encoder.right * EncoderOdometry.right_direction);
+        }
+        return {
+            x : encoder_params.x,
+            y : encoder_params.y,
+            heading : encoder_params.heading,
+        };
+    }
+
+    getPosition(cur) {
+        if(this.push_nodes == null){
+            return {
+                x: 0,
+                y: 0,
+                heading: 0,
+            };
+        }
+
+        const kf_pos = this.getKeyframePosition(cur);
+
+        // const yxz = quaternionToYXZ({
+        //     x : this.current_odom.pose[3],
+        //     y : this.current_odom.pose[4],
+        //     z : this.current_odom.pose[5],
+        //     w : this.current_odom.pose[6],
+        // });
+
+        const nodes = [];
+        for(let i=this.last_odom_cur;i<this.push_cur;i++){
+            const key = this.numToKey(i);
+            nodes.push(this.push_nodes[key]);
+        }
+
+        return this.appendEncoderPosition(kf_pos, nodes);
+    }
     calculateDistance(cur) {
-        let key;
-        for (; cur < this.waypoints_keys.length; cur++) {
-            key = this.waypoints_keys[cur];
-            if (this.positions[key] !== undefined) {
-                break;
-            }
-        }
-        if (this.positions[key] === undefined) {
-            return 0;
-        }
-        const target_position = this.positions[key];
-        const dx = target_position.pose.position.x - this.current_odom.pose.position.x;
-        const dy = target_position.pose.position.y - this.current_odom.pose.position.y;
+        const pos = this.getPosition(cur);
+        const dx = this.enc_positions[cur].x - pos.x;
+        const dy = this.enc_positions[cur].y - pos.y;
         return Math.sqrt(dx * dx + dy * dy);
     }
-    calculateBearing(cur) {
-        let key;
-        for (; cur < this.waypoints_keys.length; cur++) {
-            key = this.waypoints_keys[cur];
-            if (this.positions[key] !== undefined) {
-                break;
-            }
+    calculateBearing(cur, pos) {
+        if(!pos){
+            pos = this.getPosition(cur);
         }
-        if (this.positions[key] === undefined) {
-            return 0;
-        }
-        const target_position = this.positions[key];
-        const dx = target_position.pose.position.x - this.current_odom.pose.position.x;
-        const dy = target_position.pose.position.y - this.current_odom.pose.position.y;
+        const dx = this.enc_positions[cur].x - pos.x;
+        const dy = this.enc_positions[cur].y - pos.y;
         const θ = Math.atan2(dy, dx);
         const bearing = (Math.PI / 2 - θ);
         return (radiansToDegrees(bearing) + 360) % 360; // Bearing in degrees
     }
     calculateHeadingError(cur) {
-        let key;
-        for (; cur < this.waypoints_keys.length; cur++) {
-            key = this.waypoints_keys[cur];
-            if (this.positions[key] !== undefined) {
-                break;
-            }
-        }
-        if (this.positions[key] === undefined) {
-            return 0;
-        }
-        const heading = 90 - radiansToDegrees(quaternionToYaw(this.current_odom.pose.orientation));
-        const targetHeading = this.calculateBearing(cur);
-        let headingError = targetHeading - heading;
+        const pos = this.getPosition(cur);
+        const targetHeading = this.calculateBearing(cur, pos);
+        let headingError = targetHeading - pos.heading;
         if (headingError <= -180) {
             headingError += 360;
         } else if (headingError > 180) {

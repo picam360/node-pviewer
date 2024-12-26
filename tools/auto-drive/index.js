@@ -230,16 +230,18 @@ function auto_drive_handler(tmp_img){
 	const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
 	const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
 
+	let is_ready = true;
 	const conf_keys = Object.keys(m_odometry_conf)
 	for(const key of conf_keys){
 		const conf = m_odometry_conf[key];
 		if(conf.handler){
 			conf.handler.push(header, meta, tmp_img[2]);
-			const { x, y, heading} = conf.handler.getPosition();
-			conf.x = x;
-			conf.y = y;
-			conf.heading = heading;
+			is_ready = is_ready & conf.handler.is_ready();
 		}
+	}
+
+	if(!is_ready){
+		return;
 	}
 
 	const keys = Object.keys(m_auto_drive_waypoints);
@@ -249,6 +251,11 @@ function auto_drive_handler(tmp_img){
 		for(const key of conf_keys){
 			const conf = m_odometry_conf[key];
 			if(conf.handler){
+				const { x, y, heading} = conf.handler.getPosition(cur);
+				conf.x = x;
+				conf.y = y;
+				conf.heading = heading;
+
 				let distanceToTarget = conf.handler.calculateDistance(cur);
 				let headingError = conf.handler.calculateHeadingError(cur);
 

@@ -241,6 +241,10 @@ class EncoderOdometry {
             callback();
         }
     }
+
+    is_ready() {
+        return true;
+    }
   
     push(header, meta, jpeg_data) {
         const frame_dom = xml_parser.parse(meta);

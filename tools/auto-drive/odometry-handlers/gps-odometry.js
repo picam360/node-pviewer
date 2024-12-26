@@ -69,6 +69,10 @@ class GpsOdometry {
         }
     }
 
+    is_ready() {
+        return true;
+    }
+
     static cal_xy(waypoints){
         const positions = {};
         const keys = Object.keys(waypoints);
