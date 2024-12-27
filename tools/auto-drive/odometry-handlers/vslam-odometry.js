@@ -135,12 +135,14 @@ class VslamOdometry {
             subscriber.subscribe('picam360-vslam-odom', (data, key) => {
                 console.log(data);
                 const params = JSON.parse(data);
+                for(const odom of params['odom']){
+                    const cur = keys.length - 1 - odom['timestamp'];//reverse
+                    if(keys[cur] !== undefined){
+                        this.positions[keys[cur]] = odom;
+                    }
+                }
                 if(!this.initialized){
                     if(params['type'] == 'backend'){
-                        for(const odom of params['odom']){
-                            const cur = keys.length - 1 - odom['timestamp'];//reverse
-                            this.positions[keys[cur]] = odom;
-                        }
                         this.initialized = true;
                         this.current_odom = null;
                         this.push_cur = keys.length;
@@ -151,13 +153,16 @@ class VslamOdometry {
                         }
                     }
                 }else{
-                    this.current_odom = params['odom'][0];
-                    const odom_cur = this.current_odom['timestamp'];
-                    for(let i=this.last_odom_cur;i<odom_cur;i++){
-                        const key = this.numToKey(i);
-                        delete this.push_nodes[key];
+                    const odom = params['odom'][params['odom'].length - 1];//last one
+                    const odom_cur = odom['timestamp'];
+                    if(odom_cur > this.last_odom_cur){
+                        this.current_odom = odom;
+                        for(let i=this.last_odom_cur;i<odom_cur;i++){
+                            const key = this.numToKey(i);
+                            delete this.push_nodes[key];
+                        }
+                        this.last_odom_cur = odom_cur;
                     }
-                    this.last_odom_cur = odom_cur;
                 }
             });
             this.enc_positions = EncoderOdometry.cal_xy(waypoints, EncoderOdometry.settings);
@@ -292,11 +297,15 @@ class VslamOdometry {
             x: q1.x - scale * (rotationMatrix[0][0] * p1.x + rotationMatrix[0][1] * p1.y),
             y: q1.y - scale * (rotationMatrix[1][0] * p1.x + rotationMatrix[1][1] * p1.y),
         };
+
+        const dheading_p = p2.heading - p1.heading;
+        const dheading_q = q2.heading - q1.heading;
     
         // Transform the given point
         const pointTransformed = {
             x: scale * (rotationMatrix[0][0] * point.x + rotationMatrix[0][1] * point.y) + translation.x,
             y: scale * (rotationMatrix[1][0] * point.x + rotationMatrix[1][1] * point.y) + translation.y,
+            heading: point.heading + (dheading_p + dheading_q) / 2,
         };
     
         return pointTransformed;
@@ -346,24 +355,21 @@ class VslamOdometry {
                 heading: 0,
             };
         }
-        const vslam_pos1 = {
-            x : this.positions[cur1].pose[0],
-            y : this.positions[cur1].pose[2],
+
+        function convert_odom_to_pos(odom){
+            return {
+                x : odom.pose.position.x,
+                y : odom.pose.position.z,
+                heading : quaternionToYXZ(odom.pose.orientation).yaw * 180 / Math.PI,
+            };
         }
-        const vslam_pos2 = {
-            x : this.positions[cur2].pose[0],
-            y : this.positions[cur2].pose[2],
-        }
-        const vslam_pos = {
-            x: this.current_odom.pose[0],
-            y: this.current_odom.pose[2],
-        }
+        const vslam_pos1 = convert_odom_to_pos(this.positions[cur1]);
+        const vslam_pos2 = convert_odom_to_pos(this.positions[cur2]);
+        const vslam_pos = convert_odom_to_pos(this.current_odom);
         const enc_pos = VslamOdometry.transformCoordinates(
             [vslam_pos1, this.enc_positions[cur1]],
             [vslam_pos2, this.enc_positions[cur2]],
             vslam_pos);
-
-        enc_pos.heading = 0;
 
         return enc_pos;
     }
@@ -404,13 +410,6 @@ class VslamOdometry {
 
         const kf_pos = this.getKeyframePosition(cur);
 
-        // const yxz = quaternionToYXZ({
-        //     x : this.current_odom.pose[3],
-        //     y : this.current_odom.pose[4],
-        //     z : this.current_odom.pose[5],
-        //     w : this.current_odom.pose[6],
-        // });
-
         const nodes = [];
         for(let i=this.last_odom_cur;i<this.push_cur;i++){
             const key = this.numToKey(i);
@@ -423,7 +422,9 @@ class VslamOdometry {
         const pos = this.getPosition(cur);
         const dx = this.enc_positions[cur].x - pos.x;
         const dy = this.enc_positions[cur].y - pos.y;
-        return Math.sqrt(dx * dx + dy * dy);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        console.log("distance", distance);
+        return distance;
     }
     calculateBearing(cur, pos) {
         if(!pos){
@@ -444,6 +445,7 @@ class VslamOdometry {
         } else if (headingError > 180) {
             headingError -= 360;
         }
+        console.log("headingError", headingError);
         return headingError;
     }
 }

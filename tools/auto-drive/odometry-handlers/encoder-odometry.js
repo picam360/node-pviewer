@@ -120,6 +120,7 @@ class EncoderOdometry {
             positions[key] = {
                 x : encoder_params.x,
                 y : encoder_params.y,
+                heading : encoder_params.heading,
             }
         }
         return positions;
