@@ -5,7 +5,7 @@ const xml_parser = new fxp.XMLParser({
 	ignoreAttributes: false,
 	attributeNamePrefix: "",
 });
-const gps_odometry = require('./gps-odometry');
+const { GpsOdometry } = require('./gps-odometry');
 const numeric = require('numeric');
 
 // Convert degrees to radians
@@ -19,19 +19,21 @@ function radiansToDegrees(radians) {
 }
 
 class EncoderOdometry {
-    static left_direction = -1;
-    static right_direction = 1;
     static settings = {
         right_gain: 1.0,
         meter_per_pulse: 0.00902127575039515,
         wheel_separation: 3.093597564134178,
         imu_heading_error: 0.0,
+        left_direction: -1,
+        right_direction: 1,
     };
     //static settings = {
     //     right_gain: 1.0148108360301102,
     //     meter_per_pulse: 0.000051365457364540345,
     //     wheel_separation: 0.3254187353986605,
     //     imu_heading_error: 0,
+    //     left_direction: 1,
+    //     right_direction: 1,
     // };
     constructor() {
         this.waypoints = null;
@@ -49,6 +51,7 @@ class EncoderOdometry {
         };
 
         this.calib_enabled = false;
+        this.lock_gps_heading = true;
     }
 
     static inclement_xy(encoder_params, left_counts, right_counts) {
@@ -105,8 +108,8 @@ class EncoderOdometry {
             right_gain : settings.right_gain,
             meter_per_pulse : settings.meter_per_pulse,
             wheel_separation : settings.wheel_separation,
-            last_left_counts : base_encoder.left * EncoderOdometry.left_direction,
-            last_right_counts : base_encoder.right * EncoderOdometry.right_direction,
+            last_left_counts : base_encoder.left * settings.left_direction,
+            last_right_counts : base_encoder.right * settings.right_direction,
             x : 0,
             y : 0,
             heading : base_imu.heading + settings.imu_heading_error,
@@ -115,8 +118,8 @@ class EncoderOdometry {
             const current_encoder = JSON.parse(waypoints[key].encoder);
             EncoderOdometry.inclement_xy(
                 encoder_params,
-                current_encoder.left * EncoderOdometry.left_direction,
-                current_encoder.right * EncoderOdometry.right_direction);
+                current_encoder.left * settings.left_direction,
+                current_encoder.right * settings.right_direction);
             positions[key] = {
                 x : encoder_params.x,
                 y : encoder_params.y,
@@ -180,14 +183,14 @@ class EncoderOdometry {
                 }
             }
             
-            const gps_positions = gps_odometry.GpsOdometry.cal_xy(waypoints);
+            this.gps_positions = GpsOdometry.cal_xy(waypoints);
             {
-                const keys = Object.keys(gps_positions);
-                const gps_base_x = gps_positions[keys[0]].x;
-                const gps_base_y = gps_positions[keys[0]].y;
+                const keys = Object.keys(this.gps_positions);
+                const gps_base_x = this.gps_positions[keys[0]].x;
+                const gps_base_y = this.gps_positions[keys[0]].y;
                 for(const key of keys){
-                    gps_positions[key].x -= gps_base_x;
-                    gps_positions[key].y -= gps_base_y;
+                    this.gps_positions[key].x -= gps_base_x;
+                    this.gps_positions[key].y -= gps_base_y;
                 }
             }
             
@@ -197,35 +200,35 @@ class EncoderOdometry {
                 //    wheel_separation
                 //    imu_heading_error
                 let result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["imu_heading_error"]),
+                    createErrorFunction(waypoints, this.gps_positions, Object.assign({}, EncoderOdometry.settings), ["imu_heading_error"]),
                     [EncoderOdometry.settings.imu_heading_error]);
                 EncoderOdometry.settings.imu_heading_error = result.solution[0] % 360;
                 console.log(result.message, result.f, result.iterations);
                 console.log('imu_heading_error:', result.solution[0]);
                 
                 result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["right_gain"]),
+                    createErrorFunction(waypoints, this.gps_positions, Object.assign({}, EncoderOdometry.settings), ["right_gain"]),
                     [EncoderOdometry.settings.right_gain]);
                 //EncoderOdometry.settings.right_gain = result.solution[0];
                 console.log(result.message, result.f, result.iterations);
                 console.log('right_gain:', result.solution[0]);
 
                 result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["meter_per_pulse"]),
+                    createErrorFunction(waypoints, this.gps_positions, Object.assign({}, EncoderOdometry.settings), ["meter_per_pulse"]),
                     [EncoderOdometry.settings.meter_per_pulse]);
                 EncoderOdometry.settings.meter_per_pulse = result.solution[0];
                 console.log(result.message, result.f, result.iterations);
                 console.log('meter_per_pulse:', result.solution[0]);
 
                 result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["wheel_separation"]),
+                    createErrorFunction(waypoints, this.gps_positions, Object.assign({}, EncoderOdometry.settings), ["wheel_separation"]),
                     [EncoderOdometry.settings.wheel_separation]);
                 EncoderOdometry.settings.wheel_separation = result.solution[0];
                 console.log(result.message, result.f, result.iterations);
                 console.log('wheel_separation:', result.solution[0]);
 
                 result = numeric.uncmin(
-                    createErrorFunction(waypoints, gps_positions, Object.assign({}, EncoderOdometry.settings), ["meter_per_pulse", "wheel_separation", "imu_heading_error"]),
+                    createErrorFunction(waypoints, this.gps_positions, Object.assign({}, EncoderOdometry.settings), ["meter_per_pulse", "wheel_separation", "imu_heading_error"]),
                     [EncoderOdometry.settings.meter_per_pulse, EncoderOdometry.settings.wheel_separation, EncoderOdometry.settings.imu_heading_error]);
                 EncoderOdometry.settings.meter_per_pulse = result.solution[0];
                 EncoderOdometry.settings.wheel_separation = result.solution[1];
@@ -236,7 +239,20 @@ class EncoderOdometry {
                 console.log('imu_heading_error:', result.solution[2]);
             }
         }
-        this.positions = EncoderOdometry.cal_xy(waypoints, EncoderOdometry.settings);
+        {
+            const settings = Object.assign({}, EncoderOdometry.settings);
+            if(this.lock_gps_heading){
+                settings.imu_heading_error = 0;
+                const enc_positions = EncoderOdometry.cal_xy(this.waypoints, settings);
+                const last_key = this.waypoints_keys[this.waypoints_keys.length - 1];
+                const last_gps_position = this.gps_positions[last_key];
+                const last_enc_position = enc_positions[last_key];
+                const gps_heading = Math.atan2(last_gps_position.x, last_gps_position.y) * 180 / Math.PI;//from y axis
+                const enc_heading = Math.atan2(last_enc_position.x, last_enc_position.y) * 180 / Math.PI;//from y axis
+                settings.imu_heading_error = gps_heading - enc_heading;
+            }
+            this.positions = EncoderOdometry.cal_xy(waypoints, settings);
+        }
 
         if(callback){
             callback();
@@ -254,23 +270,33 @@ class EncoderOdometry {
         this.current_encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
 
         if(this.encoder_params.last_left_counts === null){
+            const settings = Object.assign({}, EncoderOdometry.settings);
             const base_imu = JSON.parse(this.waypoints[this.waypoints_keys[0]].imu);
+            if(this.lock_gps_heading){
+                settings.imu_heading_error = 0;
+                const enc_positions = EncoderOdometry.cal_xy(this.waypoints, settings);
+                const last_key = this.waypoints_keys[this.waypoints_keys.length - 1];
+                const last_gps_position = this.gps_positions[last_key];
+                const last_enc_position = enc_positions[last_key];
+                const gps_heading = Math.atan2(last_gps_position.x, last_gps_position.y) * 180 / Math.PI;//from y axis
+                const enc_heading = Math.atan2(last_enc_position.x, last_enc_position.y) * 180 / Math.PI;//from y axis
+                settings.imu_heading_error = gps_heading - enc_heading;
+            }
             this.encoder_params = {
-                right_gain : EncoderOdometry.settings.right_gain,
-                meter_per_pulse : EncoderOdometry.settings.meter_per_pulse,
-                wheel_separation : EncoderOdometry.settings.wheel_separation,
-                last_left_counts : this.current_encoder.left * EncoderOdometry.left_direction,
-                last_right_counts : this.current_encoder.right * EncoderOdometry.right_direction,
+                right_gain : settings.right_gain,
+                meter_per_pulse : settings.meter_per_pulse,
+                wheel_separation : settings.wheel_separation,
+                last_left_counts : this.current_encoder.left * settings.left_direction,
+                last_right_counts : this.current_encoder.right * settings.right_direction,
                 x : 0,
                 y : 0,
-                //heading : this.current_imu.heading + EncoderOdometry.settings.imu_heading_error,
-                heading : base_imu.heading + EncoderOdometry.settings.imu_heading_error,
+                heading : base_imu.heading + settings.imu_heading_error,
             };
         }
         EncoderOdometry.inclement_xy(
             this.encoder_params,
-            this.current_encoder.left * EncoderOdometry.left_direction,
-            this.current_encoder.right * EncoderOdometry.right_direction);
+            this.current_encoder.left * EncoderOdometry.settings.left_direction,
+            this.current_encoder.right * EncoderOdometry.settings.right_direction);
     }
 
     getPosition(){

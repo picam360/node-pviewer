@@ -41,7 +41,7 @@ let m_odometry_conf = {
 		enabled : true
 	},
 	VSLAM : {
-		enabled : true
+		enabled : false
 	},
 };
 
@@ -446,7 +446,9 @@ function main() {
 		});
 
 		let tmp_img = [];
+		let last_ts = Date.now();
 		subscriber.subscribe('pserver-vslam-pst', (data, key) => {
+			last_ts = Date.now();
 			if(data.length == 0 && tmp_img.length != 0){
 				switch(m_drive_mode){
 				case "RECORD":
@@ -461,6 +463,26 @@ function main() {
 				tmp_img.push(Buffer.from(data, 'base64'));
 			}
 		});
+		setInterval(() => {
+			const elapsed = Date.now() - last_ts;
+			if(elapsed > 1000){
+				//waiting
+				switch(m_drive_mode){
+				case "RECORD":
+					m_client.publish('pserver-auto-drive-info', JSON.stringify({
+						"mode" : "RECORD",
+						"state" : "WAITING_PST",
+					}));
+					break;
+				case "AUTO":
+					m_client.publish('pserver-auto-drive-info', JSON.stringify({
+						"mode" : "AUTO",
+						"state" : "WAITING_PST",
+					}));
+					break;
+				}
+			}
+		}, 1000);
 	});
 }
 function command_handler(cmd) {
