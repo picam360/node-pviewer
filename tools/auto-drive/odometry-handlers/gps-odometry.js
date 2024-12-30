@@ -57,6 +57,7 @@ function toWebMercator(lat, lon) {
 class GpsOdometry {
     constructor() {
         this.waypoints = null;
+        this.gps_waypoints = null;
         this.current_nmea = null;
         this.current_imu = null;
     }
@@ -64,8 +65,9 @@ class GpsOdometry {
     init(waypoints, callback){
         this.waypoints = waypoints;
         this.waypoints_keys = Object.keys(waypoints);
+        this.gps_waypoints = GpsOdometry.cal_xy(waypoints);
         if(callback){
-            callback();
+            callback(this.gps_waypoints);
         }
     }
 

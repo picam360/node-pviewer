@@ -26,6 +26,8 @@ class EncoderOdometry {
         imu_heading_error: 0.0,
         left_direction: -1,
         right_direction: 1,
+
+        lock_gps_heading : true,
     };
     //static settings = {
     //     right_gain: 1.0148108360301102,
@@ -34,10 +36,12 @@ class EncoderOdometry {
     //     imu_heading_error: 0,
     //     left_direction: 1,
     //     right_direction: 1,
+    //
+    //    lock_gps_heading : true,
     // };
     constructor() {
         this.waypoints = null;
-        this.positions = null;
+        this.enc_waypoints = null;
         this.current_nmea = null;
         this.current_imu = null;
         this.encoder_params = {
@@ -51,7 +55,6 @@ class EncoderOdometry {
         };
 
         this.calib_enabled = false;
-        this.lock_gps_heading = true;
     }
 
     static inclement_xy(encoder_params, left_counts, right_counts) {
@@ -103,16 +106,15 @@ class EncoderOdometry {
         const positions = {};
         const keys = Object.keys(waypoints);
         const base_encoder = JSON.parse(waypoints[keys[0]].encoder);
-        const base_imu = JSON.parse(waypoints[keys[0]].imu);
         const encoder_params = {
             right_gain : settings.right_gain,
             meter_per_pulse : settings.meter_per_pulse,
             wheel_separation : settings.wheel_separation,
             last_left_counts : base_encoder.left * settings.left_direction,
             last_right_counts : base_encoder.right * settings.right_direction,
-            x : 0,
-            y : 0,
-            heading : base_imu.heading + settings.imu_heading_error,
+            x : settings.x_initial || 0,
+            y : settings.y_initial || 0,
+            heading : settings.heading_initial || 0,
         };
         for(const key of keys){
             const current_encoder = JSON.parse(waypoints[key].encoder);
@@ -127,6 +129,34 @@ class EncoderOdometry {
             }
         }
         return positions;
+    }
+    static cal_heading(waypoints){
+        const waypoints_keys = Object.keys(waypoints);
+        const settings = Object.assign({}, EncoderOdometry.settings);
+        if(settings.lock_gps_heading){
+            const gps_positions = GpsOdometry.cal_xy(waypoints);
+            const enc_positions = EncoderOdometry.cal_xy(waypoints, settings);
+            const last_key = waypoints_keys[waypoints_keys.length - 1];
+
+            const first_gps_position = gps_positions[0];
+            const last_gps_position = gps_positions[last_key];
+            const gps_heading = Math.atan2(
+                last_gps_position.x - first_gps_position.x, 
+                last_gps_position.y - first_gps_position.y,
+            ) * 180 / Math.PI;//from y axis
+
+            const first_enc_position = enc_positions[0];
+            const last_enc_position = enc_positions[last_key];
+            const enc_heading = Math.atan2(
+                last_enc_position.x - first_enc_position.x,
+                last_enc_position.y - first_enc_position.y,
+            ) * 180 / Math.PI;//from y axis
+
+            return gps_heading - enc_heading;
+        }else{
+            const base_imu = JSON.parse(waypoints[waypoints_keys[0]].imu);
+            return base_imu.heading + settings.imu_heading_error;
+        }
     }
 
     init(waypoints, callback){
@@ -241,21 +271,14 @@ class EncoderOdometry {
         }
         {
             const settings = Object.assign({}, EncoderOdometry.settings);
-            if(this.lock_gps_heading){
-                settings.imu_heading_error = 0;
-                const enc_positions = EncoderOdometry.cal_xy(this.waypoints, settings);
-                const last_key = this.waypoints_keys[this.waypoints_keys.length - 1];
-                const last_gps_position = this.gps_positions[last_key];
-                const last_enc_position = enc_positions[last_key];
-                const gps_heading = Math.atan2(last_gps_position.x, last_gps_position.y) * 180 / Math.PI;//from y axis
-                const enc_heading = Math.atan2(last_enc_position.x, last_enc_position.y) * 180 / Math.PI;//from y axis
-                settings.imu_heading_error = gps_heading - enc_heading;
-            }
-            this.positions = EncoderOdometry.cal_xy(waypoints, settings);
+            settings.x_initial = 0;
+            settings.y_initial = 0;
+            settings.heading_initial = EncoderOdometry.cal_heading(this.waypoints);
+            this.enc_waypoints = EncoderOdometry.cal_xy(this.waypoints, settings);
         }
 
         if(callback){
-            callback();
+            callback(this.enc_waypoints);
         }
     }
 
@@ -271,26 +294,18 @@ class EncoderOdometry {
 
         if(this.encoder_params.last_left_counts === null){
             const settings = Object.assign({}, EncoderOdometry.settings);
-            const base_imu = JSON.parse(this.waypoints[this.waypoints_keys[0]].imu);
-            if(this.lock_gps_heading){
-                settings.imu_heading_error = 0;
-                const enc_positions = EncoderOdometry.cal_xy(this.waypoints, settings);
-                const last_key = this.waypoints_keys[this.waypoints_keys.length - 1];
-                const last_gps_position = this.gps_positions[last_key];
-                const last_enc_position = enc_positions[last_key];
-                const gps_heading = Math.atan2(last_gps_position.x, last_gps_position.y) * 180 / Math.PI;//from y axis
-                const enc_heading = Math.atan2(last_enc_position.x, last_enc_position.y) * 180 / Math.PI;//from y axis
-                settings.imu_heading_error = gps_heading - enc_heading;
-            }
+            settings.x_initial = 0;
+            settings.y_initial = 0;
+            settings.heading_initial = EncoderOdometry.cal_heading(this.waypoints);
             this.encoder_params = {
                 right_gain : settings.right_gain,
                 meter_per_pulse : settings.meter_per_pulse,
                 wheel_separation : settings.wheel_separation,
                 last_left_counts : this.current_encoder.left * settings.left_direction,
                 last_right_counts : this.current_encoder.right * settings.right_direction,
-                x : 0,
-                y : 0,
-                heading : base_imu.heading + settings.imu_heading_error,
+                x : settings.x_initial || 0,
+                y : settings.y_initial || 0,
+                heading : settings.heading_initial || 0,
             };
         }
         EncoderOdometry.inclement_xy(
@@ -309,14 +324,14 @@ class EncoderOdometry {
 
     calculateDistance(cur){
         const key = this.waypoints_keys[cur];
-        const target_position = this.positions[key];
+        const target_position = this.enc_waypoints[key];
         const dx = target_position.x - this.encoder_params.x;
         const dy = target_position.y - this.encoder_params.y;
         return Math.sqrt(dx * dx + dy * dy);
     }
     calculateBearing(cur){
         const key = this.waypoints_keys[cur];
-        const target_position = this.positions[key];
+        const target_position = this.enc_waypoints[key];
         const dx = target_position.x - this.encoder_params.x;
         const dy = target_position.y - this.encoder_params.y;
         const θ = Math.atan2(dy, dx);
