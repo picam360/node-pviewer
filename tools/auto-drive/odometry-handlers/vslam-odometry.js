@@ -307,11 +307,6 @@ class VslamOdometry {
                         }
                     }
                 }else{
-
-                    const { vslam_waypoints, active_points } = convert_transforms_to_positions(params['transforms'], this.enc_positions);
-                    this.vslam_waypoints = vslam_waypoints;
-                    this.active_points = active_points;
-                    
                     const odom = params['odom'][params['odom'].length - 1];//last one
                     const odom_cur = odom['timestamp'];
                     if(odom_cur > this.last_odom_cur){
@@ -321,6 +316,14 @@ class VslamOdometry {
                             delete this.push_nodes[key];
                         }
                         this.last_odom_cur = odom_cur;
+
+                        const { vslam_waypoints, active_points } = convert_transforms_to_positions(params['transforms'], this.enc_positions);
+                        this.vslam_waypoints = vslam_waypoints;
+                        this.active_points = active_points;
+
+                        if(this.options.transforms_callback){
+                            this.options.transforms_callback(this.vslam_waypoints, this.active_points);
+                        }
                     }
                 }
             });
@@ -341,12 +344,15 @@ class VslamOdometry {
                 if (cur == 0 || cur == keys.length - 1) {
                     is_keyframe = true;
                 } else {
-                    const threashold = 1;
+                    const dr_threashold = 1;
+                    const dh_threashold = 5;
                     const ref_pos = this.enc_positions[ref_cur];
                     const dx = pos.x - ref_pos.x;
                     const dy = pos.y - ref_pos.y;
-                    const d = Math.sqrt(dx * dx + dy * dy);
-                    if (d > threashold) {
+                    const dh = pos.heading - ref_pos.heading;
+                    const dr = Math.sqrt(dx * dx + dy * dy);
+                    if (dr > dr_threashold || Math.abs(dh) > dh_threashold) {
+                        console.log(`dr=${dr}, dh=${dh}`);
                         is_keyframe = true;
                     }
                 }

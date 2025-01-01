@@ -239,7 +239,7 @@ function auto_drive_handler(tmp_img){
 		}
 	}
 
-	const keys = Object.keys(m_auto_drive_waypoints);
+	const keys = Object.keys(m_auto_drive_waypoints.src);
 
 	let cur = m_auto_drive_cur;
 	while(cur < keys.length){
@@ -578,6 +578,10 @@ function command_handler(cmd) {
 								const vslam_odometry = require('./odometry-handlers/vslam-odometry');
 								m_odometry_conf[key].handler = new vslam_odometry.VslamOdometry({
 									host : m_argv.host,
+									transforms_callback : (vslam_waypoints, active_points) => {
+										msg["VSLAM"] = vslam_waypoints;
+										update_auto_drive_waypoints(msg);
+									},
 								});
 								break;
 						}
