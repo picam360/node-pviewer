@@ -116,6 +116,9 @@ class VslamOdometry {
         this.push_nodes = null;
         this.last_pushVslam_cur = 0;
         this.last_odom_cur = 0;
+
+        this.dr_threashold = 1;
+        this.dh_threashold = 5;
     }
 
     init(waypoints, callback) {
@@ -158,7 +161,8 @@ class VslamOdometry {
                 const vslam_waypoints = {};
                 const active_points = {};
                 for(const node of nodes){
-                    const cur = keys.length - 1 - node['timestamp'];//reverse
+                    //const cur = keys.length - 1 - node['timestamp'];//reverse
+                    const cur = node['timestamp'];
                     if(keys[cur] !== undefined){
                         vslam_waypoints[keys[cur]] = convert_transform_to_pos(node);
                     }else{
@@ -217,75 +221,6 @@ class VslamOdometry {
                 };
             }
 
-            function convert_odom_to_positions(odoms, enc_positions){
-                function convert_odom_to_pos(odom){
-                    return {
-                        x : -odom.pose.position.x,
-                        y : odom.pose.position.z,
-                        heading : -quaternionToYXZ(odom.pose.orientation).yaw * 180 / Math.PI,
-                    };
-                }
-                const keys = Object.keys(enc_positions);
-                const vslam_waypoints = {};
-                const active_points = {};
-                for(const odom of odoms){
-                    const cur = keys.length - 1 - odom['timestamp'];//reverse
-                    if(keys[cur] !== undefined){
-                        vslam_waypoints[keys[cur]] = convert_odom_to_pos(odom);
-                    }else{
-                        active_points[odom['timestamp']] = convert_odom_to_pos(odom);
-                    }
-                }
-                const keys2 = Object.keys(vslam_waypoints);
-                let first_key = keys2[0];
-                let last_key = keys2[keys2.length - 1];
-
-                const first_vslam_position = Object.assign({}, vslam_waypoints[first_key]);
-                const last_vslam_position = vslam_waypoints[last_key];
-                const diff_vslam_position = {
-                    x : last_vslam_position.x - first_vslam_position.x,
-                    y : last_vslam_position.y - first_vslam_position.y,
-                };
-                const vslam_heading = Math.atan2(diff_vslam_position.x, diff_vslam_position.y) * 180 / Math.PI;//from y axis
-                const vslam_scale = Math.sqrt(diff_vslam_position.x ** 2 + diff_vslam_position.y ** 2);
-
-                const first_enc_position = enc_positions[first_key];
-                const last_enc_position = enc_positions[last_key];
-                const diff_enc_position = {
-                    x : last_enc_position.x - first_enc_position.x,
-                    y : last_enc_position.y - first_enc_position.y,
-                };
-                const enc_heading = Math.atan2(diff_enc_position.x, diff_enc_position.y) * 180 / Math.PI;//from y axis
-                const enc_scale = Math.sqrt(diff_enc_position.x ** 2 + diff_enc_position.y ** 2);
-
-                const heading_diff = enc_heading - vslam_heading;
-                
-                const rad = (Math.PI / 180) * heading_diff;
-                const cos = Math.cos(rad);
-                const sin = Math.sin(rad);
-                const scale = enc_scale / vslam_scale;
-                for(const key of Object.keys(vslam_waypoints)){
-                    const x = vslam_waypoints[key].x - first_vslam_position.x;
-                    const y = vslam_waypoints[key].y - first_vslam_position.y;
-                    //vslam_waypoints[key].x = -scale * (x * cos - y * sin);
-                    //vslam_waypoints[key].y = -scale * (x * sin + y * cos);
-                    vslam_waypoints[key].x = -scale * x;
-                    vslam_waypoints[key].y = -scale * y;
-                    vslam_waypoints[key].heading += heading_diff;
-                }
-                for(const key of Object.keys(active_points)){
-                    const x = active_points[key].x - first_vslam_position.x;
-                    const y = active_points[key].y - first_vslam_position.y;
-                    active_points[key].x = -scale * (x * cos - y * sin);
-                    active_points[key].y = -scale * (x * sin + y * cos);
-                    active_points[key].heading += heading_diff;
-                }
-                return {
-                    vslam_waypoints,
-                    active_points,
-                };
-            }
-
             subscriber.subscribe('picam360-vslam-odom', (data, key) => {
                 console.log(data);
                 const params = JSON.parse(data);
@@ -335,23 +270,23 @@ class VslamOdometry {
                 this.enc_positions = EncoderOdometry.cal_xy(this.waypoints, settings);
             }
 
-            let ref_cur = keys.length - 1;
+            //let ref_cur = keys.length - 1;//reverse
+            let ref_cur = 0;
 
             for (let i = 0; i < keys.length; i++) {
-                const cur = keys.length - 1 - i;//reverse
+                //const cur = keys.length - 1 - i;//reverse
+                const cur = i;
                 const pos = this.enc_positions[cur];
                 let is_keyframe = false;
                 if (cur == 0 || cur == keys.length - 1) {
                     is_keyframe = true;
                 } else {
-                    const dr_threashold = 1;
-                    const dh_threashold = 5;
                     const ref_pos = this.enc_positions[ref_cur];
                     const dx = pos.x - ref_pos.x;
                     const dy = pos.y - ref_pos.y;
                     const dh = pos.heading - ref_pos.heading;
                     const dr = Math.sqrt(dx * dx + dy * dy);
-                    if (dr > dr_threashold || Math.abs(dh) > dh_threashold) {
+                    if (dr > this.dr_threashold || Math.abs(dh) > this.dh_threashold) {
                         console.log(`dr=${dr}, dh=${dh}`);
                         is_keyframe = true;
                     }
@@ -374,6 +309,9 @@ class VslamOdometry {
             m_client.publish('picam360-vslam', JSON.stringify({
                 "cmd": "backend",
                 "itr": 7,
+            }));
+            m_client.publish('picam360-vslam', JSON.stringify({
+                "cmd": "reset_pos",
             }));
         });
     }
@@ -417,7 +355,6 @@ class VslamOdometry {
         };
 
         {
-            const threashold = 1;
             const nodes = [];
             for(let i=this.last_pushVslam_cur;i<this.push_cur+1;i++){
                 const key = this.numToKey(i);
@@ -428,8 +365,11 @@ class VslamOdometry {
                 x:0, y:0, heading:0
             }, nodes);
 
-            const d = Math.sqrt(pos.x*pos.x + pos.y*pos.y);
-            if(d > threashold){
+            const dr = Math.sqrt(pos.x*pos.x + pos.y*pos.y);
+            const dh = pos.heading;
+            if (dr > this.dr_threashold || Math.abs(dh) > this.dh_threashold) {
+                console.log(`dr=${dr}, dh=${dh}`);
+
                 this.pushVslam(`${this.push_cur}`, jpeg_data);
                 this.last_pushVslam_cur = this.push_cur;
             }
