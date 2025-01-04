@@ -246,7 +246,7 @@ function auto_drive_handler(tmp_img){
 		for(const key of conf_keys){
 			const conf = m_odometry_conf[key];
 			if(conf.handler && conf.handler.is_ready()){
-				const { x, y, heading} = conf.handler.getPosition(cur);
+				const { x, y, heading} = conf.handler.getPosition();
 				conf.x = x;
 				conf.y = y;
 				conf.heading = heading;
