@@ -35,6 +35,7 @@ const ODOMETRY_TYPE = {
 	VSLAM : "VSLAM",
 };
 let m_odometry_conf = {
+	odom_type : ODOMETRY_TYPE.VSLAM,
 	GPS : {
 		enabled : true
 	},
@@ -239,6 +240,10 @@ function auto_drive_handler(tmp_img){
 		}
 	}
 
+	if(m_odometry_conf[m_odometry_conf.odom_type].handler.is_ready() == false){
+		return;
+	}
+
 	const keys = Object.keys(m_auto_drive_waypoints.src);
 
 	let cur = m_auto_drive_cur;
@@ -270,8 +275,8 @@ function auto_drive_handler(tmp_img){
 			}
 		}
 
-		let distanceToTarget = m_odometry_conf[ODOMETRY_TYPE.ENCODER].distanceToTarget;
-		let headingError = m_odometry_conf[ODOMETRY_TYPE.ENCODER].headingError;
+		let distanceToTarget = m_odometry_conf[m_odometry_conf.odom_type].distanceToTarget;
+		let headingError = m_odometry_conf[m_odometry_conf.odom_type].headingError;
 
 		let tolerance_distance = 1.0;
 		let tolerance_heading = (m_auto_drive_heading_tuning ? 20 : 30);
