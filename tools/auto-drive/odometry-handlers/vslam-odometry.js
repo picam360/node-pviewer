@@ -376,9 +376,9 @@ class VslamOdometry {
                             const diff_x = kf_pos.x - enc_pos.x;
                             const diff_y = kf_pos.y - enc_pos.y;
                             const diff_heading = kf_pos.heading - enc_pos.heading;
-                            //this.enc_odom.encoder_params.x += diff_x * update_gain;
-                            //this.enc_odom.encoder_params.y += diff_y * update_gain;
-                            //this.enc_odom.encoder_params.heading += diff_heading * update_gain;
+                            this.enc_odom.encoder_params.x += diff_x * update_gain;
+                            this.enc_odom.encoder_params.y += diff_y * update_gain;
+                            this.enc_odom.encoder_params.heading += diff_heading * update_gain;
 
                             console.log("diff_x", diff_x);
                             console.log("diff_y", diff_y);
@@ -540,7 +540,7 @@ class VslamOdometry {
         const vslam_pos = Object.assign({}, this.active_points[this.current_odom['timestamp']]);
         
         const center_key = findClosestWaypoint(vslam_pos, this.vslam_waypoints);
-        const keys = getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 5);
+        const keys = getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
 
         const vslam_waypoints = {};
         const enc_waypoints = {};
