@@ -163,7 +163,7 @@ function createErrorFunction(vslam_waypoints, enc_waypoints, settings, types) {
             const error_Y = (positions[key].y - enc_waypoints[key].y) ** 2;
             totalError += error_X + error_Y;
         }
-    
+        
         return totalError;
     }
 }
@@ -208,6 +208,8 @@ function cal_fitting_params(vslam_waypoints, enc_waypoints, settings){
         [settings.scale, settings.heading_diff]);
     settings.scale = result.solution[0];
     settings.heading_diff = result.solution[1] % 360;
+
+    //createErrorFunction(vslam_waypoints, enc_waypoints, settings, ["scale", "heading_diff"])([settings.scale, settings.heading_diff]);
 
     return settings;
 }

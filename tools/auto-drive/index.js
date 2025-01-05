@@ -580,6 +580,7 @@ function command_handler(cmd) {
 									host : m_argv.host,
 									transforms_callback : (vslam_waypoints, active_points) => {
 										msg["VSLAM"] = vslam_waypoints;
+										msg["VSLAM_ACTIVE"] = active_points;
 										update_auto_drive_waypoints(msg);
 									},
 								});
