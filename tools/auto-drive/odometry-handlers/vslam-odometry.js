@@ -420,7 +420,7 @@ class VslamOdometry {
                     const waypoint = waypoints[keys[cur]];
                     const jpeg_filepath = waypoint.jpeg_filepath;
                     const jpeg_data = fs.readFileSync(jpeg_filepath);
-                    this.pushVslam(`${i}`, jpeg_data);
+                    this.pushVslam(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
 
                     console.log(`timestamp ${i} : ${jpeg_filepath}`);
 
@@ -447,11 +447,12 @@ class VslamOdometry {
         return null;
     }
 
-    pushVslam(timestamp, jpeg_data, backend) {
+    pushVslam(timestamp, jpeg_data, keyframe, backend) {
         m_client.publish('picam360-vslam', JSON.stringify({
             "cmd": "track",
             "timestamp": `${timestamp}`,
             "jpeg_data": jpeg_data.toString("base64"),
+            "keyframe" : (keyframe || false),
             "backend": (backend || 0),
         }));
     }
@@ -467,8 +468,8 @@ class VslamOdometry {
         if(this.first_push){
             this.first_push = false;
 
-            //this.pushVslam(`${this.push_cur}`, jpeg_data, 1);
-            this.pushVslam(`${this.push_cur}`, jpeg_data, 0);
+            //this.pushVslam(`${this.push_cur}`, jpeg_data, false, 1);
+            this.pushVslam(`${this.push_cur}`, jpeg_data, true, 0);
             this.backend_pending++;
             this.last_pushVslam_cur = this.push_cur;
         }
@@ -485,8 +486,8 @@ class VslamOdometry {
             if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
                 console.log(`dr=${dr}, dh=${dh}`);
 
-                //this.pushVslam(`${this.push_cur}`, jpeg_data, (this.backend_pending % 10) == 0);
-                this.pushVslam(`${this.push_cur}`, jpeg_data, 0);
+                //this.pushVslam(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
+                this.pushVslam(`${this.push_cur}`, jpeg_data, false, 0);
                 this.backend_pending++;
                 this.last_pushVslam_cur = this.push_cur;
             }
