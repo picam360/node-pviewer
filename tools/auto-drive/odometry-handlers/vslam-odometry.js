@@ -373,14 +373,21 @@ class VslamOdometry {
                             this.active_points = active_points;
 
                             const update_gain = 0.1;
+                            const update_r_cutoff = 0.5;
+                            const update_h_cutoff = 1.0;
+
                             const kf_pos = this.getKeyframePosition();
                             const enc_pos = this.enc_positions[odom_cur];
                             const diff_x = kf_pos.x - enc_pos.x;
                             const diff_y = kf_pos.y - enc_pos.y;
-                            const diff_heading = kf_pos.heading - enc_pos.heading;
-                            this.enc_odom.encoder_params.x += diff_x * update_gain;
-                            this.enc_odom.encoder_params.y += diff_y * update_gain;
-                            this.enc_odom.encoder_params.heading += diff_heading * update_gain;
+                            const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
+                            const diff_h = kf_pos.heading - enc_pos.heading;
+                            const diff_h_abs = Math.abs(diff_h);
+                            const update_gain_r = Math.min(diff_r, update_r_cutoff) / Math.max(diff_r, 1e-3) * update_gain;
+                            const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
+                            this.enc_odom.encoder_params.x += diff_x * update_gain_r;
+                            this.enc_odom.encoder_params.y += diff_y * update_gain_r;
+                            this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
 
                             console.log("diff_x", diff_x);
                             console.log("diff_y", diff_y);
@@ -470,7 +477,7 @@ class VslamOdometry {
         if(this.first_push){
             this.first_push = false;
 
-            //this.pushVslam(`${this.push_cur}`, jpeg_data, false, 1);
+            //this.pushVslam(`${this.push_cur}`, jpeg_data, true, 1);
             this.pushVslam(`${this.push_cur}`, jpeg_data, true, 0);
             this.backend_pending++;
             this.last_pushVslam_cur = this.push_cur;
