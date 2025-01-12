@@ -428,9 +428,9 @@ class VslamOdometry {
                             console.log("diff_y", diff_y, diff_y * update_gain_r);
                             console.log("diff_h", diff_h, diff_h * update_gain_h);
 
-                            // if(this.options.transforms_callback){
-                            //     this.options.transforms_callback(this.vslam_waypoints, this.active_points);
-                            // }
+                            if(this.options.transforms_callback){
+                                this.options.transforms_callback(this.vslam_waypoints, this.active_points);
+                            }
 
                             if(true){//debug
                                 const nmea = this.enc_positions[odom_cur].nmea;
@@ -559,7 +559,7 @@ class VslamOdometry {
 
             const keys = Object.keys(this.vslam_waypoints);
             //this.requestTrack(`${this.push_cur}`, jpeg_data, true, 1);
-            const ref_timestamps = keys.slice(0, 4);
+            const ref_timestamps = keys.slice(0, 5);
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
             this.backend_pending++;
             this.last_pushVslam_cur = this.push_cur;
