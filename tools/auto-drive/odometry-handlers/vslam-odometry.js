@@ -14,6 +14,8 @@ const numeric = require('numeric');
 
 const { EncoderOdometry } = require('./encoder-odometry');
 
+const vslam_path = '/home/picam360/github/picam360-vslam';
+
 // Convert degrees to radians
 function degreesToRadians(degrees) {
     return degrees * (Math.PI / 180);
@@ -57,7 +59,6 @@ function getYawFromRotationMatrix(matrix) {
 function launchDockerContainer() {
     return;
 
-    const vslam_path = '/home/picam360/github/picam360-vslam';
     const vslam_process = spawn('python', [`${vslam_path}/vslam.py`], { cwd: path.resolve(vslam_path) });
     vslam_process.stdout.on('data', (data) => {
         console.log(`PICAM360_VSLAM STDOUT: ${data}`);
@@ -144,23 +145,30 @@ function createErrorFunction(vslam_waypoints, enc_waypoints, settings, types) {
         for(const i in types){
             settings[types[i]] = solving_params[i];
         }
-        const positions = JSON.parse(JSON.stringify(vslam_waypoints));
+        const vslam_positions = JSON.parse(JSON.stringify(vslam_waypoints));
+        const keys = Object.keys(vslam_positions);
+        const enc_positions = {};
+        for(const key of keys){
+            enc_positions[key] = Object.assign({}, enc_waypoints[key]);
+        }
 
-        const keys = Object.keys(positions);
-
-        scale_positions(positions, settings.scale);
-        aply_cam_offset(positions, {
+        scale_positions(vslam_positions, settings.scale);
+        aply_cam_offset(vslam_positions, {
             x : settings.cam_offset_x,
             y : settings.cam_offset_y,
         });
-        rotate_positions(positions, settings.heading_diff);
-        const base_position = Object.assign({}, positions[keys[0]]);
-        minus_offset_from_positions(positions, base_position);
+        rotate_positions(vslam_positions, settings.heading_diff);
+
+        const vslam_base = Object.assign({}, vslam_positions[keys[0]]);//need to be after aply_cam_offset
+        minus_offset_from_positions(vslam_positions, vslam_base);
+
+        const enc_base = Object.assign({}, enc_positions[keys[0]]);
+        minus_offset_from_positions(enc_positions, enc_base);
 
         let totalError = 0;
         for(const key of keys){
-            const error_X = (positions[key].x - enc_waypoints[key].x) ** 2;
-            const error_Y = (positions[key].y - enc_waypoints[key].y) ** 2;
+            const error_X = (vslam_positions[key].x - enc_positions[key].x) ** 2;
+            const error_Y = (vslam_positions[key].y - enc_positions[key].y) ** 2;
             totalError += error_X + error_Y;
         }
         
@@ -214,7 +222,7 @@ function cal_fitting_params(vslam_waypoints, enc_waypoints, settings){
     return settings;
 }
 
-function convert_transforms_to_positions(nodes, enc_waypoints){
+function convert_transforms_to_positions(nodes, _enc_waypoints){
     function convert_transform_to_pos(node){
         const heading = getYawFromRotationMatrix(node.transform) * 180 / Math.PI;
         return {
@@ -223,7 +231,8 @@ function convert_transforms_to_positions(nodes, enc_waypoints){
             heading : (heading + 180) % 360,//back camera
         };
     }
-    const keys = Object.keys(enc_waypoints);
+    const keys = Object.keys(_enc_waypoints);
+    const enc_waypoints = {};
     const vslam_waypoints = {};
     const active_points = {};
     for(const node of nodes){
@@ -231,6 +240,7 @@ function convert_transforms_to_positions(nodes, enc_waypoints){
         const cur = node['timestamp'];
         if(keys[cur] !== undefined){
             vslam_waypoints[keys[cur]] = convert_transform_to_pos(node);
+            enc_waypoints[keys[cur]] = Object.assign({}, _enc_waypoints[keys[cur]]);
         }else{
             active_points[node['timestamp']] = convert_transform_to_pos(node);
         }
@@ -262,8 +272,11 @@ function convert_transforms_to_positions(nodes, enc_waypoints){
         y : settings.cam_offset_y,
     });
     rotate_positions(vslam_waypoints, settings.heading_diff);
-    const base_position = Object.assign({}, vslam_waypoints[first_key]);
-    minus_offset_from_positions(vslam_waypoints, base_position);
+
+    const vslam_base = Object.assign({}, vslam_waypoints[first_key]);
+    minus_offset_from_positions(vslam_waypoints, vslam_base);
+    const enc_base = Object.assign({}, enc_waypoints[first_key]);
+    add_offset_from_positions(vslam_waypoints, enc_base);
 
     scale_positions(active_points, settings.scale);
     aply_cam_offset(active_points, {
@@ -271,7 +284,8 @@ function convert_transforms_to_positions(nodes, enc_waypoints){
         y : settings.cam_offset_y,
     });
     rotate_positions(active_points, settings.heading_diff);
-    minus_offset_from_positions(active_points, base_position);
+    minus_offset_from_positions(active_points, vslam_base);
+    add_offset_from_positions(active_points, enc_base);
 
     return {
         vslam_waypoints,
@@ -346,7 +360,7 @@ class VslamOdometry {
                     const params = JSON.parse(data);
 
                     if(!this.initialized){
-                        if(params['type'] == 'backend'){
+                        if(params['type'] == 'load' || params['type'] == 'backend'){
                             this.initialized = true;
                             this.current_odom = null;
                             this.push_cur = keys.length;
@@ -369,14 +383,13 @@ class VslamOdometry {
                             this.last_odom_cur = odom_cur;
 
                             const { vslam_waypoints, active_points } = convert_transforms_to_positions(params['transforms'], this.enc_waypoints);
-                            this.vslam_waypoints = vslam_waypoints;
-                            this.active_points = active_points;
+                            this.active_points = Object.assign(this.active_points, active_points);
 
                             const update_gain = 0.1;
                             const update_r_cutoff = 0.5;
                             const update_h_cutoff = 1.0;
 
-                            const kf_pos = this.getKeyframePosition();
+                            const kf_pos = this.active_points[odom_cur];
                             const enc_pos = this.enc_positions[odom_cur];
                             const diff_x = kf_pos.x - enc_pos.x;
                             const diff_y = kf_pos.y - enc_pos.y;
@@ -387,62 +400,94 @@ class VslamOdometry {
                             const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
                             this.enc_odom.encoder_params.x += diff_x * update_gain_r;
                             this.enc_odom.encoder_params.y += diff_y * update_gain_r;
-                            this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
+                            //this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
 
                             console.log("diff_x", diff_x);
                             console.log("diff_y", diff_y);
-                            console.log("diff_heading", diff_heading);
+                            console.log("diff_h", diff_h);
 
-                            if(this.options.transforms_callback){
-                                this.options.transforms_callback(this.vslam_waypoints, this.active_points);
+                            // if(this.options.transforms_callback){
+                            //     this.options.transforms_callback(this.vslam_waypoints, this.active_points);
+                            // }
+
+                            if(true){//debug
+                                const nmea = this.enc_positions[odom_cur].nmea;
+                                for(const key in this.waypoints){
+                                    if(this.waypoints[key].nmea == nmea){
+                                        const enc_pos2 = this.enc_waypoints[key];
+                                        const kf_pos2 = vslam_waypoints[key];
+                                        console.log("diff", key, {
+                                            kf_pos,
+                                            enc_pos,
+                                            kf_pos2,
+                                            enc_pos2,
+                                        });
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
                 });
 
-                //let ref_cur = keys.length - 1;//reverse
-                let ref_cur = 0;
+                const filename = "waypoints.data";
+                const data_path = `${vslam_path}/reconstructions/${filename}`;
+				if (fs.existsSync(data_path)) {
+                    m_client.publish('picam360-vslam', JSON.stringify({
+                        "cmd": "load",
+                        "filename": filename,
+                    }));
+                }else{ //reconstruct
 
-                for (let i = 0; i < keys.length; i++) {
-                    //const cur = keys.length - 1 - i;//reverse
-                    const cur = i;
-                    const pos = this.enc_waypoints[cur];
-                    let is_keyframe = false;
-                    if (cur == 0 || cur == keys.length - 1) {
-                        is_keyframe = true;
-                    } else {
-                        const ref_pos = this.enc_waypoints[ref_cur];
-                        const dx = pos.x - ref_pos.x;
-                        const dy = pos.y - ref_pos.y;
-                        const dh = pos.heading - ref_pos.heading;
-                        const dr = Math.sqrt(dx * dx + dy * dy);
-                        if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
-                            console.log(`dr=${dr}, dh=${dh}`);
+                    //let ref_cur = keys.length - 1;//reverse
+                    let ref_cur = 0;
+    
+                    for (let i = 0; i < keys.length; i++) {
+                        //const cur = keys.length - 1 - i;//reverse
+                        const cur = i;
+                        const pos = this.enc_waypoints[cur];
+                        let is_keyframe = false;
+                        if (cur == 0 || cur == keys.length - 1) {
                             is_keyframe = true;
+                        } else {
+                            const ref_pos = this.enc_waypoints[ref_cur];
+                            const dx = pos.x - ref_pos.x;
+                            const dy = pos.y - ref_pos.y;
+                            const dh = pos.heading - ref_pos.heading;
+                            const dr = Math.sqrt(dx * dx + dy * dy);
+                            if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
+                                console.log(`dr=${dr}, dh=${dh}`);
+                                is_keyframe = true;
+                            }
                         }
+    
+                        if (!is_keyframe) {
+                            continue;
+                        }
+    
+                        const waypoint = waypoints[keys[cur]];
+                        const jpeg_filepath = waypoint.jpeg_filepath;
+                        const jpeg_data = fs.readFileSync(jpeg_filepath);
+                        //this.requestTrack(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
+                        this.requestTrack(`${i}`, jpeg_data, true);
+    
+                        console.log(`timestamp ${i} : ${jpeg_filepath}`);
+    
+                        ref_cur = cur;
                     }
-
-                    if (!is_keyframe) {
-                        continue;
-                    }
-
-                    const waypoint = waypoints[keys[cur]];
-                    const jpeg_filepath = waypoint.jpeg_filepath;
-                    const jpeg_data = fs.readFileSync(jpeg_filepath);
-                    this.pushVslam(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
-
-                    console.log(`timestamp ${i} : ${jpeg_filepath}`);
-
-                    ref_cur = cur;
+    
+                    m_client.publish('picam360-vslam', JSON.stringify({
+                        "cmd": "backend",
+                        "itr": 8,
+                    }));
+                    m_client.publish('picam360-vslam', JSON.stringify({
+                        "cmd": "save",
+                        "filename": filename,
+                    }));
+                    m_client.publish('picam360-vslam', JSON.stringify({
+                        "cmd": "reset_pos",
+                    }));
                 }
-
-                m_client.publish('picam360-vslam', JSON.stringify({
-                    "cmd": "backend",
-                    "itr": 1,
-                }));
-                m_client.publish('picam360-vslam', JSON.stringify({
-                    "cmd": "reset_pos",
-                }));
             });
 
         });
@@ -456,13 +501,23 @@ class VslamOdometry {
         return null;
     }
 
-    pushVslam(timestamp, jpeg_data, keyframe, backend) {
+    requestTrack(timestamp, jpeg_data, keyframe, backend) {
         m_client.publish('picam360-vslam', JSON.stringify({
             "cmd": "track",
             "timestamp": `${timestamp}`,
             "jpeg_data": jpeg_data.toString("base64"),
             "keyframe" : (keyframe || false),
             "backend": (backend || 0),
+        }));
+    }
+
+    requestEstimation(timestamps, timestamp, jpeg_data, itr) {
+        m_client.publish('picam360-vslam', JSON.stringify({
+            "cmd": "estimate",
+            "timestamps": timestamps,
+            "timestamp": `${timestamp}`,
+            "jpeg_data": jpeg_data.toString("base64"),
+            "itr": (itr || 1),
         }));
     }
 
@@ -473,14 +528,21 @@ class VslamOdometry {
     push(header, meta, jpeg_data) {
         this.enc_odom.push(header, meta, jpeg_data);
         this.enc_positions[this.push_cur] = this.enc_odom.getPosition();
+        
+        const frame_dom = xml_parser.parse(meta);
+        this.enc_positions[this.push_cur].nmea = frame_dom['picam360:frame']['passthrough:nmea'];
 
         if(this.first_push){
             this.first_push = false;
 
-            //this.pushVslam(`${this.push_cur}`, jpeg_data, true, 1);
-            this.pushVslam(`${this.push_cur}`, jpeg_data, true, 0);
+            const keys = Object.keys(this.vslam_waypoints);
+            //this.requestTrack(`${this.push_cur}`, jpeg_data, true, 1);
+            const ref_timestamps = keys.slice(0, 4);
+            this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
             this.backend_pending++;
             this.last_pushVslam_cur = this.push_cur;
+        }else if(this.current_odom == null){
+            return;
         }
 
         {
@@ -494,98 +556,62 @@ class VslamOdometry {
             const dh = pos.heading;
             if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
                 console.log(`dr=${dr}, dh=${dh}`);
+        
+                const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
+                const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 2);
 
-                //this.pushVslam(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
-                this.pushVslam(`${this.push_cur}`, jpeg_data, false, 0);
+                console.log("diff", ref_timestamps);
+        
+                //this.requestTrack(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
+                this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
                 this.backend_pending++;
                 this.last_pushVslam_cur = this.push_cur;
+
+                this.enc_positions[this.push_cur].keyframe = true;
             }
         }
 
         this.push_cur++;
     }
 
-    getKeyframePosition() {
-
-        function findClosestWaypoint(point, waypoints) {
-            let closestKey = null;
-            let minDistance = Infinity;
-            const calculateDistance = (p1, p2) => {
-                const dx = p1.x - p2.x;
-                const dy = p1.y - p2.y;
-                return Math.sqrt(dx * dx + dy * dy);
-            };
-            for (const [key, waypoint] of Object.entries(waypoints)) {
-                const distance = calculateDistance(point, waypoint);
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestKey = key;
-                }
-            }
-        
-            return closestKey;
-        }
-        
-        function getSurroundingKeys(keys, centerKey, range = 5) {
-            const centerIndex = keys.indexOf(centerKey);
-        
-            if (centerIndex === -1) {
-                throw new Error("Center key not found in keys array.");
-            }
-        
-            const totalKeys = keys.length;
-            const startIndex = Math.max(0, centerIndex - range); // 前方の開始インデックス
-            const endIndex = Math.min(totalKeys, centerIndex + range + 1); // 後方の終了インデックス（+1はslice用）
-        
-            // 前後の範囲を考慮して不足分を調整
-            const preKeys = centerIndex - startIndex; // 前方に取れたキー数
-            const postKeys = endIndex - centerIndex - 1; // 後方に取れたキー数
-        
-            const adjustStartIndex = Math.max(0, startIndex - (range - postKeys)); // 後方不足分を前方に補う
-            const adjustEndIndex = Math.min(totalKeys, endIndex + (range - preKeys)); // 前方不足分を後方に補う
-        
-            return keys.slice(adjustStartIndex, adjustEndIndex);
-        }
-
-        const vslam_pos = Object.assign({}, this.active_points[this.current_odom['timestamp']]);
-        
-        const center_key = findClosestWaypoint(vslam_pos, this.vslam_waypoints);
-        const keys = getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
-
-        const vslam_waypoints = {};
-        const enc_waypoints = {};
-        for(const key of keys){
-            vslam_waypoints[key] = Object.assign({}, this.vslam_waypoints[key]);
-            enc_waypoints[key] = Object.assign({}, this.enc_waypoints[key]);
-        }
-
-        const vslam_base_position = Object.assign({}, vslam_waypoints[keys[0]]);
-        minus_offset_from_positions(vslam_waypoints, vslam_base_position);
-        minus_offset_from_positions({ "keyframe" : vslam_pos }, vslam_base_position);
-
-        const enc_base_position = Object.assign({}, enc_waypoints[keys[0]]);
-        minus_offset_from_positions(enc_waypoints, enc_base_position);
-
-        const settings = {
-            scale : 1.0,
-            heading_diff : 0.0,
+    findClosestWaypoint(point, waypoints) {
+        let closestKey = null;
+        let minDistance = Infinity;
+        const calculateDistance = (p1, p2) => {
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            return Math.sqrt(dx * dx + dy * dy);
         };
-        cal_fitting_params(vslam_waypoints, enc_waypoints, settings);
-
-        vslam_waypoints["keyframe"] = vslam_pos;
-        scale_positions(vslam_waypoints, settings.scale);
-        rotate_positions(vslam_waypoints, settings.heading_diff);
-        add_offset_from_positions(vslam_waypoints, enc_base_position);
-
-        let heading_error = 0.0;
-        for(const key of keys){
-            heading_error += enc_waypoints[key].heading - vslam_waypoints[key].heading;
+        for (const [key, waypoint] of Object.entries(waypoints)) {
+            const distance = calculateDistance(point, waypoint);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestKey = key;
+            }
         }
-        heading_error /= keys.length;
-        
-        vslam_pos.heading += heading_error;
-
-        return vslam_pos;
+    
+        return closestKey;
+    }
+    
+    getSurroundingKeys(keys, centerKey, range = 5) {
+        const centerIndex = keys.indexOf(centerKey);
+    
+        if (centerIndex === -1) {
+            throw new Error("Center key not found in keys array.");
+        }
+    
+        const totalKeys = keys.length;
+        const startIndex = Math.max(0, centerIndex - range); // 前方の開始インデックス
+        const endIndex = Math.min(totalKeys, centerIndex + range + 1); // 後方の終了インデックス（+1はslice用）
+    
+        // 前後の範囲を考慮して不足分を調整
+        const preKeys = centerIndex - startIndex; // 前方に取れたキー数
+        const postKeys = endIndex - centerIndex - 1; // 後方に取れたキー数
+    
+        const adjustStartIndex = Math.max(0, startIndex - (range - postKeys)); // 後方不足分を前方に補う
+        const adjustEndIndex = Math.min(totalKeys, endIndex + (range - preKeys)); // 前方不足分を後方に補う
+    
+        return keys.slice(adjustStartIndex, adjustEndIndex);
     }
 
     getPosition() {
