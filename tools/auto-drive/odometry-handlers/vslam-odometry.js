@@ -57,9 +57,12 @@ function getYawFromRotationMatrix(matrix) {
 }
 
 function launchDockerContainer() {
-    return;
-
-    const vslam_process = spawn('python', [`${vslam_path}/vslam.py`], { cwd: path.resolve(vslam_path) });
+    const command = `
+        source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
+        conda activate droidslam && \
+        python ${vslam_path}/vslam.py --disable_vis
+    `;
+    const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vslam_path) });
     vslam_process.stdout.on('data', (data) => {
         console.log(`PICAM360_VSLAM STDOUT: ${data}`);
     });
@@ -73,8 +76,6 @@ function launchDockerContainer() {
     });
 }
 function killDockerContainer() {
-    return;
-
     const processName = "picam360-vslam"; // プロセス名を指定
 
     try {
@@ -452,66 +453,67 @@ class VslamOdometry {
                     }
                 });
 
-                const filename = "waypoints.data";
-                const data_path = `${vslam_path}/reconstructions/${filename}`;
-				if (fs.existsSync(data_path)) {
-                    m_client.publish('picam360-vslam', JSON.stringify({
-                        "cmd": "load",
-                        "filename": filename,
-                    }));
-                }else{ //reconstruct
+                setTimeout(() => {
+                    const filename = "waypoints.data";
+                    const data_path = `${vslam_path}/reconstructions/${filename}`;
+                    if (fs.existsSync(data_path)) {
+                        m_client.publish('picam360-vslam', JSON.stringify({
+                            "cmd": "load",
+                            "filename": filename,
+                        }));
+                    }else{ //reconstruct
 
-                    //let ref_cur = keys.length - 1;//reverse
-                    let ref_cur = 0;
-    
-                    for (let i = 0; i < keys.length; i++) {
-                        //const cur = keys.length - 1 - i;//reverse
-                        const cur = i;
-                        const pos = this.enc_waypoints[cur];
-                        let is_keyframe = false;
-                        if (cur == 0 || cur == keys.length - 1) {
-                            is_keyframe = true;
-                        } else {
-                            const ref_pos = this.enc_waypoints[ref_cur];
-                            const dx = pos.x - ref_pos.x;
-                            const dy = pos.y - ref_pos.y;
-                            const dh = pos.heading - ref_pos.heading;
-                            const dr = Math.sqrt(dx * dx + dy * dy);
-                            if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
-                                console.log(`dr=${dr}, dh=${dh}`);
+                        //let ref_cur = keys.length - 1;//reverse
+                        let ref_cur = 0;
+        
+                        for (let i = 0; i < keys.length; i++) {
+                            //const cur = keys.length - 1 - i;//reverse
+                            const cur = i;
+                            const pos = this.enc_waypoints[cur];
+                            let is_keyframe = false;
+                            if (cur == 0 || cur == keys.length - 1) {
                                 is_keyframe = true;
+                            } else {
+                                const ref_pos = this.enc_waypoints[ref_cur];
+                                const dx = pos.x - ref_pos.x;
+                                const dy = pos.y - ref_pos.y;
+                                const dh = pos.heading - ref_pos.heading;
+                                const dr = Math.sqrt(dx * dx + dy * dy);
+                                if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
+                                    console.log(`dr=${dr}, dh=${dh}`);
+                                    is_keyframe = true;
+                                }
                             }
+        
+                            if (!is_keyframe) {
+                                continue;
+                            }
+        
+                            const waypoint = waypoints[keys[cur]];
+                            const jpeg_filepath = waypoint.jpeg_filepath;
+                            const jpeg_data = fs.readFileSync(jpeg_filepath);
+                            //this.requestTrack(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
+                            this.requestTrack(`${i}`, jpeg_data, true);
+        
+                            console.log(`timestamp ${i} : ${jpeg_filepath}`);
+        
+                            ref_cur = cur;
                         }
-    
-                        if (!is_keyframe) {
-                            continue;
-                        }
-    
-                        const waypoint = waypoints[keys[cur]];
-                        const jpeg_filepath = waypoint.jpeg_filepath;
-                        const jpeg_data = fs.readFileSync(jpeg_filepath);
-                        //this.requestTrack(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
-                        this.requestTrack(`${i}`, jpeg_data, true);
-    
-                        console.log(`timestamp ${i} : ${jpeg_filepath}`);
-    
-                        ref_cur = cur;
+        
+                        m_client.publish('picam360-vslam', JSON.stringify({
+                            "cmd": "backend",
+                            "itr": 8,
+                        }));
+                        m_client.publish('picam360-vslam', JSON.stringify({
+                            "cmd": "save",
+                            "filename": filename,
+                        }));
+                        m_client.publish('picam360-vslam', JSON.stringify({
+                            "cmd": "reset_pos",
+                        }));
                     }
-    
-                    m_client.publish('picam360-vslam', JSON.stringify({
-                        "cmd": "backend",
-                        "itr": 8,
-                    }));
-                    m_client.publish('picam360-vslam', JSON.stringify({
-                        "cmd": "save",
-                        "filename": filename,
-                    }));
-                    m_client.publish('picam360-vslam', JSON.stringify({
-                        "cmd": "reset_pos",
-                    }));
-                }
+                }, 5000);
             });
-
         });
     }
 
