@@ -379,7 +379,7 @@ class VslamOdometry {
                 console.log('redis connected:');
 
                 subscriber.subscribe('picam360-vslam-odom', (data, key) => {
-                    console.log(data);
+                    //console.log(data);
                     const params = JSON.parse(data);
 
                     if(!this.initialized){
@@ -433,7 +433,7 @@ class VslamOdometry {
                                 this.options.transforms_callback(this.vslam_waypoints, this.active_points);
                             }
 
-                            if(true){//debug
+                            if(false){//debug
                                 const nmea = this.enc_positions[odom_cur].nmea;
                                 for(const key in this.waypoints){
                                     if(this.waypoints[key].nmea == nmea){
@@ -579,12 +579,12 @@ class VslamOdometry {
             const dr = Math.sqrt(pos.x*pos.x + pos.y*pos.y);
             const dh = pos.heading;
             if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
-                console.log(`dr=${dr}, dh=${dh}`);
+                console.log("requestEstimation", `dr=${dr}, dh=${dh}`);
         
                 const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
                 const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
 
-                console.log("diff", ref_timestamps);
+                console.log("requestEstimation", ref_timestamps);
         
                 //this.requestTrack(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
                 this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
