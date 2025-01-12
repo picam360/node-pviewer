@@ -424,9 +424,9 @@ class VslamOdometry {
                             this.enc_odom.encoder_params.y += diff_y * update_gain_r;
                             this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
 
-                            console.log("diff_x", diff_x);
-                            console.log("diff_y", diff_y);
-                            console.log("diff_h", diff_h);
+                            console.log("diff_x", diff_x, diff_x * update_gain_r);
+                            console.log("diff_y", diff_y, diff_y * update_gain_r);
+                            console.log("diff_h", diff_h, diff_h * update_gain_h);
 
                             // if(this.options.transforms_callback){
                             //     this.options.transforms_callback(this.vslam_waypoints, this.active_points);
