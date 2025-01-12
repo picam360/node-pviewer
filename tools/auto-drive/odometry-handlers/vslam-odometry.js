@@ -123,10 +123,18 @@ function scale_positions(positions, scale){
 }
 function aply_cam_offset(positions, cam_offset){
     for(const key of Object.keys(positions)){
+        positions[key].heading += cam_offset.heading;
         const offset = rotate_vec(cam_offset, positions[key].heading);
         positions[key].x += offset.x;
         positions[key].y += offset.y;
     }
+}
+function formay_angle_180(angle){
+    angle = (angle % 360);
+    if(angle > 180){
+        angle -= 360;
+    }
+    return angle;
 }
 function minus_offset_from_positions(positions, offset){
     for(const key of Object.keys(positions)){
@@ -135,6 +143,12 @@ function minus_offset_from_positions(positions, offset){
     }
 }
 function add_offset_from_positions(positions, offset){
+    for(const key of Object.keys(positions)){
+        positions[key].x += offset.x;
+        positions[key].y += offset.y;
+    }
+}
+function cal_camera_heading_offset(vslam_positions, enc_positions){
     for(const key of Object.keys(positions)){
         positions[key].x += offset.x;
         positions[key].y += offset.y;
@@ -156,6 +170,7 @@ function createErrorFunction(vslam_waypoints, enc_waypoints, settings, types) {
         aply_cam_offset(vslam_positions, {
             x : settings.cam_offset_x,
             y : settings.cam_offset_y,
+            heading : settings.cam_offset_heading,
         });
         rotate_positions(vslam_positions, settings.heading_diff);
 
@@ -201,15 +216,18 @@ function cal_fitting_params(vslam_waypoints, enc_waypoints, settings){
         last_enc_position.y - first_enc_position.y) * 180 / Math.PI;//from y axis
 
     const heading_diff = (enc_heading - vslam_heading) % 360;
-    // const first_heading_diff = first_enc_position.heading - first_vslam_position.heading;
-    // const last_heading_diff = last_enc_position.heading - last_vslam_position.heading;
-    // const heading_diff = (first_heading_diff + last_heading_diff) / 2;
+
+    const first_heading_diff = first_enc_position.heading - first_vslam_position.heading;
+    const last_heading_diff = last_enc_position.heading - last_vslam_position.heading;
+    const cam_offset_heading = (first_heading_diff + last_heading_diff) / 2 - heading_diff;
+    console.log("cam_offset_heading estimation", cam_offset_heading);
 
     settings = settings || {};
     settings.scale = scale;
     settings.heading_diff = heading_diff;
     settings.cam_offset_x = settings.cam_offset_x || 0.0;
     settings.cam_offset_y = settings.cam_offset_y || 0.0;
+    settings.cam_offset_heading = settings.cam_offset_heading || 0.0;
     
     let result = numeric.uncmin(
         createErrorFunction(vslam_waypoints, enc_waypoints, settings, ["scale", "heading_diff"]),
@@ -251,6 +269,7 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
         heading_diff : 0.0,
         cam_offset_x : VslamOdometry.settings.cam_offset.x,
         cam_offset_y : VslamOdometry.settings.cam_offset.y,
+        cam_offset_heading : VslamOdometry.settings.cam_offset.heading,
     };
     cal_fitting_params(vslam_waypoints, enc_waypoints, settings);
 
@@ -270,11 +289,12 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
     aply_cam_offset(vslam_waypoints, {
         x : settings.cam_offset_x,
         y : settings.cam_offset_y,
+        heading : settings.cam_offset_heading,
     });
     rotate_positions(vslam_waypoints, settings.heading_diff);
 
     const vslam_base = Object.assign({}, vslam_waypoints[first_key]);
-    minus_offset_from_positions(vslam_waypoints, vslam_base);
+    minus_offset_from_positions(vslam_waypoints, vslam_base);//need to be after aply_cam_offset
     const enc_base = Object.assign({}, enc_waypoints[first_key]);
     add_offset_from_positions(vslam_waypoints, enc_base);
 
@@ -282,9 +302,10 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
     aply_cam_offset(active_points, {
         x : settings.cam_offset_x,
         y : settings.cam_offset_y,
+        heading : settings.cam_offset_heading,
     });
     rotate_positions(active_points, settings.heading_diff);
-    minus_offset_from_positions(active_points, vslam_base);
+    minus_offset_from_positions(active_points, vslam_base);//need to be after aply_cam_offset
     add_offset_from_positions(active_points, enc_base);
 
     return {
@@ -299,6 +320,7 @@ class VslamOdometry {
             x : 0.0,
             y : 2.2,
             //y : 2.228590172834311,
+            heading : -8.5,
         },
         dr_threashold : 1,
         dh_threashold : 5,
@@ -394,13 +416,13 @@ class VslamOdometry {
                             const diff_x = kf_pos.x - enc_pos.x;
                             const diff_y = kf_pos.y - enc_pos.y;
                             const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
-                            const diff_h = kf_pos.heading - enc_pos.heading;
+                            const diff_h = formay_angle_180(kf_pos.heading - enc_pos.heading);
                             const diff_h_abs = Math.abs(diff_h);
                             const update_gain_r = Math.min(diff_r, update_r_cutoff) / Math.max(diff_r, 1e-3) * update_gain;
                             const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
                             this.enc_odom.encoder_params.x += diff_x * update_gain_r;
                             this.enc_odom.encoder_params.y += diff_y * update_gain_r;
-                            //this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
+                            this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
 
                             console.log("diff_x", diff_x);
                             console.log("diff_y", diff_y);
@@ -558,7 +580,7 @@ class VslamOdometry {
                 console.log(`dr=${dr}, dh=${dh}`);
         
                 const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
-                const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 2);
+                const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
 
                 console.log("diff", ref_timestamps);
         
