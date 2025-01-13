@@ -282,6 +282,9 @@ class EncoderOdometry {
         }
     }
 
+    deinit() {
+    }
+
     is_ready() {
         return true;
     }

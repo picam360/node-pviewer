@@ -566,6 +566,10 @@ function command_handler(cmd) {
 								build_odometry_handler(cur + 1);
 							}
 						};
+						if(m_odometry_conf[key].handler){
+							m_odometry_conf[key].handler.deinit();
+							m_odometry_conf[key].handler = null;
+						}
 						if(!m_odometry_conf[key].enabled){
 							next_cb();
 							return;
@@ -582,6 +586,7 @@ function command_handler(cmd) {
 							case ODOMETRY_TYPE.VSLAM:
 								const vslam_odometry = require('./odometry-handlers/vslam-odometry');
 								m_odometry_conf[key].handler = new vslam_odometry.VslamOdometry({
+									reverse : m_options.reverse,
 									host : m_argv.host,
 									transforms_callback : (vslam_waypoints, active_points) => {
 										msg["VSLAM"] = vslam_waypoints;

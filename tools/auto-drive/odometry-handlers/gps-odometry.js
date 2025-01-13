@@ -71,6 +71,9 @@ class GpsOdometry {
         }
     }
 
+    deinit() {
+    }
+
     is_ready() {
         return true;
     }
