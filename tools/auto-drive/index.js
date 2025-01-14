@@ -36,6 +36,7 @@ const ODOMETRY_TYPE = {
 };
 let m_odometry_conf = {
 	odom_type : ODOMETRY_TYPE.VSLAM,
+//	odom_type : ODOMETRY_TYPE.ENCODER,
 	GPS : {
 		enabled : true
 	},
@@ -279,7 +280,7 @@ function auto_drive_handler(tmp_img){
 		let headingError = m_odometry_conf[m_odometry_conf.odom_type].headingError;
 
 		let tolerance_distance = 1.0;
-		let tolerance_heading = (m_auto_drive_heading_tuning ? 20 : 30);
+		let tolerance_heading = (m_auto_drive_heading_tuning ? 999 : 999);
 		if(cur == keys.length - 1){
 			tolerance_distance = 0.5;
 			// switch(m_auto_drive_last_state){
@@ -587,7 +588,7 @@ function command_handler(cmd) {
 								const vslam_odometry = require('./odometry-handlers/vslam-odometry');
 								m_odometry_conf[key].handler = new vslam_odometry.VslamOdometry({
 									reverse : m_options.reverse,
-									host : m_argv.host,
+									//host : m_argv.host,
 									transforms_callback : (vslam_waypoints, active_points) => {
 										msg["VSLAM"] = vslam_waypoints;
 										msg["VSLAM_ACTIVE"] = active_points;
@@ -605,12 +606,17 @@ function command_handler(cmd) {
 			}
 			break;
 		case "STOP_AUTO":
+			stop_robot();
+			setTimeout(() => {
+				stop_robot();
+			}, 1000)
 			m_drive_mode = "STANBY";
 			console.log("drive mode", m_drive_mode);
 			break;
 	}
 }
 function push_nmea(nmea){
+return;
 	if(!m_last_nmea){
 		m_last_nmea = m_averaging_nmea;
 		return;

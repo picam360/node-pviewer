@@ -314,10 +314,13 @@ class VslamOdometry {
             x : 0.0,
             y : 2.2,
             //y : 2.228590172834311,
-            heading : -8.5,
+            heading : 0,
+//            heading : -8.5,
         },
-        dr_threashold : 1,
-        dh_threashold : 5,
+        dr_threashold_waypoint : 2.0,
+        dh_threashold_waypoint : 10,
+        dr_threashold : 1.0,
+        dh_threashold : 10,
 
         launch_vslam : true,
         calib_enabled : false,
@@ -409,8 +412,8 @@ class VslamOdometry {
                             this.active_points = Object.assign(this.active_points, active_points);
 
                             const update_gain = 0.3;
-                            const update_r_cutoff = 0.5;
-                            const update_h_cutoff = 0.5;
+                            const update_r_cutoff = 1.0;
+                            const update_h_cutoff = 0.25;
 
                             const kf_pos = this.active_points[odom_cur];
                             const enc_pos = this.enc_positions[odom_cur];
@@ -472,7 +475,7 @@ class VslamOdometry {
                                 const dy = pos.y - ref_pos.y;
                                 const dh = pos.heading - ref_pos.heading;
                                 const dr = Math.sqrt(dx * dx + dy * dy);
-                                if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
+                                if (dr > VslamOdometry.settings.dr_threashold_waypoint || Math.abs(dh) > VslamOdometry.settings.dh_threashold_waypoint) {
                                     console.log(`dr=${dr}, dh=${dh}`);
                                     is_keyframe = true;
                                 }
