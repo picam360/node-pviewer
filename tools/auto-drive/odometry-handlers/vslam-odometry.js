@@ -412,8 +412,8 @@ class VslamOdometry {
                             this.active_points = Object.assign(this.active_points, active_points);
 
                             const update_gain = 0.3;
-                            const update_r_cutoff = 1.0;
-                            const update_h_cutoff = 0.25;
+                            const update_r_cutoff = 2.0;
+                            const update_h_cutoff = 2.0;
 
                             const kf_pos = this.active_points[odom_cur];
                             const enc_pos = this.enc_positions[odom_cur];

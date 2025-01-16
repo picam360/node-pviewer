@@ -292,7 +292,11 @@ class EncoderOdometry {
     push(header, meta, jpeg_data) {
         const frame_dom = xml_parser.parse(meta);
         this.current_nmea = nmea.parseNmeaSentence(frame_dom['picam360:frame']['passthrough:nmea']);
-        this.current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
+        if(frame_dom['picam360:frame']['passthrough:imu']){
+            this.current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
+        }else{
+            this.current_imu = {heading : 0};
+        }
         this.current_encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
 
         if(this.encoder_params.last_left_counts === null){

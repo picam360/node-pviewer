@@ -165,14 +165,22 @@ function move_robot(distance) {
 }
 
 function move_pwm_robot(distance, angle) {
+
 	const max = 5;
+	const gain = 0.03;
 	if(distance > 0){
-		const left_pwd = 50 - Math.floor(Math.min(max, angle < 0 ? max * Math.abs(angle) / 10 : 0));
-		const right_pwd = 50 - Math.floor(Math.min(max, angle > 0 ? max * Math.abs(angle) / 10 : 0));
+		const left_minus = Math.min(max, angle < 0 ? max * Math.abs(angle) * gain : 0);
+		const right_minus = Math.min(max, angle > 0 ? max * Math.abs(angle) * gain : 0);
+		const left_pwd = 45 - Math.round(left_minus);
+		const right_pwd = 45 - Math.round(right_minus);
+		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd} ${right_pwd}`);
 	}else{
-		const left_pwd = 45 - Math.floor(Math.min(max, angle > 0 ? max * Math.abs(angle) / 10 : 0));
-		const right_pwd = 45 - Math.floor(Math.min(max, angle < 0 ? max * Math.abs(angle) / 10 : 0));
+		const left_minus = Math.min(max, angle > 0 ? max * Math.abs(angle) * gain : 0);
+		const right_minus = Math.min(max, angle < 0 ? max * Math.abs(angle) * gain : 0);
+		const left_pwd = 41 - Math.round(left_minus);
+		const right_pwd = 41 - Math.round(right_minus);
+		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd} ${right_pwd}`);
 	}
 }
@@ -279,7 +287,7 @@ function auto_drive_handler(tmp_img){
 		let distanceToTarget = m_odometry_conf[m_odometry_conf.odom_type].distanceToTarget;
 		let headingError = m_odometry_conf[m_odometry_conf.odom_type].headingError;
 
-		let tolerance_distance = 1.0;
+		let tolerance_distance = 2.0;
 		let tolerance_heading = (m_auto_drive_heading_tuning ? 999 : 999);
 		if(cur == keys.length - 1){
 			tolerance_distance = 0.5;
