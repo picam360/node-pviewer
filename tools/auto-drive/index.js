@@ -165,21 +165,25 @@ function move_robot(distance) {
 }
 
 function move_pwm_robot(distance, angle) {
+	//const forward_pwm_base = 50;
+	//const backward_pwm_base = 46;
 
-	const max = 5;
+	const forward_pwm_base = 45;
+	const backward_pwm_base = 42;
+	const max = 10;
 	const gain = 0.03;
 	if(distance > 0){
 		const left_minus = Math.min(max, angle < 0 ? max * Math.abs(angle) * gain : 0);
 		const right_minus = Math.min(max, angle > 0 ? max * Math.abs(angle) * gain : 0);
-		const left_pwd = 45 - Math.round(left_minus);
-		const right_pwd = 45 - Math.round(right_minus);
+		const left_pwd = forward_pwm_base - Math.round(left_minus);
+		const right_pwd = forward_pwm_base - Math.round(right_minus);
 		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd} ${right_pwd}`);
 	}else{
 		const left_minus = Math.min(max, angle > 0 ? max * Math.abs(angle) * gain : 0);
 		const right_minus = Math.min(max, angle < 0 ? max * Math.abs(angle) * gain : 0);
-		const left_pwd = 41 - Math.round(left_minus);
-		const right_pwd = 41 - Math.round(right_minus);
+		const left_pwd = backward_pwm_base - Math.round(left_minus);
+		const right_pwd = backward_pwm_base - Math.round(right_minus);
 		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd} ${right_pwd}`);
 	}
