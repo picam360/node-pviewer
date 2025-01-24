@@ -12,6 +12,7 @@ const xml_parser = new fxp.XMLParser({
 	attributeNamePrefix: "",
 });
 const pif_utils = require('./pif-utils');
+const jsonc = require('jsonc-parser');
 
 const { GpsOdometry } = require('./odometry-handlers/gps-odometry');
 const { EncoderOdometry } = require('./odometry-handlers/encoder-odometry');
@@ -397,6 +398,11 @@ function auto_drive_handler(tmp_img){
 
 function main() {
     const argv = yargs
+		.option('config', {
+			alias: 'c',
+			type: 'string',
+			description: 'config path',
+		})
         .option('dir', {
             alias: 'd',
             type: 'string',
@@ -423,11 +429,25 @@ function main() {
 	const port = argv.port;
 	m_argv = argv;
 
+	if(argv.config !== undefined){
+		const json_str = fs.readFileSync(argv.config, 'utf-8');
+		Object.assign(m_options, jsonc.parse(json_str));
+	}
 	if(argv.dir !== undefined){
 		m_options.data_filepath = argv.dir;
 	}
 	if(argv.reverse !== undefined){
 		m_options.reverse = argv.reverse;
+	}
+
+	if(m_options.gps_odom){
+		Object.assign(GpsOdometry.settings, m_options.gps_odom);
+	}
+	if(m_options.encoder_odom){
+		Object.assign(EncoderOdometry.settings, m_options.encoder_odom);
+	}
+	if(m_options.vslam_odom){
+		Object.assign(VslamOdometry.settings, m_options.vslam_odom);
 	}
 
     const redis = require('redis');

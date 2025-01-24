@@ -1,0 +1,15 @@
+{
+    "gps_odom" : {
+
+    },
+    "encoder_odom" : {
+
+    },
+    "vslam_odom" : {
+
+    },
+	"waypoint_threshold_m" : 10,
+	"data_filepath" : "auto-drive-waypoints",
+	"reverse" : false,
+    "debug" : 0
+}

@@ -55,6 +55,8 @@ function toWebMercator(lat, lon) {
 }
 
 class GpsOdometry {
+    static settings = {
+    };
     constructor() {
         this.waypoints = null;
         this.gps_waypoints = null;

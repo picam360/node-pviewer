@@ -1,0 +1,19 @@
+##regist service
+#bash setup_service.sh /path/to/config.json
+
+[Unit]
+Description = auto-drive daemon
+
+[Service]
+# wait for EglDisplay ready
+#ExecStartPre = /bin/sleep 10
+ExecStart = /usr/bin/auto-drive -c @CONFIG_PATH@
+
+Environment="DISPLAY=:0"
+
+Restart = always
+RestartSec = 3
+Type = simple
+
+[Install]
+WantedBy = multi-user.target

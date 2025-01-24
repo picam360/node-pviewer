@@ -14,11 +14,6 @@ const numeric = require('numeric');
 
 const { EncoderOdometry } = require('./encoder-odometry');
 
-const vslam_path = '/home/picam360/github/picam360-vslam';
-//const vslam_option = '--disable_vis';
-const vslam_option = '';
-const vslam_filename = 'waypoints.data';
-
 // Convert degrees to radians
 function degreesToRadians(degrees) {
     return degrees * (Math.PI / 180);
@@ -63,9 +58,9 @@ function launchDockerContainer() {
     const command = `
         source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
         conda activate droidslam && \
-        python ${vslam_path}/vslam.py ${vslam_option}
+        python ${VslamOdometry.settings.vslam_path}/vslam.py ${VslamOdometry.settings.vslam_option}
     `;
-    const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vslam_path) });
+    const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(VslamOdometry.settings.vslam_path) });
     vslam_process.stdout.on('data', (data) => {
         console.log(`PICAM360_VSLAM STDOUT: ${data}`);
     });
@@ -313,13 +308,13 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
 
 class VslamOdometry {
     static settings = {
-        data_path : `${vslam_path}/reconstructions/${vslam_filename}`,
+        vslam_path : '/home/picam360/github/picam360-vslam',
+        vslam_option : '--disable_vis',
+        vslam_filename : 'waypoints.data',
         cam_offset : {
             x : 0.0,
             y : 2.2,
-            //y : 2.228590172834311,
             heading : 0,
-//            heading : -8.5,
         },
         dr_threashold_waypoint : 2.0,
         dh_threashold_waypoint : 10,
@@ -350,10 +345,15 @@ class VslamOdometry {
         this.enc_positions = {};
     }
 
+
+    static get_data_path(){
+        return `${VslamOdometry.settings.vslam_path}/reconstructions/${VslamOdometry.settings.vslam_filename}`;
+    }
+
     static clear_reconstruction(){
-        if (fs.existsSync(VslamOdometry.settings.data_path)) { //reconstruct
-            fs.rmSync(VslamOdometry.settings.data_path);
-            console.log(`${VslamOdometry.settings.data_path} has been deleted.`);
+        if (fs.existsSync(VslamOdometry.get_data_path())) { //reconstruct
+            fs.rmSync(VslamOdometry.get_data_path());
+            console.log(`${VslamOdometry.get_data_path()} has been deleted.`);
         }
     }
 
@@ -393,7 +393,7 @@ class VslamOdometry {
                 this.m_subscriber = null;
             });
             const push_keyframes = () => {
-                if (!fs.existsSync(VslamOdometry.settings.data_path)) { //reconstruct
+                if (!fs.existsSync(VslamOdometry.get_data_path())) { //reconstruct
 
                     let ref_cur = 0;
     
@@ -439,13 +439,13 @@ class VslamOdometry {
                     }));
                     this.m_client.publish('picam360-vslam', JSON.stringify({
                         "cmd": "save",
-                        "filename": vslam_filename,
+                        "filename": VslamOdometry.settings.vslam_filename,
                         "reverse": this.options.reverse ? true : false,
                     }));
                 }
                 this.m_client.publish('picam360-vslam', JSON.stringify({
                     "cmd": "load",
-                    "filename": vslam_filename,
+                    "filename": VslamOdometry.settings.vslam_filename,
                     "reverse": this.options.reverse ? true : false,
                 }));
             }
