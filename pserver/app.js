@@ -262,6 +262,7 @@ async.waterfall([
 		config_json += "        \"plugins/dup_st.so\",\n";
 		config_json += "        \"plugins/dealer_st.so\",\n";
 		config_json += "        \"plugins/suspender_st.so\",\n";
+		config_json += "        \"plugins/sampler_st.so\",\n";
 		config_json += "        \"plugins/redis_st.so\",\n";
 		if(process.platform === 'darwin') {
 			config_json += "		\"plugins/vt_decoder_st.so\",\n";
@@ -299,7 +300,7 @@ async.waterfall([
 		config_json += "		\"plugins/pipe_st.so\"\n";
 		config_json += "	]\n";
 		config_json += "}\n";
-		pstcore.pstcore_init(config_json);
+		pstcore.pstcore_init(JSON.stringify(JSON.parse(config_json)));
 		
 		setInterval(() => {
 			pstcore.pstcore_poll_events();
@@ -594,6 +595,8 @@ async.waterfall([
 						name = path.basename(pstdef_path, path.extname(pstdef_path));
 					}
 					m_pstdefs[name] = pstdef;
+				}else{
+					console.log("loading... not found " + pstdef_path);
 				}
 			}
 		}
