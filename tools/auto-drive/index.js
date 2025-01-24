@@ -28,6 +28,7 @@ let m_drive_mode = "STANBY";
 let m_averaging_nmea = null;
 let m_averaging_count = 0;
 let m_last_nmea = null;
+let m_record_pif_dirpath = "";
 let m_auto_drive_ready = false;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
@@ -68,6 +69,21 @@ function latLonToXY(lat1, lon1, lat2, lon2) {
 	return { x, y };
 }
 
+function load_auto_drive_waypoints_ext(dirpath, idx, drive_waypoints, callback){
+	drive_waypoints = drive_waypoints || {};
+	const dirpath_ext = dirpath + (idx ? `_ext_${idx}` : "");
+	if (!fs.existsSync(dirpath_ext)) {
+		if(callback){
+			callback(drive_waypoints);
+		}
+	}else{
+		load_auto_drive_waypoints(dirpath_ext, (waypoints) => {
+			drive_waypoints = Object.assign(drive_waypoints, waypoints);
+			load_auto_drive_waypoints_ext(dirpath, idx + 1, drive_waypoints, callback);
+		});
+	}
+}
+
 function load_auto_drive_waypoints(dirpath, callback){
 	if (!fs.existsSync(dirpath)) {
 		const drive_waypoints = {};
@@ -105,16 +121,21 @@ function load_auto_drive_waypoints(dirpath, callback){
 				}
 			});
 			if(callback){
-				const waypoints = {};
-				const keys = Object.keys(drive_waypoints);
-				for(let i=0;i<keys.length;i++){
-					const index = (m_options.reverse ? keys.length - 1 - i : i);
-					waypoints[i] = drive_waypoints[keys[index]];
-				}
-				callback(waypoints);
+				callback(drive_waypoints);
 			}
 		});
 	}
+}
+
+function reindex_waypoints(drive_waypoints, reverse){
+	const waypoints = [];
+	for(const key of Object.keys(drive_waypoints)){
+		waypoints.push(drive_waypoints[key]);
+	}
+	if(reverse){
+		waypoints.reverse();
+	}
+	return waypoints;
 }
 
 function record_waypoints_handler(tmp_img){
@@ -136,7 +157,7 @@ function record_waypoints_handler(tmp_img){
 		const ary = timestamp.split(',');
 		timestamp = `${ary[0]}.${ary[1].padStart(6, '0')}`;
 	}
-	const pif_filepath = `${m_options.data_filepath}/waypoint_images/${timestamp}.pif`;
+	const pif_filepath = `${m_record_pif_dirpath}/${timestamp}.pif`;
 	fs.writeFile(pif_filepath, data, (err) => {
 		if (err) {
 			console.error('pif file dump faild', err);
@@ -424,7 +445,9 @@ function main() {
 		stop_robot();
 		
 		const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
-		load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
+		load_auto_drive_waypoints_ext(pif_dirpath, 0, null, (waypoints) => {
+			waypoints = reindex_waypoints(waypoints, m_options.reverse);
+
 			update_auto_drive_waypoints({
 				src : waypoints
 			});
@@ -507,22 +530,34 @@ function command_handler(cmd) {
 	switch(split[0]){
 		case "START_RECORD":
 			if(m_drive_mode == "STANBY") {
-				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
+				const extend_mode = (split[1] == "EXTEND");
+
+				let pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				let succeeded = false;
 				if (fs.existsSync(pif_dirpath)) {
-					const now = new Date();
-					const formattedDate = now.getFullYear() +
-						String(now.getMonth() + 1).padStart(2, '0') +
-						String(now.getDate()).padStart(2, '0') + "_" +
-						String(now.getHours()).padStart(2, '0') +
-						String(now.getMinutes()).padStart(2, '0') + "_" +
-						String(now.getSeconds()).padStart(2, '0');
-					try {
-						// フォルダを同期的にリネームして移動
-						fs.renameSync(pif_dirpath, `${pif_dirpath}.${formattedDate}`);
-						console.log(`folder moved to${pif_dirpath}.${formattedDate}`);
-					} catch (err) {
-						console.error('folder move faild:', err);
+					if(extend_mode){
+						for(let i=1;;i++){
+							const pif_dirpath_ext = `${pif_dirpath}_ext_${i}`;
+							if (!fs.existsSync(pif_dirpath_ext)) {
+								pif_dirpath = pif_dirpath_ext;
+								break;
+							}
+						}
+					}else{
+						const now = new Date();
+						const formattedDate = now.getFullYear() +
+							String(now.getMonth() + 1).padStart(2, '0') +
+							String(now.getDate()).padStart(2, '0') + "_" +
+							String(now.getHours()).padStart(2, '0') +
+							String(now.getMinutes()).padStart(2, '0') + "_" +
+							String(now.getSeconds()).padStart(2, '0');
+						try {
+							// フォルダを同期的にリネームして移動
+							fs.renameSync(m_options.data_filepath, `${m_options.data_filepath}.${formattedDate}`);
+							console.log(`folder moved to ${m_options.data_filepath}.${formattedDate}`);
+						} catch (err) {
+							console.error('folder move faild:', err);
+						}
 					}
 				}
 				if (!fs.existsSync(pif_dirpath)) {
@@ -538,6 +573,7 @@ function command_handler(cmd) {
 				if(!succeeded){
 					break;
 				}
+				m_record_pif_dirpath = pif_dirpath;
 				m_drive_mode = "RECORD";
 				m_client.publish('pserver-auto-drive-info', JSON.stringify({
 					"mode" : "RECORD",
@@ -552,7 +588,9 @@ function command_handler(cmd) {
 			m_drive_mode = "STANBY";
 			execSync('sync');
 			const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
-			load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
+			load_auto_drive_waypoints_ext(pif_dirpath, 0, null, (waypoints) => {
+				waypoints = reindex_waypoints(waypoints, m_options.reverse);
+
 				update_auto_drive_waypoints({
 					src : waypoints
 				});
@@ -579,7 +617,9 @@ function command_handler(cmd) {
 				}));
 
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
-				load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
+				load_auto_drive_waypoints_ext(pif_dirpath, 0, null, (waypoints) => {
+					waypoints = reindex_waypoints(waypoints, m_options.reverse);
+
 					const msg = {
 						src : waypoints
 					};
