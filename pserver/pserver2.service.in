@@ -2,12 +2,12 @@
 #bash setup_service.sh /path/to/config.json
 
 [Unit]
-Description = pserver daemon
+Description = pserver2 daemon
 
 [Service]
 # wait for EglDisplay ready
 ExecStartPre = /bin/sleep 10
-ExecStart = /usr/bin/pserver -c @CONFIG_PATH@
+ExecStart = /usr/bin/pserver2 -c @CONFIG_PATH@
 #ExecStop = -/usr/bin/docker kill pserver
 
 Environment="DISPLAY=:0"

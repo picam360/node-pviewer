@@ -31,7 +31,6 @@
     },
     "plugin_paths" : [
         "plugins/redis.js",
-        "plugins/serial-interface.js",
         "plugins/camera/take-picture.js",
         "plugins/camera/generate-psf.js",
         "plugins/network/host.js",
@@ -39,11 +38,9 @@
         "plugins/network/osc.js",
         "plugins/vehicle/wheel.js",
         "plugins/encoder/encoder-y2kb.js",
+        "plugins/start-stream.js",
         "plugins/startup.js"
     ],
-    "serial_interface" : {
-        "path" : "/dev/ttyACM0"
-    },
     "take_picture" : {
         "pstdef" : "take-picture-ptpvf"
     },

@@ -82,13 +82,24 @@ class GpsOdometry {
         const positions = {};
         const keys = Object.keys(waypoints);
         for(const key of keys){
-            const current_nmea = nmea.parseNmeaSentence(waypoints[key].nmea);
-            const { easting, northing } = 
-                toWebMercator(current_nmea.latitude, current_nmea.longitude);
-                //utm.fromLatLon(current_nmea.latitude, current_nmea.longitude);
-            positions[key] = {
-                x : easting,
-                y : northing,
+            try{
+                if(!waypoints[key].nmea){
+                    positions[key] = {
+                        x : 0,
+                        y : 0,
+                    }
+                    continue;
+                }
+                const current_nmea = nmea.parseNmeaSentence(waypoints[key].nmea);
+                const { easting, northing } = 
+                    toWebMercator(current_nmea.latitude, current_nmea.longitude);
+                    //utm.fromLatLon(current_nmea.latitude, current_nmea.longitude);
+                positions[key] = {
+                    x : easting,
+                    y : northing,
+                }
+            }catch(err){
+                console.log(err);
             }
         }
         return positions;
@@ -96,7 +107,11 @@ class GpsOdometry {
   
     push(header, meta, jpeg_data) {
         const frame_dom = xml_parser.parse(meta);
-        this.current_nmea = nmea.parseNmeaSentence(frame_dom['picam360:frame']['passthrough:nmea']);
+        if(frame_dom['picam360:frame']['passthrough:nmea']){
+            this.current_nmea = nmea.parseNmeaSentence(frame_dom['picam360:frame']['passthrough:nmea']);
+        }else{
+            this.current_nmea = null;
+        }
         if(frame_dom['picam360:frame']['passthrough:imu']){
             this.current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
         }else{
@@ -107,6 +122,13 @@ class GpsOdometry {
     getPosition(){
         const key = this.waypoints_keys[0];
         const base_waypoint = this.waypoints[key];
+        if(!base_waypoint['nmea'] || !this.current_nmea){
+            return {
+                x : 0,
+                y : 0,
+                heading : 0,
+            };
+        }
 		const base_nmea = nmea.parseNmeaSentence(base_waypoint['nmea']);
         const base_pos = 
             toWebMercator(base_nmea.latitude, base_nmea.longitude);
@@ -124,6 +146,9 @@ class GpsOdometry {
     calculateDistance(cur){
         const key = this.waypoints_keys[cur];
         const target_waypoint = this.waypoints[key];
+        if(!target_waypoint['nmea']){
+            return 999;
+        }
 		const target_nmea = nmea.parseNmeaSentence(target_waypoint['nmea']);
         return calculateDistance(
             target_nmea.latitude, target_nmea.longitude,
@@ -132,6 +157,9 @@ class GpsOdometry {
     calculateBearing(cur){
         const key = this.waypoints_keys[cur];
         const target_waypoint = this.waypoints[key];
+        if(!target_waypoint['nmea']){
+            return 0;
+        }
 		const target_nmea = nmea.parseNmeaSentence(target_waypoint['nmea']);
         return calculateBearing(
             target_nmea.latitude, target_nmea.longitude,

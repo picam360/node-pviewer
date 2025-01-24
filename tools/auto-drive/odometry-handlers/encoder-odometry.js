@@ -105,7 +105,10 @@ class EncoderOdometry {
     static cal_xy(waypoints, settings){
         const positions = {};
         const keys = Object.keys(waypoints);
-        const base_encoder = JSON.parse(waypoints[keys[0]].encoder);
+        const base_encoder = (waypoints[keys[0]].encoder ? JSON.parse(waypoints[keys[0]].encoder) : {
+            left : 0,
+            right : 0,
+        });
         const encoder_params = {
             right_gain : settings.right_gain,
             meter_per_pulse : settings.meter_per_pulse,
@@ -117,7 +120,10 @@ class EncoderOdometry {
             heading : settings.heading_initial || 0,
         };
         for(const key of keys){
-            const current_encoder = JSON.parse(waypoints[key].encoder);
+            const current_encoder = (waypoints[keys[key]].encoder ? JSON.parse(waypoints[keys[key]].encoder) : {
+                left : 0,
+                right : 0,
+            });
             EncoderOdometry.inclement_xy(
                 encoder_params,
                 current_encoder.left * settings.left_direction,
@@ -291,13 +297,24 @@ class EncoderOdometry {
   
     push(header, meta, jpeg_data) {
         const frame_dom = xml_parser.parse(meta);
-        this.current_nmea = nmea.parseNmeaSentence(frame_dom['picam360:frame']['passthrough:nmea']);
+        if(frame_dom['picam360:frame']['passthrough:nmea']){
+            this.current_nmea = nmea.parseNmeaSentence(frame_dom['picam360:frame']['passthrough:nmea']);
+        }else{
+            this.current_nmea = null;
+        }
         if(frame_dom['picam360:frame']['passthrough:imu']){
             this.current_imu = JSON.parse(frame_dom['picam360:frame']['passthrough:imu']);
         }else{
             this.current_imu = {heading : 0};
         }
-        this.current_encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
+        if(frame_dom['picam360:frame']['passthrough:encoder']){
+            this.current_encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
+        }else{
+            this.current_encoder = {
+                left : 0,
+                right : 0,
+            };
+        }
 
         if(this.encoder_params.last_left_counts === null){
             const settings = Object.assign({}, EncoderOdometry.settings);

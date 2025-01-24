@@ -13,6 +13,10 @@ const xml_parser = new fxp.XMLParser({
 });
 const pif_utils = require('./pif-utils');
 
+const { GpsOdometry } = require('./odometry-handlers/gps-odometry');
+const { EncoderOdometry } = require('./odometry-handlers/encoder-odometry');
+const { VslamOdometry } = require('./odometry-handlers/vslam-odometry');
+
 let m_options = {
 	"waypoint_threshold_m" : 10,
 	"data_filepath" : "auto-drive-waypoints",
@@ -24,6 +28,7 @@ let m_drive_mode = "STANBY";
 let m_averaging_nmea = null;
 let m_averaging_count = 0;
 let m_last_nmea = null;
+let m_auto_drive_ready = false;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
 let m_auto_drive_heading_tuning = false;
@@ -471,7 +476,9 @@ function main() {
 					record_waypoints_handler(tmp_img);
 					break;
 				case "AUTO":
-					auto_drive_handler(tmp_img);
+					if(m_auto_drive_ready){
+						auto_drive_handler(tmp_img);
+					}
 					break;
 				}
 				tmp_img = [];
@@ -482,21 +489,15 @@ function main() {
 		setInterval(() => {
 			const elapsed = Date.now() - last_ts;
 			if(elapsed > 1000){
-				//waiting
-				switch(m_drive_mode){
-				case "RECORD":
-					m_client.publish('pserver-auto-drive-info', JSON.stringify({
-						"mode" : "RECORD",
-						"state" : "WAITING_PST",
-					}));
-					break;
-				case "AUTO":
-					m_client.publish('pserver-auto-drive-info', JSON.stringify({
-						"mode" : "AUTO",
-						"state" : "WAITING_PST",
-					}));
-					break;
-				}
+				m_client.publish('pserver-auto-drive-info', JSON.stringify({
+					"mode" : m_drive_mode,
+					"state" : "WAITING_PST",
+				}));
+			}else{
+				m_client.publish('pserver-auto-drive-info', JSON.stringify({
+					"mode" : m_drive_mode,
+					"state" : "RECEIVING_PST",
+				}));
 			}
 		}, 1000);
 	});
@@ -534,9 +535,16 @@ function command_handler(cmd) {
 				}else{
 					succeeded = true;
 				}
-				if(succeeded){
-					m_drive_mode = "RECORD";
+				if(!succeeded){
+					break;
 				}
+				m_drive_mode = "RECORD";
+				m_client.publish('pserver-auto-drive-info', JSON.stringify({
+					"mode" : "RECORD",
+					"state" : "START_RECORD",
+				}));
+				
+				VslamOdometry.clear_reconstruction();
 			}
 			console.log("drive mode", m_drive_mode);
 			break;
@@ -550,6 +558,10 @@ function command_handler(cmd) {
 				});
 				update_auto_drive_cur(0);
 			});
+			m_client.publish('pserver-auto-drive-info', JSON.stringify({
+				"mode" : "RECORD",
+				"state" : "STOP_RECORD",
+			}));
 			console.log("drive mode", m_drive_mode);
 
 			break;
@@ -558,6 +570,13 @@ function command_handler(cmd) {
 			stop_robot();
 			if(m_drive_mode == "STANBY") {
 				m_options.reverse = (split[1] == "REVERSE");
+
+				m_auto_drive_ready = false;
+				m_drive_mode = "AUTO";
+				m_client.publish('pserver-auto-drive-info', JSON.stringify({
+					"mode" : "AUTO",
+					"state" : "START_AUTO",
+				}));
 
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				load_auto_drive_waypoints(pif_dirpath, (waypoints) => {
@@ -571,10 +590,16 @@ function command_handler(cmd) {
 							m_odometry_conf[key].converted_waypoints = converted_waypoints;
 							msg[key] = converted_waypoints;
 							if(cur == keys.length - 1){
-								m_drive_mode = "AUTO";
+								m_auto_drive_ready = true;
 								update_auto_drive_waypoints(msg);
 								update_auto_drive_cur(0);
 								console.log("drive mode", m_drive_mode);
+
+								m_client.publish('pserver-auto-drive-info', JSON.stringify({
+									"mode" : "AUTO",
+									"state" : "READY_AUTO",
+								}));
+				
 							}else{
 								build_odometry_handler(cur + 1);
 							}
@@ -589,16 +614,13 @@ function command_handler(cmd) {
 						}
 						switch(key){
 							case ODOMETRY_TYPE.GPS:
-								const gps_odometry = require('./odometry-handlers/gps-odometry');
-								m_odometry_conf[key].handler = new gps_odometry.GpsOdometry();
+								m_odometry_conf[key].handler = new GpsOdometry();
 								break;
 							case ODOMETRY_TYPE.ENCODER:
-								const encoder_odometry = require('./odometry-handlers/encoder-odometry');
-								m_odometry_conf[key].handler = new encoder_odometry.EncoderOdometry();
+								m_odometry_conf[key].handler = new EncoderOdometry();
 								break;
 							case ODOMETRY_TYPE.VSLAM:
-								const vslam_odometry = require('./odometry-handlers/vslam-odometry');
-								m_odometry_conf[key].handler = new vslam_odometry.VslamOdometry({
+								m_odometry_conf[key].handler = new VslamOdometry({
 									reverse : m_options.reverse,
 									//host : m_argv.host,
 									transforms_callback : (vslam_waypoints, active_points) => {
@@ -623,6 +645,12 @@ function command_handler(cmd) {
 				stop_robot();
 			}, 1000)
 			m_drive_mode = "STANBY";
+
+			m_client.publish('pserver-auto-drive-info', JSON.stringify({
+				"mode" : "AUTO",
+				"state" : "STOP_AUTO",
+			}));
+
 			console.log("drive mode", m_drive_mode);
 			break;
 	}

@@ -15,6 +15,9 @@ const numeric = require('numeric');
 const { EncoderOdometry } = require('./encoder-odometry');
 
 const vslam_path = '/home/picam360/github/picam360-vslam';
+//const vslam_option = '--disable_vis';
+const vslam_option = '';
+const vslam_filename = 'waypoints.data';
 
 // Convert degrees to radians
 function degreesToRadians(degrees) {
@@ -60,7 +63,7 @@ function launchDockerContainer() {
     const command = `
         source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
         conda activate droidslam && \
-        python ${vslam_path}/vslam.py --disable_vis
+        python ${vslam_path}/vslam.py ${vslam_option}
     `;
     const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vslam_path) });
     vslam_process.stdout.on('data', (data) => {
@@ -310,6 +313,7 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
 
 class VslamOdometry {
     static settings = {
+        data_path : `${vslam_path}/reconstructions/${vslam_filename}`,
         cam_offset : {
             x : 0.0,
             y : 2.2,
@@ -346,19 +350,29 @@ class VslamOdometry {
         this.enc_positions = {};
     }
 
+    static clear_reconstruction(){
+        if (fs.existsSync(VslamOdometry.settings.data_path)) { //reconstruct
+            fs.rmSync(VslamOdometry.settings.data_path);
+            console.log(`${VslamOdometry.settings.data_path} has been deleted.`);
+        }
+    }
+
     init(waypoints, callback) {
         this.enc_odom.init(waypoints, (enc_waypoints) => {
             this.enc_waypoints = enc_waypoints;
+
+            this.enc_available = false;
+            for(const key in this.enc_waypoints){
+                if(this.enc_waypoints[key].x != 0 || this.enc_waypoints[key].y != 0){
+                    this.enc_available = true;
+                    break;
+                }
+            }
 
             const keys = Object.keys(waypoints);
 
             this.waypoints = waypoints;
             this.waypoints_keys = keys;
-
-            if(VslamOdometry.settings.launch_vslam){
-                killDockerContainer();
-                launchDockerContainer();
-            }
 
             const host = this.host;
             const port = 6379;
@@ -378,12 +392,76 @@ class VslamOdometry {
                 console.error('redis error:', err);
                 this.m_subscriber = null;
             });
+            const push_keyframes = () => {
+                if (!fs.existsSync(VslamOdometry.settings.data_path)) { //reconstruct
+
+                    let ref_cur = 0;
+    
+                    for (let i = 0; i < keys.length; i++) {
+                        const cur = i;
+                        const pos = this.enc_waypoints[cur];
+                        let is_keyframe = false;
+                        if (cur == 0 || cur == keys.length - 1) {
+                            is_keyframe = true;
+                        } else if(this.enc_available){
+                            const ref_pos = this.enc_waypoints[ref_cur];
+                            const dx = pos.x - ref_pos.x;
+                            const dy = pos.y - ref_pos.y;
+                            const dh = pos.heading - ref_pos.heading;
+                            const dr = Math.sqrt(dx * dx + dy * dy);
+                            if (dr > VslamOdometry.settings.dr_threashold_waypoint || Math.abs(dh) > VslamOdometry.settings.dh_threashold_waypoint) {
+                                console.log(`dr=${dr}, dh=${dh}`);
+                                is_keyframe = true;
+                            }
+                        }else{
+                            const interval = Math.min(Math.ceil(keys.length / 8), 10);
+                            is_keyframe = (cur % interval) == 0;
+                        }
+    
+                        if (!is_keyframe) {
+                            continue;
+                        }
+    
+                        const waypoint = waypoints[keys[cur]];
+                        const jpeg_filepath = waypoint.jpeg_filepath;
+                        const jpeg_data = fs.readFileSync(jpeg_filepath);
+                        //this.requestTrack(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
+                        this.requestTrack(`${i}`, jpeg_data, this.enc_available);
+    
+                        console.log(`timestamp ${i} : ${jpeg_filepath}`);
+    
+                        ref_cur = cur;
+                    }
+    
+                    this.m_client.publish('picam360-vslam', JSON.stringify({
+                        "cmd": "backend",
+                        "itr": 8,
+                    }));
+                    this.m_client.publish('picam360-vslam', JSON.stringify({
+                        "cmd": "save",
+                        "filename": vslam_filename,
+                        "reverse": this.options.reverse ? true : false,
+                    }));
+                }
+                this.m_client.publish('picam360-vslam', JSON.stringify({
+                    "cmd": "load",
+                    "filename": vslam_filename,
+                    "reverse": this.options.reverse ? true : false,
+                }));
+            }
             this.m_subscriber.connect().then(() => {
                 console.log('redis connected:');
 
                 this.m_subscriber.subscribe('picam360-vslam-odom', (data, key) => {
                     //console.log(data);
                     const params = JSON.parse(data);
+
+                    if(params['type'] == 'info'){
+                        if(VslamOdometry.settings.launch_vslam && params['msg'] == 'startup'){
+                            push_keyframes();
+                        }
+                        return;
+                    }
 
                     if(!this.initialized){
                         if(params['type'] == 'load'){
@@ -455,65 +533,15 @@ class VslamOdometry {
                         }
                     }
                 });
+            });//end of substract
 
-                setTimeout(() => {
-                    const filename = "waypoints.data";
-                    const data_path = `${vslam_path}/reconstructions/${filename}`;
-                    if (!fs.existsSync(data_path)) { //reconstruct
-
-                        let ref_cur = 0;
-        
-                        for (let i = 0; i < keys.length; i++) {
-                            const cur = i;
-                            const pos = this.enc_waypoints[cur];
-                            let is_keyframe = false;
-                            if (cur == 0 || cur == keys.length - 1) {
-                                is_keyframe = true;
-                            } else {
-                                const ref_pos = this.enc_waypoints[ref_cur];
-                                const dx = pos.x - ref_pos.x;
-                                const dy = pos.y - ref_pos.y;
-                                const dh = pos.heading - ref_pos.heading;
-                                const dr = Math.sqrt(dx * dx + dy * dy);
-                                if (dr > VslamOdometry.settings.dr_threashold_waypoint || Math.abs(dh) > VslamOdometry.settings.dh_threashold_waypoint) {
-                                    console.log(`dr=${dr}, dh=${dh}`);
-                                    is_keyframe = true;
-                                }
-                            }
-        
-                            if (!is_keyframe) {
-                                continue;
-                            }
-        
-                            const waypoint = waypoints[keys[cur]];
-                            const jpeg_filepath = waypoint.jpeg_filepath;
-                            const jpeg_data = fs.readFileSync(jpeg_filepath);
-                            //this.requestTrack(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
-                            this.requestTrack(`${i}`, jpeg_data, true);
-        
-                            console.log(`timestamp ${i} : ${jpeg_filepath}`);
-        
-                            ref_cur = cur;
-                        }
-        
-                        this.m_client.publish('picam360-vslam', JSON.stringify({
-                            "cmd": "backend",
-                            "itr": 8,
-                        }));
-                        this.m_client.publish('picam360-vslam', JSON.stringify({
-                            "cmd": "save",
-                            "filename": filename,
-                            "reverse": this.options.reverse ? true : false,
-                        }));
-                    }
-                    this.m_client.publish('picam360-vslam', JSON.stringify({
-                        "cmd": "load",
-                        "filename": filename,
-                        "reverse": this.options.reverse ? true : false,
-                    }));
-                }, 5000);
-            });
-        });
+            if(VslamOdometry.settings.launch_vslam){
+                killDockerContainer();
+                launchDockerContainer();
+            }else{
+                push_keyframes();
+            }
+        });//end of redis connected
     }
 
     deinit() {
@@ -575,11 +603,12 @@ class VslamOdometry {
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
             this.backend_pending++;
             this.last_pushVslam_cur = this.push_cur;
+            return;
         }else if(this.current_odom == null){
             return;
         }
 
-        {
+        if(this.enc_available){
             const pos = {
                 x : this.enc_positions[this.push_cur].x - this.enc_positions[this.last_pushVslam_cur].x,
                 y : this.enc_positions[this.push_cur].y - this.enc_positions[this.last_pushVslam_cur].y,
@@ -592,6 +621,26 @@ class VslamOdometry {
                 console.log("requestEstimation", `dr=${dr}, dh=${dh}`);
         
                 const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
+                const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
+
+                console.log("requestEstimation", ref_timestamps);
+        
+                //this.requestTrack(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
+                this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
+                this.backend_pending++;
+                this.last_pushVslam_cur = this.push_cur;
+
+                this.enc_positions[this.push_cur].keyframe = true;
+            }
+        }else{
+            if (this.push_cur - this.last_pushVslam_cur > 10) {
+                console.log("requestEstimation", `push_cur=${this.push_cur}`);
+        
+                const center_key = this.findClosestWaypoint({
+                    x : this.current_odom.pose.position.x,
+                    y : this.current_odom.pose.position.y,
+                    heading : 0,
+                }, this.vslam_waypoints);
                 const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
 
                 console.log("requestEstimation", ref_timestamps);
