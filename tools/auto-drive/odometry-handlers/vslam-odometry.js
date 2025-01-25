@@ -553,6 +553,9 @@ class VslamOdometry {
             this.m_subscriber.quit();
             this.m_subscriber = null;
         }
+        if(VslamOdometry.settings.launch_vslam){
+            killDockerContainer();
+        }
     }
 
     is_ready() {

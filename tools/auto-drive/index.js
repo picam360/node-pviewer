@@ -387,6 +387,13 @@ function auto_drive_handler(tmp_img){
         console.log('All waypoints reached!');
 		stop_robot();
 
+		for(const key of conf_keys){
+			if(m_odometry_conf[key].handler){
+				m_odometry_conf[key].handler.deinit();
+				m_odometry_conf[key].handler = null;
+			}
+		}
+
 		m_client.publish('pserver-auto-drive-info', JSON.stringify({
 			"mode" : "AUTO",
 			"state" : "DONE",
