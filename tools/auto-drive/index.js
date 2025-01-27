@@ -673,7 +673,7 @@ function command_handler(cmd) {
 								}));
 
 								if(m_auto_drive_ready_first_launch){//for vslam initialization
-									m_client.publish('pgis-server', "CMD EABLE_OFFSCREEN");
+									m_client.publish('pgis-server', "CMD ENABLE_OFFSCREEN");
 								}
 				
 							}else{
