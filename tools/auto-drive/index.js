@@ -30,6 +30,7 @@ let m_averaging_nmea = null;
 let m_averaging_count = 0;
 let m_last_nmea = null;
 let m_record_pif_dirpath = "";
+let m_auto_drive_ready_first_launch = true;
 let m_auto_drive_ready = false;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
@@ -484,7 +485,7 @@ function main() {
 
 	const subscriber = client.duplicate();
 	subscriber.connect().then(() => {
-		console.log('redis connected:');
+		console.log('redis subscriber connected:');
 
 		subscriber.subscribe('pserver-auto-drive', (data, key) => {
 			const params = data.trim().split(' ');
@@ -643,6 +644,10 @@ function command_handler(cmd) {
 					"state" : "START_AUTO",
 				}));
 
+				if(m_auto_drive_ready_first_launch){//for vslam initialization
+					m_client.publish('pgis-server', "CMD DISABLE_OFFSCREEN");
+				}
+
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				load_auto_drive_waypoints_ext(pif_dirpath, 0, null, (waypoints) => {
 					waypoints = reindex_waypoints(waypoints, m_options.reverse);
@@ -666,6 +671,10 @@ function command_handler(cmd) {
 									"mode" : "AUTO",
 									"state" : "READY_AUTO",
 								}));
+
+								if(m_auto_drive_ready_first_launch){//for vslam initialization
+									m_client.publish('pgis-server', "CMD EABLE_OFFSCREEN");
+								}
 				
 							}else{
 								build_odometry_handler(cur + 1);

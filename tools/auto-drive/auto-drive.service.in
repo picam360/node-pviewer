@@ -9,6 +9,7 @@ Description = auto-drive daemon
 #ExecStartPre = /bin/sleep 10
 ExecStart = /usr/bin/auto-drive -c @CONFIG_PATH@
 
+#Environment="LD_LIBRARY_PATH=/path/to/cudnn:$LD_LIBRARY_PATH"
 Environment="DISPLAY=:0"
 
 Restart = always
