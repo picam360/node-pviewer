@@ -370,8 +370,6 @@ class VslamOdometry {
                 }
             }
 
-            this.publish_reconstruction_progress(0);
-
             const keys = Object.keys(waypoints);
 
             this.waypoints = waypoints;
@@ -389,6 +387,8 @@ class VslamOdometry {
             });
             this.m_client.connect().then(() => {
                 console.log('redis connected:');
+
+                this.update_reconstruction_progress(0);
             });
             this.m_subscriber = this.m_client.duplicate();
             this.m_subscriber.on('error', (err) => {
@@ -554,11 +554,13 @@ class VslamOdometry {
 
     update_reconstruction_progress(progress){
         this.reconstruction_progress = progress;
-        m_client.publish('pserver-auto-drive-info', JSON.stringify({
-            "mode" : "INFO",
-            "state" : "VSLAM_RECONSTRUCTION_PROGRESS",
-            "progress" : this.reconstruction_progress,
-        }));
+        if(this.m_client){
+            this.m_client.publish('pserver-auto-drive-info', JSON.stringify({
+                "mode" : "INFO",
+                "state" : "VSLAM_RECONSTRUCTION_PROGRESS",
+                "progress" : this.reconstruction_progress,
+            }));
+        }
     }
 
     deinit() {
