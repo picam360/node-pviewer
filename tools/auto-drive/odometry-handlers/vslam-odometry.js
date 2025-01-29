@@ -430,6 +430,8 @@ class VslamOdometry {
                         const jpeg_data = fs.readFileSync(jpeg_filepath);
                         //this.requestTrack(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
                         this.requestTrack(`${i}`, jpeg_data, this.enc_available);
+
+                        this.update_reconstruction_progress(Math.min(this.reconstruction_progress + 1, 50));
     
                         console.log(`timestamp ${i} : ${jpeg_filepath}`);
     
@@ -463,7 +465,7 @@ class VslamOdometry {
                         if(VslamOdometry.settings.launch_vslam && params['msg'] == 'startup'){
                             push_keyframes();
 
-                            this.update_reconstruction_progress(10);
+                            this.update_reconstruction_progress(50);
                         }
                         return;
                     }
