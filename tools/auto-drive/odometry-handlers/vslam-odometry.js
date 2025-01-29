@@ -339,6 +339,7 @@ class VslamOdometry {
         this.first_push = true;
         this.last_pushVslam_cur = 0;
         this.last_odom_cur = 0;
+        this.reconstruction_progress = 0;
 
         this.enc_odom = new EncoderOdometry();
         this.enc_waypoints = {};
@@ -368,6 +369,8 @@ class VslamOdometry {
                     break;
                 }
             }
+
+            this.publish_reconstruction_progress(0);
 
             const keys = Object.keys(waypoints);
 
@@ -459,11 +462,14 @@ class VslamOdometry {
                     if(params['type'] == 'info'){
                         if(VslamOdometry.settings.launch_vslam && params['msg'] == 'startup'){
                             push_keyframes();
+
+                            this.update_reconstruction_progress(10);
                         }
                         return;
                     }
 
                     if(!this.initialized){
+                        this.update_reconstruction_progress(Math.min(this.reconstruction_progress + 1, 90));
                         if(params['type'] == 'load'){
                             this.initialized = true;
                             this.current_odom = null;
@@ -478,6 +484,8 @@ class VslamOdometry {
                             if(callback){
                                 callback(this.vslam_waypoints);
                             }
+
+                            this.update_reconstruction_progress(100);
                         }
                     }else{
                         const odom = params['odom'][params['odom'].length - 1];//last one
@@ -542,6 +550,15 @@ class VslamOdometry {
                 push_keyframes();
             }
         });//end of redis connected
+    }
+
+    update_reconstruction_progress(progress){
+        this.reconstruction_progress = progress;
+        m_client.publish('pserver-auto-drive-info', JSON.stringify({
+            "mode" : "INFO",
+            "state" : "VSLAM_RECONSTRUCTION_PROGRESS",
+            "progress" : this.reconstruction_progress,
+        }));
     }
 
     deinit() {
