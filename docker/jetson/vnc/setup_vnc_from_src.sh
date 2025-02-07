@@ -31,7 +31,7 @@ After=syslog.target network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/x0vncserver -display :0 -PasswordFile=/home/$USER/.vnc/passwd -rfbport 5900
+ExecStart=/usr/local/bin/x0vncserver -display :0 -PasswordFile=/home/$USER/.vnc/passwd -rfbport 5900
 User=$USER
 Restart = always
 RestartSec = 3
