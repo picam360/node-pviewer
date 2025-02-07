@@ -1,0 +1,13 @@
+{
+    "gps_odom" : {
+
+    },
+    "encoder_odom" : {
+
+    },
+    "vslam_odom" : {
+
+    },
+	"data_filepath" : "data",
+    "debug" : 0
+}

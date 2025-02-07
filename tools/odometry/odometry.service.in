@@ -2,10 +2,10 @@
 #bash setup_service.sh /path/to/config.json
 
 [Unit]
-Description = vslam daemon
+Description = odometry daemon
 
 [Service]
-ExecStart = /usr/bin/vslam -c @CONFIG_PATH@
+ExecStart = /usr/bin/odometry -c @CONFIG_PATH@
 
 #Environment="LD_LIBRARY_PATH=/path/to/cudnn:$LD_LIBRARY_PATH"
 
