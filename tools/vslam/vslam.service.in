@@ -1,0 +1,17 @@
+##regist service
+#bash setup_service.sh /path/to/config.json
+
+[Unit]
+Description = vslam daemon
+
+[Service]
+ExecStart = /usr/bin/vslam -c @CONFIG_PATH@
+
+#Environment="LD_LIBRARY_PATH=/path/to/cudnn:$LD_LIBRARY_PATH"
+
+Restart = always
+RestartSec = 3
+Type = simple
+
+[Install]
+WantedBy = multi-user.target
