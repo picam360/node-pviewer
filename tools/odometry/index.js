@@ -156,18 +156,6 @@ function main() {
     client.connect().then(() => {
         console.log('redis connected:');
 		m_client = client;
-
-		stop_robot();
-		
-		const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
-		load_auto_drive_waypoints_ext(pif_dirpath, 0, null, (waypoints) => {
-			waypoints = reindex_waypoints(waypoints, m_options.reverse);
-
-			update_auto_drive_waypoints({
-				src : waypoints
-			});
-			update_auto_drive_cur(0);
-		});
 	});
 
 	const subscriber = client.duplicate();
@@ -184,14 +172,12 @@ function main() {
 			}
 		});
 		
-		subscriber.subscribe('pserver-vslam-pst', (data, key) => {
-			last_ts = Date.now();
-			if(data.length == 0 && tmp_img.length != 0){
-				//TODO:vslam
-				tmp_img = [];
-			}else{
-				tmp_img.push(Buffer.from(data, 'base64'));
-			}
+		subscriber.subscribe('pserver-nmea', (data, key) => {
+			return;
+		});
+		
+		subscriber.subscribe('pserver-encoder', (data, key) => {
+			return;
 		});
 
 		let tmp_img = [];
@@ -221,95 +207,13 @@ function main() {
 		}, 1000);
 	});
 }
+
 function command_handler(cmd) {
 	let split = cmd.split(' ');
 	switch(split[0]){
-		case "START_AUTO":
-			stop_robot();
-			if(m_drive_mode == "STANBY") {
-				m_options.reverse = (split[1] == "REVERSE");
-
-				m_drive_mode = "AUTO";
-				m_client.publish('pserver-odometry-info', JSON.stringify({
-					"mode" : "AUTO",
-					"state" : "START_AUTO",
-				}));
-
-				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
-				load_auto_drive_waypoints_ext(pif_dirpath, 0, null, (waypoints) => {
-					waypoints = reindex_waypoints(waypoints, m_options.reverse);
-
-					const msg = {
-						src : waypoints
-					};
-					const keys = Object.keys(m_odometry_conf);
-					function build_odometry_handler(cur){
-						const key = keys[cur];
-						const next_cb = (converted_waypoints) => {
-							m_odometry_conf[key].converted_waypoints = converted_waypoints;
-							msg[key] = converted_waypoints;
-							if(cur == keys.length - 1){
-								update_auto_drive_waypoints(msg);
-								update_auto_drive_cur(0);
-								console.log("drive mode", m_drive_mode);
-
-								m_client.publish('pserver-odometry-info', JSON.stringify({
-									"mode" : "AUTO",
-									"state" : "READY_AUTO",
-								}));
-				
-							}else{
-								build_odometry_handler(cur + 1);
-							}
-						};
-						if(m_odometry_conf[key].handler){
-							m_odometry_conf[key].handler.deinit();
-							m_odometry_conf[key].handler = null;
-						}
-						if(!m_odometry_conf[key].enabled){
-							next_cb();
-							return;
-						}
-						switch(key){
-							case ODOMETRY_TYPE.GPS:
-								m_odometry_conf[key].handler = new GpsOdometry();
-								break;
-							case ODOMETRY_TYPE.ENCODER:
-								m_odometry_conf[key].handler = new EncoderOdometry();
-								break;
-							case ODOMETRY_TYPE.VSLAM:
-								m_odometry_conf[key].handler = new VslamOdometry({
-									reverse : m_options.reverse,
-									//host : m_argv.host,
-									transforms_callback : (vslam_waypoints, active_points) => {
-										msg["VSLAM"] = vslam_waypoints;
-										msg["VSLAM_ACTIVE"] = active_points;
-										update_auto_drive_waypoints(msg);
-									},
-								});
-								break;
-						}
-						m_odometry_conf[key].handler.init(waypoints, next_cb);
-					}
-					build_odometry_handler(0);
-				});
-			}else{
-				console.log("drive mode", m_drive_mode);
-			}
+		case "START_MAPPING":
 			break;
-		case "STOP_AUTO":
-			stop_robot();
-			setTimeout(() => {
-				stop_robot();
-			}, 1000)
-			m_drive_mode = "STANBY";
-
-			m_client.publish('pserver-odometry-info', JSON.stringify({
-				"mode" : "AUTO",
-				"state" : "STOP_AUTO",
-			}));
-
-			console.log("drive mode", m_drive_mode);
+		case "STOP_MAPPING":
 			break;
 	}
 }

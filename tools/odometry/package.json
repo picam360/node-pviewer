@@ -1,5 +1,5 @@
 {
-    "name": "auto-drive",
+    "name": "odometry",
     "version": "1.0.0",
     "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
     "license": "MIT",
@@ -10,7 +10,6 @@
         "numeric": "^1.2.6",
         "opencv4nodejs": "^5.6.0",
         "quaternion": "^2.0.1",
-        "rclnodejs": "^0.27.4",
         "redis": "^4.7.0",
         "simplify-geometry": "^0.0.2",
         "utm": "^1.1.1",
