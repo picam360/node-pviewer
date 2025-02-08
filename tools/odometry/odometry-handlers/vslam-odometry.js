@@ -358,23 +358,8 @@ class VslamOdometry {
         }
     }
 
-    init(waypoints, callback) {
-        this.enc_odom.init(waypoints, (enc_waypoints) => {
-            this.enc_waypoints = enc_waypoints;
-
-            this.enc_available = false;
-            for(const key in this.enc_waypoints){
-                if(this.enc_waypoints[key].x != 0 || this.enc_waypoints[key].y != 0){
-                    this.enc_available = true;
-                    break;
-                }
-            }
-
-            const keys = Object.keys(waypoints);
-
-            this.waypoints = waypoints;
-            this.waypoints_keys = keys;
-
+    init(callback) {
+        this.enc_odom.init(() => {
             const host = this.host;
             const port = 6379;
             const redis = require('redis');
@@ -395,65 +380,6 @@ class VslamOdometry {
                 console.error('redis error:', err);
                 this.m_subscriber = null;
             });
-            const push_keyframes = () => {
-                if (!fs.existsSync(VslamOdometry.get_data_path())) { //reconstruct
-
-                    let ref_cur = 0;
-    
-                    for (let i = 0; i < keys.length; i++) {
-                        const cur = i;
-                        const pos = this.enc_waypoints[cur];
-                        let is_keyframe = false;
-                        if (cur == 0 || cur == keys.length - 1) {
-                            is_keyframe = true;
-                        } else if(this.enc_available){
-                            const ref_pos = this.enc_waypoints[ref_cur];
-                            const dx = pos.x - ref_pos.x;
-                            const dy = pos.y - ref_pos.y;
-                            const dh = pos.heading - ref_pos.heading;
-                            const dr = Math.sqrt(dx * dx + dy * dy);
-                            if (dr > VslamOdometry.settings.dr_threashold_waypoint || Math.abs(dh) > VslamOdometry.settings.dh_threashold_waypoint) {
-                                console.log(`dr=${dr}, dh=${dh}`);
-                                is_keyframe = true;
-                            }
-                        }else{
-                            const interval = Math.min(Math.ceil(keys.length / 8), 10);
-                            is_keyframe = (cur % interval) == 0;
-                        }
-    
-                        if (!is_keyframe) {
-                            continue;
-                        }
-    
-                        const waypoint = waypoints[keys[cur]];
-                        const jpeg_filepath = waypoint.jpeg_filepath;
-                        const jpeg_data = fs.readFileSync(jpeg_filepath);
-                        //this.requestTrack(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
-                        this.requestTrack(`${i}`, jpeg_data, this.enc_available);
-
-                        this.update_reconstruction_progress(Math.min(this.reconstruction_progress + 1, 50));
-    
-                        console.log(`timestamp ${i} : ${jpeg_filepath}`);
-    
-                        ref_cur = cur;
-                    }
-    
-                    this.m_client.publish('picam360-vslam', JSON.stringify({
-                        "cmd": "backend",
-                        "itr": 8,
-                    }));
-                    this.m_client.publish('picam360-vslam', JSON.stringify({
-                        "cmd": "save",
-                        "filename": VslamOdometry.settings.vslam_filename,
-                        "reverse": this.options.reverse ? true : false,
-                    }));
-                }
-                this.m_client.publish('picam360-vslam', JSON.stringify({
-                    "cmd": "load",
-                    "filename": VslamOdometry.settings.vslam_filename,
-                    "reverse": this.options.reverse ? true : false,
-                }));
-            }
             this.m_subscriber.connect().then(() => {
                 console.log('redis connected:');
 
@@ -523,23 +449,6 @@ class VslamOdometry {
                             if(this.options.transforms_callback){
                                 this.options.transforms_callback(this.vslam_waypoints, this.active_points);
                             }
-
-                            if(false){//debug
-                                const nmea = this.enc_positions[odom_cur].nmea;
-                                for(const key in this.waypoints){
-                                    if(this.waypoints[key].nmea == nmea){
-                                        const enc_pos2 = this.enc_waypoints[key];
-                                        const kf_pos2 = vslam_waypoints[key];
-                                        console.log("diff", key, {
-                                            kf_pos,
-                                            enc_pos,
-                                            kf_pos2,
-                                            enc_pos2,
-                                        });
-                                        break;
-                                    }
-                                }
-                            }
                         }
                     }
                 });
@@ -557,7 +466,7 @@ class VslamOdometry {
     update_reconstruction_progress(progress){
         this.reconstruction_progress = progress;
         if(this.m_client){
-            this.m_client.publish('pserver-auto-drive-info', JSON.stringify({
+            this.m_client.publish('pserver-odometry-info', JSON.stringify({
                 "mode" : "INFO",
                 "state" : "VSLAM_RECONSTRUCTION_PROGRESS",
                 "progress" : this.reconstruction_progress,
@@ -681,57 +590,8 @@ class VslamOdometry {
         this.push_cur++;
     }
 
-    findClosestWaypoint(point, waypoints) {
-        let closestKey = null;
-        let minDistance = Infinity;
-        const calculateDistance = (p1, p2) => {
-            const dx = p1.x - p2.x;
-            const dy = p1.y - p2.y;
-            return Math.sqrt(dx * dx + dy * dy);
-        };
-        for (const [key, waypoint] of Object.entries(waypoints)) {
-            const distance = calculateDistance(point, waypoint);
-            if (distance < minDistance) {
-                minDistance = distance;
-                closestKey = key;
-            }
-        }
-    
-        return closestKey;
-    }
-    
-    getSurroundingKeys(keys, centerKey, range = 5) {
-        const centerIndex = keys.indexOf(centerKey);
-    
-        if (centerIndex === -1) {
-            throw new Error("Center key not found in keys array.");
-        }
-    
-        const totalKeys = keys.length;
-        const startIndex = Math.max(0, centerIndex - range); // 前方の開始インデックス
-        const endIndex = Math.min(totalKeys, centerIndex + range + 1); // 後方の終了インデックス（+1はslice用）
-    
-        // 前後の範囲を考慮して不足分を調整
-        const preKeys = centerIndex - startIndex; // 前方に取れたキー数
-        const postKeys = endIndex - centerIndex - 1; // 後方に取れたキー数
-    
-        const adjustStartIndex = Math.max(0, startIndex - (range - postKeys)); // 後方不足分を前方に補う
-        const adjustEndIndex = Math.min(totalKeys, endIndex + (range - preKeys)); // 前方不足分を後方に補う
-    
-        return keys.slice(adjustStartIndex, adjustEndIndex);
-    }
-
     getPosition() {
         return this.enc_odom.getPosition();
-    }
-    calculateDistance(cur) {
-        return this.enc_odom.calculateDistance(cur);
-    }
-    calculateBearing(cur, pos) {
-        return this.enc_odom.calculateBearing(cur);
-    }
-    calculateHeadingError(cur) {
-        return this.enc_odom.calculateHeadingError(cur);
     }
 }
 

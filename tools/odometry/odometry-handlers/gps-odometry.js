@@ -58,18 +58,13 @@ class GpsOdometry {
     static settings = {
     };
     constructor() {
-        this.waypoints = null;
-        this.gps_waypoints = null;
         this.current_nmea = null;
         this.current_imu = null;
     }
 
-    init(waypoints, callback){
-        this.waypoints = waypoints;
-        this.waypoints_keys = Object.keys(waypoints);
-        this.gps_waypoints = GpsOdometry.cal_xy(waypoints);
+    init(callback){
         if(callback){
-            callback(this.gps_waypoints);
+            callback();
         }
     }
 
@@ -122,60 +117,14 @@ class GpsOdometry {
     }
 
     getPosition(){
-        const key = this.waypoints_keys[0];
-        const base_waypoint = this.waypoints[key];
-        if(!base_waypoint['nmea'] || !this.current_nmea){
-            return {
-                x : 0,
-                y : 0,
-                heading : 0,
-            };
-        }
-		const base_nmea = nmea.parseNmeaSentence(base_waypoint['nmea']);
-        const base_pos = 
-            toWebMercator(base_nmea.latitude, base_nmea.longitude);
-            //utm.fromLatLon(base_nmea.latitude, base_nmea.longitude);
         const current_post = 
             toWebMercator(this.current_nmea.latitude, this.current_nmea.longitude);
             //utm.fromLatLon(this.current_nmea.latitude, this.current_nmea.longitude);
         return {
-            x : current_post.easting - base_pos.easting,
-            y : current_post.northing - base_pos.northing,
+            x : current_post.easting,
+            y : current_post.northing,
             heading : this.current_imu.heading,
         };
-    }
-
-    calculateDistance(cur){
-        const key = this.waypoints_keys[cur];
-        const target_waypoint = this.waypoints[key];
-        if(!target_waypoint['nmea']){
-            return 999;
-        }
-		const target_nmea = nmea.parseNmeaSentence(target_waypoint['nmea']);
-        return calculateDistance(
-            target_nmea.latitude, target_nmea.longitude,
-            this.current_nmea.latitude, this.current_nmea.longitude);
-    }
-    calculateBearing(cur){
-        const key = this.waypoints_keys[cur];
-        const target_waypoint = this.waypoints[key];
-        if(!target_waypoint['nmea']){
-            return 0;
-        }
-		const target_nmea = nmea.parseNmeaSentence(target_waypoint['nmea']);
-        return calculateBearing(
-            target_nmea.latitude, target_nmea.longitude,
-            this.current_nmea.latitude, this.current_nmea.longitude);
-    }
-    calculateHeadingError(cur){
-        const targetHeading = this.calculateBearing(cur);
-		let headingError = targetHeading - this.current_imu.heading;
-		if(headingError <= -180){
-			headingError += 360;
-		}else if(headingError > 180){
-			headingError -= 360;
-		}
-        return headingError;
     }
   }
   

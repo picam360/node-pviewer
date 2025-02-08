@@ -1,14 +1,14 @@
 {
-    "base" : "4khdr-stereo",
-    "def" : "dealer ! mjpeg_encoder ! redis pst_pub=pserver-vslam-pst ! mjpeg_decoder ! v4l2_tegra_encoder name=encoder br=@APP.BITRATE_KBPS@ preset=ultrafast",
+    "base" : "usb-base",
+    "def" : "dup name=dup_vslam ! sampler interval=3 ! pcuda_remapper name=remapper maptype=WINDOW fov=90 view_quat=0.707,0,0,0.707 ignore_view_params=1 s=@VSLAM.SIZE@ n_vstreams=1 ! mjpeg_encoder ! redis pst_pub=pserver-vslam-pst",
     "params" : {
-        "dealer.def" : "mux name=mux ! pcuda_remapper name=remapper maptype=WINDOW fov=90 ignore_view_params=1 s=@APP.SIZE@ n_vstreams=1",
-        "mux.vin0" : "redis param_sub=pserver-nmea param_sub=pserver-encoder param_sub=pserver-imu ! v4l2_capture name=capture s=@APP.CAM0@ ! mjpeg_tegra_decoder name=decoder cudamem=@JPGDEC.CUDAMEM@",
+        "dup_vslam.def" : "mux ! mjpeg_tegra_decoder name=decoder cudamem=@JPGDEC.CUDAMEM@",
+        "mux.vin0" : "redis param_sub=pserver-nmea param_sub=pserver-encoder param_sub=pserver-imu ! v4l2_capture name=capture s=@APP.CAM0@ startup_delay_ms=@APP.STARTUP_DELAY_MS0@",
         "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" passthrough:nmea=\"@GET_PARAM('redis.pserver-nmea')@\" passthrough:encoder=\"@GET_PARAM('redis.pserver-encoder')@\" passthrough:imu=\"@GET_PARAM('redis.pserver-imu')@\" />"
     },
     "replacements" : {
-        "@APP.CAM0@" : "2048x1536@5:/dev/video0",
-        "@APP.CAM1@" : "2048x1536@5:/dev/video2",
-        "@CALIB.DEG_OFFSET.X@" : "0"
+        "@APP.STARTUP_DELAY_MS0@" : "0",
+        "@APP.STARTUP_DELAY_MS1@" : "1000",
+        "@VSLAM.SIZE@" : "1024x512"
     }
 }

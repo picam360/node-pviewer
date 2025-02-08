@@ -1,0 +1,9 @@
+{
+    "base" : "vslam",
+    "def" : "dealer ! v4l2_tegra_encoder name=encoder fps=15 br=@APP.BITRATE_KBPS@ preset=ultrafast",
+    "params" : {
+        "dealer.def" : "dup name=dup_vslam ! suspender ! pcuda_remapper name=remapper ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@"
+    },
+    "replacements" : {
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "params" : {
+        "mux.vin0" : "v4l2_capture name=capture s=@APP.CAM0@ startup_delay_ms=@APP.STARTUP_DELAY_MS0@",
+        "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" />",
+        "mux.vin0.capture.set_sharpness" : "@V4L2.SHARPNESS@",
+        "mux.vin0.capture.set_backlight_compensation" : "@V4L2.BLACKLIGHT_COMPENSATION@",
+        "mux.vin1" : "v4l2_capture name=capture s=@APP.CAM1@ startup_delay_ms=@APP.STARTUP_DELAY_MS1@",
+        "mux.vin1.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS1@\" />",
+        "mux.vin1.capture.set_sharpness" : "@V4L2.SHARPNESS@",
+        "mux.vin1.capture.set_backlight_compensation" : "@V4L2.BLACKLIGHT_COMPENSATION@"
+    },
+    "replacements" : {
+        "@APP.N_STREAMS@" : "1",
+        "@APP.BITRATE_KBPS@" : "1000",
+        "@APP.SIZE@" : "1024x512",
+        "@APP.CAM0@" : "3840x2880@15:/dev/video0",
+        "@APP.CAM1@" : "3840x2880@15:/dev/video2",
+        "@APP.STARTUP_DELAY_MS0@" : "0",
+        "@APP.STARTUP_DELAY_MS1@" : "0",
+        
+        "@JPGDEC.CUDAMEM@" : "1",
+        "@CALIB.DEG_OFFSET.X@" : "-90",
+        "@CALIB.DEG_OFFSET.Y@" : "0",
+        "@CALIB.DEG_OFFSET.Z@" : "0",
+        "@CALIB.LENS0@" : "file:///etc/pserver/lens-params0.json",
+        "@CALIB.LENS1@" : "file:///etc/pserver/lens-params1.json",
+        "@V4L2.SHARPNESS@" : "7",
+        "@V4L2.BLACKLIGHT_COMPENSATION@" : "30"
+    }
+}

@@ -36,8 +36,6 @@
         "plugins/network/host.js",
         "plugins/network/http-pvf.js",
         "plugins/network/osc.js",
-        "plugins/vehicle/wheel.js",
-        "plugins/encoder/encoder-y2kb.js",
         "plugins/start-stream.js",
         "plugins/startup.js"
     ],
@@ -49,19 +47,6 @@
         "cmd" : "any_command",
         "cmd_args" : {},
         "delay_ms" : 1000
-    },
-    "wheel" : {
-        "enabled" : false,
-        "debug" : false
-    },
-    "encoder_y2kb" : {
-        "enabled" : false,
-        "bus_num" : 0,
-        "addrs" : {
-            "left" : "0x11",
-            "right" : "0x12"
-        },
-        "debug" : false
     },
     "license" : {
         "app_key" : "your_app_key",

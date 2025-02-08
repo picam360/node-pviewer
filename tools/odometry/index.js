@@ -36,16 +36,16 @@ const ODOMETRY_TYPE = {
 	VSLAM : "VSLAM",
 };
 let m_odometry_conf = {
-	odom_type : ODOMETRY_TYPE.VSLAM,
-//	odom_type : ODOMETRY_TYPE.ENCODER,
+//	odom_type : ODOMETRY_TYPE.VSLAM,
+	odom_type : ODOMETRY_TYPE.ENCODER,
 	GPS : {
-		enabled : true
+		enabled : false
 	},
 	ENCODER : {
 		enabled : true
 	},
 	VSLAM : {
-		enabled : true
+		enabled : false
 	},
 };
 
@@ -55,7 +55,7 @@ function init_odometory_handlers(){
 		const key = keys[cur];
 		const next_cb = () => {
 			if(cur == keys.length - 1){
-				console.log("drive mode", m_drive_mode);
+				console.log("mode", m_drive_mode);
 
 				m_client.publish('pserver-odometry-info', JSON.stringify({
 					"mode" : "LOCALIZATION",
@@ -83,7 +83,6 @@ function init_odometory_handlers(){
 				break;
 			case ODOMETRY_TYPE.VSLAM:
 				m_odometry_conf[key].handler = new VslamOdometry({
-					reverse : m_options.reverse,
 					//host : m_argv.host,
 					transforms_callback : (vslam_waypoints, active_points) => {
 						msg["VSLAM"] = vslam_waypoints;
@@ -96,6 +95,43 @@ function init_odometory_handlers(){
 		m_odometry_conf[key].handler.init(next_cb);
 	}
 	build_odometry_handler(0);
+}
+function localization_handler(tmp_img){
+	if(tmp_img.length != 3){
+		return;
+	}
+
+	const data = Buffer.concat([tmp_img[0], tmp_img[1]]);
+	const header = data.slice(0, 2).toString('utf-8');
+	if (header !== 'PI') {
+		throw new Error('Invalid file format');
+	}
+
+	const header_size = data.readUInt16BE(2);
+	const xml = data.slice(4, 4 + header_size).toString('utf-8');
+	const img_dom = xml_parser.parse(xml);
+
+	const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
+	const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
+
+	const conf_keys = Object.keys(m_odometry_conf)
+	for(const key of conf_keys){
+		const conf = m_odometry_conf[key];
+		if(conf.handler){
+			conf.handler.push(header, meta, tmp_img[2]);
+		}
+	}
+
+	if(m_odometry_conf[m_odometry_conf.odom_type].handler.is_ready() == false){
+		return;
+	}
+	
+	const odom = m_odometry_conf[m_odometry_conf.odom_type].handler.getPosition();
+	m_client.publish('pserver-odometry-info', JSON.stringify({
+		"mode" : m_drive_mode,
+		"state" : "UPDATE_ODOMETRY",
+		"odom" : odom,
+	}));
 }
 
 function main() {
@@ -162,6 +198,8 @@ function main() {
 	subscriber.connect().then(() => {
 		console.log('redis subscriber connected:');
 
+		init_odometory_handlers();
+
 		subscriber.subscribe('pserver-odometry', (data, key) => {
 			const params = data.trim().split(' ');
 			switch (params[0]) {
@@ -171,21 +209,14 @@ function main() {
 					break;
 			}
 		});
-		
-		subscriber.subscribe('pserver-nmea', (data, key) => {
-			return;
-		});
-		
-		subscriber.subscribe('pserver-encoder', (data, key) => {
-			return;
-		});
 
 		let tmp_img = [];
 		let last_ts = Date.now();
 		subscriber.subscribe('pserver-vslam-pst', (data, key) => {
 			last_ts = Date.now();
 			if(data.length == 0 && tmp_img.length != 0){
-				//TODO:vslam
+				localization_handler(tmp_img);
+
 				tmp_img = [];
 			}else{
 				tmp_img.push(Buffer.from(data, 'base64'));
