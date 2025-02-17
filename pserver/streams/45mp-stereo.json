@@ -9,8 +9,8 @@
         "mux.vin1.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS1@\" />",
         "mux.vin0.capture.startup_delay_ms" : "0",
         "mux.vin1.capture.startup_delay_ms" : "0",
-        "mux.vin0.capture.ctemp" : "4000",
-        "mux.vin1.capture.ctemp" : "4000",
+        "mux.vin0.capture.ctemp" : "6000",
+        "mux.vin1.capture.ctemp" : "6000",
         "encoder.br" : "@APP.BITRATE_KBPS@"
     },
     "replacements" : {
