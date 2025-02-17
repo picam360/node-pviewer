@@ -15,3 +15,8 @@ sed -e "s%@CONFIG_PATH@%${CONFIG_PATH}%" webdis.service.in | sudo tee /etc/syste
 sudo systemctl daemon-reload
 sudo systemctl restart webdis.service
 sudo systemctl enable webdis.service
+
+#/etc/redis/redis.conf
+# "0.0.0.0" means accepting connections from any ipv4 client
+# "::0" means accepting connections from any ipv6 client
+#bind 0.0.0.0 ::0
