@@ -53,3 +53,10 @@ dist
 .DS_Store
 .snipet
 __pycache__
+
+user-*
+oem-*
+ext-*
+*-user
+*-oem
+*-ext
