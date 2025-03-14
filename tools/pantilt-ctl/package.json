@@ -1,0 +1,15 @@
+{
+  "name": "pantilt-ctl",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Takuma Hirayama <hirayama.takuma@picam360.com> (https://www.picam360.com/)",
+  "license": "ISC",
+  "dependencies": {
+    "redis": "^4.7.0",
+    "yargs": "^17.7.2"
+  }
+}

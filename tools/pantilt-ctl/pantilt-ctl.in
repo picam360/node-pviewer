@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cd @SCRIPT_DIR@
+@NODE_PATH@ index.js --ip=127.0.0.1
