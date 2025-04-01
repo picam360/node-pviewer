@@ -154,6 +154,10 @@ function record_waypoints_handler(tmp_img){
 	const header_size = data.readUInt16BE(2);
 	const xml = data.slice(4, 4 + header_size).toString('utf-8');
 	const img_dom = xml_parser.parse(xml);
+
+	const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
+	const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
+
 	let timestamp = img_dom["picam360:image"]['timestamp'];
 	if(timestamp.includes(',')){
 		const ary = timestamp.split(',');
@@ -165,12 +169,17 @@ function record_waypoints_handler(tmp_img){
 			console.error('pif file dump faild', err);
 		}
 	});
+	const jpeg_data = tmp_img[2];
 	const jpeg_filepath = pif_filepath + ".0.0.JPEG";
-	fs.writeFile(jpeg_filepath, tmp_img[2], (err) => {
+	fs.writeFile(jpeg_filepath, jpeg_data, (err) => {
 		if (err) {
 			console.error('jpeg file dump faild', err);
 		}
 	});
+
+	if(m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM && m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler){
+		m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.push(header, meta, jpeg_data);
+	}
 
 	if(m_options.debug){
 		console.log(`${pif_filepath} recorded.`);
@@ -260,7 +269,7 @@ function auto_drive_handler(tmp_img){
 		return;
 	}
 	if(m_odometry_conf[m_odometry_conf.odom_type].handler == null){
-		return;//not ready or finished or something wrong
+		return;//fail safe : not ready or finished or something wrong
 	}
 
 	const data = Buffer.concat([tmp_img[0], tmp_img[1]]);
@@ -289,6 +298,9 @@ function auto_drive_handler(tmp_img){
 	}
 
 	const keys = Object.keys(m_auto_drive_waypoints.src);
+    if (m_auto_drive_cur >= keys.length) {
+		return;//fail safe : finished
+	}
 
 	let cur = m_auto_drive_cur;
 	while(cur < keys.length){
@@ -391,19 +403,14 @@ function auto_drive_handler(tmp_img){
         console.log('All waypoints reached!');
 		stop_robot();
 
-		for(const key of conf_keys){
-			if(m_odometry_conf[key].handler){
-				m_odometry_conf[key].handler.deinit();
-				m_odometry_conf[key].handler = null;
-			}
-		}
-
 		m_client.publish('pserver-auto-drive-info', JSON.stringify({
 			"mode" : "AUTO",
 			"state" : "DONE",
 			"waypoint_distance" : "-",
 			"heading_error" : "-",
 		}));
+		
+		command_handler("STOP_AUTO");
     }
 }
 
@@ -611,7 +618,25 @@ function command_handler(cmd) {
 					"state" : "START_RECORD",
 				}));
 				
-				VslamOdometry.clear_reconstruction();
+				if(m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM){
+					const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
+					load_auto_drive_waypoints_ext(pif_dirpath, 0, null, (waypoints) => {
+						waypoints = reindex_waypoints(waypoints, m_options.reverse);
+	
+						VslamOdometry.clear_reconstruction();
+						m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler = new VslamOdometry({
+							incremental_reconstruction : true,
+							reverse : false,
+							//host : m_argv.host,
+							transforms_callback : (vslam_waypoints, active_points) => {
+							},
+						});
+						m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.init(waypoints, () => {
+							m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.deinit();
+							m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler = null;
+						});
+					});
+				}
 			}
 			console.log("drive mode", m_drive_mode);
 			break;
@@ -627,6 +652,10 @@ function command_handler(cmd) {
 				});
 				update_auto_drive_cur(0);
 			});
+
+			if(m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM && m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler){
+				m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.reconstruction_finalize();
+			}
 			m_client.publish('pserver-auto-drive-info', JSON.stringify({
 				"mode" : "RECORD",
 				"state" : "STOP_RECORD",
@@ -675,12 +704,15 @@ function command_handler(cmd) {
 								build_odometry_handler(cur + 1);
 							}
 						};
-						if(m_odometry_conf[key].handler){
-							m_odometry_conf[key].handler.deinit();
-							m_odometry_conf[key].handler = null;
-						}
 						if(!m_odometry_conf[key].enabled){
 							next_cb();
+							return;
+						}
+						if(m_odometry_conf[key].handler){
+							setTimeout(() => {
+								build_odometry_handler(cur);
+							}, 1000);
+							console.log(`wait ${key} handler finished`);
 							return;
 						}
 						switch(key){
@@ -712,11 +744,23 @@ function command_handler(cmd) {
 			}
 			break;
 		case "STOP_AUTO":
+			if(m_drive_mode == "STANBY") {
+				return;
+			}
+
 			stop_robot();
 			setTimeout(() => {
 				stop_robot();
 			}, 1000)
 			m_drive_mode = "STANBY";
+
+			const keys = Object.keys(m_odometry_conf);
+			for(const key of keys){
+				if(m_odometry_conf[key].handler){
+					m_odometry_conf[key].handler.deinit();
+					m_odometry_conf[key].handler = null;
+				}
+			}
 
 			m_client.publish('pserver-auto-drive-info', JSON.stringify({
 				"mode" : "AUTO",

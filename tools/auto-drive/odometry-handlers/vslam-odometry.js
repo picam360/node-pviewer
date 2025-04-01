@@ -186,6 +186,10 @@ function createErrorFunction(vslam_waypoints, enc_waypoints, settings, types) {
 
 function cal_fitting_params(vslam_waypoints, enc_waypoints, settings){
     const keys2 = Object.keys(vslam_waypoints);
+    if(!keys2.length){
+        return settings;
+    }
+
     let first_key = keys2[0];
     let last_key = keys2[keys2.length - 1];
 
@@ -611,14 +615,22 @@ class VslamOdometry {
             this.reconstruction._enc_odom.push(header, meta, jpeg_data);
             this.reconstruction._enc_waypoints.push(this.reconstruction._enc_odom.getPosition());
 
+
             if (!fs.existsSync(VslamOdometry.get_data_path())) { //reconstruct
+                if(!this.enc_available){
+                    const frame_dom = xml_parser.parse(meta);
+                    if(frame_dom['picam360:frame']['passthrough:encoder']){
+                        this.enc_available = true;
+                    }
+                }
                 let is_keyframe = false;
                 let need_truck = false;
+                const cur = this.reconstruction._enc_waypoints.length - 1;
                 if (!this.reconstruction.pushed_data) {//first
                     is_keyframe = true;
                     need_truck = true;
                 } else if(this.enc_available){
-                    const pos = this.reconstruction._enc_waypoints[this.reconstruction._enc_waypoints.length - 1];
+                    const pos = this.reconstruction._enc_waypoints[cur];
                     const ref_pos = this.reconstruction._enc_waypoints[this.reconstruction.ref_cur];
                     const dx = pos.x - ref_pos.x;
                     const dy = pos.y - ref_pos.y;
@@ -630,7 +642,7 @@ class VslamOdometry {
                         need_truck = true;
                     }
                 }else{
-                    const interval = Math.min(Math.ceil(keys.length / 8), 10);
+                    const interval = 30;
                     need_truck = (cur % interval) == 0;
                 }
 
@@ -644,9 +656,9 @@ class VslamOdometry {
 
                 this.update_reconstruction_progress(Math.min(this.reconstruction_progress + 1, 50));
 
-                console.log(`timestamp ${cur} : ${jpeg_filepath}`);
+                console.log(`timestamp ${cur} : track`);
 
-                this.reconstruction.ref_cur = this.reconstruction._enc_waypoints.length - 1;
+                this.reconstruction.ref_cur = cur;
             }
 
         }else{
