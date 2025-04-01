@@ -105,6 +105,9 @@ class EncoderOdometry {
     static cal_xy(waypoints, settings){
         const positions = {};
         const keys = Object.keys(waypoints);
+        if(!keys.length){
+            return {};
+        }
         const base_encoder = (waypoints[keys[0]].encoder ? JSON.parse(waypoints[keys[0]].encoder) : {
             left : 0,
             right : 0,
@@ -138,6 +141,9 @@ class EncoderOdometry {
     }
     static cal_heading(waypoints){
         const waypoints_keys = Object.keys(waypoints);
+        if(!waypoints_keys.length){
+            return 0;
+        }
         const settings = Object.assign({}, EncoderOdometry.settings);
         if(settings.lock_gps_heading){
             const gps_positions = GpsOdometry.cal_xy(waypoints);
@@ -220,7 +226,7 @@ class EncoderOdometry {
             }
             
             this.gps_positions = GpsOdometry.cal_xy(waypoints);
-            {
+            if(Object.keys(this.gps_positions).length){
                 const keys = Object.keys(this.gps_positions);
                 const gps_base_x = this.gps_positions[keys[0]].x;
                 const gps_base_y = this.gps_positions[keys[0]].y;
@@ -320,7 +326,11 @@ class EncoderOdometry {
             const settings = Object.assign({}, EncoderOdometry.settings);
             settings.x_initial = 0;
             settings.y_initial = 0;
-            settings.heading_initial = EncoderOdometry.cal_heading(this.waypoints);
+            if(this.waypoints.length){
+                settings.heading_initial = EncoderOdometry.cal_heading(this.waypoints);
+            }else{
+                settings.heading_initial = this.current_imu.heading;//jissaitonozure ha kouryosubeki
+            }
             this.encoder_params = {
                 right_gain : settings.right_gain,
                 meter_per_pulse : settings.meter_per_pulse,

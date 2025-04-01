@@ -259,6 +259,9 @@ function auto_drive_handler(tmp_img){
 	if(tmp_img.length != 3){
 		return;
 	}
+	if(m_odometry_conf[m_odometry_conf.odom_type].handler == null){
+		return;//not ready or finished or something wrong
+	}
 
 	const data = Buffer.concat([tmp_img[0], tmp_img[1]]);
 	const header = data.slice(0, 2).toString('utf-8');
@@ -644,10 +647,6 @@ function command_handler(cmd) {
 					"state" : "START_AUTO",
 				}));
 
-				if(m_auto_drive_ready_first_launch){//for vslam initialization
-					m_client.publish('pgis-server', "CMD DISABLE_OFFSCREEN");
-				}
-
 				const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				load_auto_drive_waypoints_ext(pif_dirpath, 0, null, (waypoints) => {
 					waypoints = reindex_waypoints(waypoints, m_options.reverse);
@@ -671,10 +670,6 @@ function command_handler(cmd) {
 									"mode" : "AUTO",
 									"state" : "READY_AUTO",
 								}));
-
-								if(m_auto_drive_ready_first_launch){//for vslam initialization
-									m_client.publish('pgis-server', "CMD ENABLE_OFFSCREEN");
-								}
 				
 							}else{
 								build_odometry_handler(cur + 1);
@@ -697,6 +692,7 @@ function command_handler(cmd) {
 								break;
 							case ODOMETRY_TYPE.VSLAM:
 								m_odometry_conf[key].handler = new VslamOdometry({
+									incremental_reconstruction : false,
 									reverse : m_options.reverse,
 									//host : m_argv.host,
 									transforms_callback : (vslam_waypoints, active_points) => {

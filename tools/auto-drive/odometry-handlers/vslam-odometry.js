@@ -344,6 +344,15 @@ class VslamOdometry {
         this.enc_odom = new EncoderOdometry();
         this.enc_waypoints = {};
         this.enc_positions = {};
+
+        this.reconstruction = {
+            cur : 0,
+            ref_cur : 0,
+            pushed_data : null,
+            _enc_odom : new EncoderOdometry(),
+            _enc_waypoints : [],
+            finalized : false,
+        };
     }
 
 
@@ -395,64 +404,15 @@ class VslamOdometry {
                 console.error('redis error:', err);
                 this.m_subscriber = null;
             });
-            const push_keyframes = () => {
-                if (!fs.existsSync(VslamOdometry.get_data_path())) { //reconstruct
-
-                    let ref_cur = 0;
-    
-                    for (let i = 0; i < keys.length; i++) {
-                        const cur = i;
-                        const pos = this.enc_waypoints[cur];
-                        let is_keyframe = false;
-                        if (cur == 0 || cur == keys.length - 1) {
-                            is_keyframe = true;
-                        } else if(this.enc_available){
-                            const ref_pos = this.enc_waypoints[ref_cur];
-                            const dx = pos.x - ref_pos.x;
-                            const dy = pos.y - ref_pos.y;
-                            const dh = pos.heading - ref_pos.heading;
-                            const dr = Math.sqrt(dx * dx + dy * dy);
-                            if (dr > VslamOdometry.settings.dr_threashold_waypoint || Math.abs(dh) > VslamOdometry.settings.dh_threashold_waypoint) {
-                                console.log(`dr=${dr}, dh=${dh}`);
-                                is_keyframe = true;
-                            }
-                        }else{
-                            const interval = Math.min(Math.ceil(keys.length / 8), 10);
-                            is_keyframe = (cur % interval) == 0;
-                        }
-    
-                        if (!is_keyframe) {
-                            continue;
-                        }
-    
-                        const waypoint = waypoints[keys[cur]];
-                        const jpeg_filepath = waypoint.jpeg_filepath;
-                        const jpeg_data = fs.readFileSync(jpeg_filepath);
-                        //this.requestTrack(`${i}`, jpeg_data, (cur == 0 || cur == keys.length - 1));
-                        this.requestTrack(`${i}`, jpeg_data, this.enc_available);
-
-                        this.update_reconstruction_progress(Math.min(this.reconstruction_progress + 1, 50));
-    
-                        console.log(`timestamp ${i} : ${jpeg_filepath}`);
-    
-                        ref_cur = cur;
+            const startup_callback = () => {
+                this.reconstruction._enc_odom.init({}, () => {
+                    for (let i = 0; i < waypoints.length; i++) {
+                        this.push(null, waypoints[i].meta, waypoints[i].jpeg_data);
                     }
-    
-                    this.m_client.publish('picam360-vslam', JSON.stringify({
-                        "cmd": "backend",
-                        "itr": 8,
-                    }));
-                    this.m_client.publish('picam360-vslam', JSON.stringify({
-                        "cmd": "save",
-                        "filename": VslamOdometry.settings.vslam_filename,
-                        "reverse": this.options.reverse ? true : false,
-                    }));
-                }
-                this.m_client.publish('picam360-vslam', JSON.stringify({
-                    "cmd": "load",
-                    "filename": VslamOdometry.settings.vslam_filename,
-                    "reverse": this.options.reverse ? true : false,
-                }));
+                    if(!this.options.incremental_reconstruction){
+                        this.reconstruction_finalize();
+                    }
+                });
             }
             this.m_subscriber.connect().then(() => {
                 console.log('redis connected:');
@@ -463,7 +423,7 @@ class VslamOdometry {
 
                     if(params['type'] == 'info'){
                         if(VslamOdometry.settings.launch_vslam && params['msg'] == 'startup'){
-                            push_keyframes();
+                            startup_callback();
 
                             this.update_reconstruction_progress(50);
                         }
@@ -549,7 +509,7 @@ class VslamOdometry {
                 killDockerContainer();
                 launchDockerContainer();
             }else{
-                push_keyframes();
+                startup_callback();
             }
         });//end of redis connected
     }
@@ -563,6 +523,40 @@ class VslamOdometry {
                 "progress" : this.reconstruction_progress,
             }));
         }
+    }
+
+    reconstruction_finalize(){
+        if(this.reconstruction.finalized){
+            return;
+        }
+        if (!fs.existsSync(VslamOdometry.get_data_path())) { //reconstruct
+            if(this.reconstruction.pushed_data){
+                const pos = this.reconstruction._enc_waypoints[this.reconstruction._enc_waypoints.length - 1];
+                const ref_pos = this.reconstruction._enc_waypoints[this.reconstruction.ref_cur];
+                const dx = pos.x - ref_pos.x;
+                const dy = pos.y - ref_pos.y;
+                if(dx != 0 || dy != 0){
+                    this.requestTrack(`${this.reconstruction._enc_waypoints.length - 1}`, this.reconstruction.pushed_data.jpeg_data, true);
+                }
+            }
+    
+            this.m_client.publish('picam360-vslam', JSON.stringify({
+                "cmd": "backend",
+                "itr": 8,
+            }));
+            this.m_client.publish('picam360-vslam', JSON.stringify({
+                "cmd": "save",
+                "filename": VslamOdometry.settings.vslam_filename,
+                "reverse": this.options.reverse ? true : false,
+            }));
+        }
+        this.m_client.publish('picam360-vslam', JSON.stringify({
+            "cmd": "load",
+            "filename": VslamOdometry.settings.vslam_filename,
+            "reverse": this.options.reverse ? true : false,
+        }));
+        this.reconstruction.finalized = true;
+        //this.enc_waypoints = this.reconstruction._enc_waypoints;
     }
 
     deinit() {
@@ -612,73 +606,119 @@ class VslamOdometry {
     }
 
     push(header, meta, jpeg_data) {
-        this.enc_odom.push(header, meta, jpeg_data);
-        this.enc_positions[this.push_cur] = this.enc_odom.getPosition();
         
-        const frame_dom = xml_parser.parse(meta);
-        this.enc_positions[this.push_cur].nmea = frame_dom['picam360:frame']['passthrough:nmea'];
+        if(!this.reconstruction.finalized){//incremental reconstruction
+            this.reconstruction._enc_odom.push(header, meta, jpeg_data);
+            this.reconstruction._enc_waypoints.push(this.reconstruction._enc_odom.getPosition());
 
-        if(this.first_push){
-            this.first_push = false;
+            if (!fs.existsSync(VslamOdometry.get_data_path())) { //reconstruct
+                let is_keyframe = false;
+                let need_truck = false;
+                if (!this.reconstruction.pushed_data) {//first
+                    is_keyframe = true;
+                    need_truck = true;
+                } else if(this.enc_available){
+                    const pos = this.reconstruction._enc_waypoints[this.reconstruction._enc_waypoints.length - 1];
+                    const ref_pos = this.reconstruction._enc_waypoints[this.reconstruction.ref_cur];
+                    const dx = pos.x - ref_pos.x;
+                    const dy = pos.y - ref_pos.y;
+                    const dh = pos.heading - ref_pos.heading;
+                    const dr = Math.sqrt(dx * dx + dy * dy);
+                    if (dr > VslamOdometry.settings.dr_threashold_waypoint || Math.abs(dh) > VslamOdometry.settings.dh_threashold_waypoint) {
+                        console.log(`dr=${dr}, dh=${dh}`);
+                        is_keyframe = true;
+                        need_truck = true;
+                    }
+                }else{
+                    const interval = Math.min(Math.ceil(keys.length / 8), 10);
+                    need_truck = (cur % interval) == 0;
+                }
 
-            const keys = Object.keys(this.vslam_waypoints);
-            //this.requestTrack(`${this.push_cur}`, jpeg_data, true, 1);
-            const ref_timestamps = keys.slice(0, 5);
-            this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
-            this.backend_pending++;
-            this.last_pushVslam_cur = this.push_cur;
-            return;
-        }else if(this.current_odom == null){
-            return;
-        }
+                this.reconstruction.pushed_data = { header, meta, jpeg_data };
 
-        if(this.enc_available){
-            const pos = {
-                x : this.enc_positions[this.push_cur].x - this.enc_positions[this.last_pushVslam_cur].x,
-                y : this.enc_positions[this.push_cur].y - this.enc_positions[this.last_pushVslam_cur].y,
-                heading : this.enc_positions[this.push_cur].heading - this.enc_positions[this.last_pushVslam_cur].heading,
-            };
+                if (!need_truck) {
+                    return;
+                }
 
-            const dr = Math.sqrt(pos.x*pos.x + pos.y*pos.y);
-            const dh = pos.heading;
-            if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
-                console.log("requestEstimation", `dr=${dr}, dh=${dh}`);
-        
-                const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
-                const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
+                this.requestTrack(`${cur}`, jpeg_data, is_keyframe);
 
-                console.log("requestEstimation", ref_timestamps);
-        
-                //this.requestTrack(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
-                this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
-                this.backend_pending++;
-                this.last_pushVslam_cur = this.push_cur;
+                this.update_reconstruction_progress(Math.min(this.reconstruction_progress + 1, 50));
 
-                this.enc_positions[this.push_cur].keyframe = true;
+                console.log(`timestamp ${cur} : ${jpeg_filepath}`);
+
+                this.reconstruction.ref_cur = this.reconstruction._enc_waypoints.length - 1;
             }
+
         }else{
-            if (this.push_cur - this.last_pushVslam_cur > 10) {
-                console.log("requestEstimation", `push_cur=${this.push_cur}`);
-        
-                const center_key = this.findClosestWaypoint({
-                    x : this.current_odom.pose.position.x,
-                    y : this.current_odom.pose.position.y,
-                    heading : 0,
-                }, this.vslam_waypoints);
-                const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
 
-                console.log("requestEstimation", ref_timestamps);
-        
-                //this.requestTrack(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
-                this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
+            this.enc_odom.push(header, meta, jpeg_data);
+            this.enc_positions[this.push_cur] = this.enc_odom.getPosition();
+            
+            const frame_dom = xml_parser.parse(meta);
+            this.enc_positions[this.push_cur].nmea = frame_dom['picam360:frame']['passthrough:nmea'];
+
+            if(this.first_push){
+                this.first_push = false;
+
+                const keys = Object.keys(this.vslam_waypoints);
+                //this.requestTrack(`${this.push_cur}`, jpeg_data, true, 1);
+                const ref_timestamps = keys.slice(0, 5);
+                this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
                 this.backend_pending++;
                 this.last_pushVslam_cur = this.push_cur;
-
-                this.enc_positions[this.push_cur].keyframe = true;
+                return;
+            }else if(this.current_odom == null){
+                return;
             }
-        }
 
-        this.push_cur++;
+            if(this.enc_available){
+                const pos = {
+                    x : this.enc_positions[this.push_cur].x - this.enc_positions[this.last_pushVslam_cur].x,
+                    y : this.enc_positions[this.push_cur].y - this.enc_positions[this.last_pushVslam_cur].y,
+                    heading : this.enc_positions[this.push_cur].heading - this.enc_positions[this.last_pushVslam_cur].heading,
+                };
+
+                const dr = Math.sqrt(pos.x*pos.x + pos.y*pos.y);
+                const dh = pos.heading;
+                if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
+                    console.log("requestEstimation", `dr=${dr}, dh=${dh}`);
+            
+                    const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
+                    const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
+
+                    console.log("requestEstimation", ref_timestamps);
+            
+                    //this.requestTrack(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
+                    this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
+                    this.backend_pending++;
+                    this.last_pushVslam_cur = this.push_cur;
+
+                    this.enc_positions[this.push_cur].keyframe = true;
+                }
+            }else{
+                if (this.push_cur - this.last_pushVslam_cur > 10) {
+                    console.log("requestEstimation", `push_cur=${this.push_cur}`);
+            
+                    const center_key = this.findClosestWaypoint({
+                        x : this.current_odom.pose.position.x,
+                        y : this.current_odom.pose.position.y,
+                        heading : 0,
+                    }, this.vslam_waypoints);
+                    const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
+
+                    console.log("requestEstimation", ref_timestamps);
+            
+                    //this.requestTrack(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
+                    this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
+                    this.backend_pending++;
+                    this.last_pushVslam_cur = this.push_cur;
+
+                    this.enc_positions[this.push_cur].keyframe = true;
+                }
+            }
+
+            this.push_cur++;
+        }
     }
 
     findClosestWaypoint(point, waypoints) {
