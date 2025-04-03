@@ -332,6 +332,7 @@ class VslamOdometry {
         this.options = options || {};
         this.host = this.options.host || "localhost";
 
+        this.loaded = false;
         this.initialized = false;
         this.waypoints = null;
         this.vslam_waypoints = null;
@@ -410,8 +411,15 @@ class VslamOdometry {
             });
             const startup_callback = () => {
                 this.reconstruction._enc_odom.init({}, () => {
+                    this.initialized = true;
+                    
                     for (let i = 0; i < waypoints.length; i++) {
-                        this.push(null, waypoints[i].meta, waypoints[i].jpeg_data);
+                        try{
+                            const jpeg_data = fs.readFileSync(waypoints[i].jpeg_filepath);
+                            this.push(null, waypoints[i].meta, jpeg_data);
+                        }catch(err){
+                            console.log(err);
+                        }
                     }
                     if(!this.options.incremental_reconstruction){
                         this.reconstruction_finalize();
@@ -434,10 +442,10 @@ class VslamOdometry {
                         return;
                     }
 
-                    if(!this.initialized){
+                    if(!this.loaded){
                         this.update_reconstruction_progress(Math.min(this.reconstruction_progress + 1, 90));
                         if(params['type'] == 'load'){
-                            this.initialized = true;
+                            this.loaded = true;
                             this.current_odom = null;
                             this.push_cur = keys.length;
                             this.last_pushVslam_cur = keys.length - 1;
@@ -612,6 +620,10 @@ class VslamOdometry {
     push(header, meta, jpeg_data) {
         
         if(!this.reconstruction.finalized){//incremental reconstruction
+            if(!this.initialized){
+                //TODO
+                return;
+            }
             this.reconstruction._enc_odom.push(header, meta, jpeg_data);
             this.reconstruction._enc_waypoints.push(this.reconstruction._enc_odom.getPosition());
 

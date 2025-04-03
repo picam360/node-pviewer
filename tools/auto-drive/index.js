@@ -202,13 +202,14 @@ function move_robot(distance) {
 }
 
 function move_pwm_robot(distance, angle) {
-	//const forward_pwm_base = 50;
-	//const backward_pwm_base = 46;
+	const forward_pwm_base = 50;
+	const backward_pwm_base = 46;
 
-	const forward_pwm_base = 45;
-	const backward_pwm_base = 42;
+	//const forward_pwm_base = 45;
+	//const backward_pwm_base = 42;
+
 	const max = 10;
-	const gain = 0.03;
+	const gain = 0.06;
 	if(distance > 0){
 		const left_minus = Math.min(max, angle < 0 ? max * Math.abs(angle) * gain : 0);
 		const right_minus = Math.min(max, angle > 0 ? max * Math.abs(angle) * gain : 0);
