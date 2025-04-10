@@ -1,0 +1,8 @@
+{
+    "base" : "20mp-stereo",
+    "params" : {
+        "mux.vin1" : null
+    },
+    "replacements" : {
+    }
+}

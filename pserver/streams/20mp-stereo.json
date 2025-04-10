@@ -1,0 +1,26 @@
+{
+    "def" : "dealer ! v4l2_tegra_encoder name=encoder br=@APP.BITRATE_KBPS@ preset=ultrafast",
+    "params" : {
+        "dealer.def" : "mux name=mux ! pcuda_remapper name=remapper sh=10 ho=1 dup=0 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
+        "mux.vin0" : "v4l2_capture name=capture s=@APP.CAM0@ fmt=BA10",
+        "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" />",
+        "mux.vin1" : "v4l2_capture name=capture s=@APP.CAM1@ fmt=BA10",
+        "mux.vin1.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS1@\" />",
+    },
+    "replacements" : {
+        "@APP.N_STREAMS@" : "1",
+        "@APP.BITRATE_KBPS@" : "2000",
+        "@APP.SIZE@" : "2048x1024",
+        "@APP.CAM0@" : "5120x3840@15:/dev/video0",
+        "@APP.CAM1@" : "5120x3840@15:/dev/video1",
+        "@JPGDEC.CUDAMEM@" : "1",
+        "@CALIB.DEG_OFFSET.X@" : "-90",
+        "@CALIB.DEG_OFFSET.Y@" : "180",
+        "@CALIB.DEG_OFFSET.Z@" : "0",
+        "@CALIB.LENS0@" : "file:///etc/pserver/lens-params0.json",
+        "@CALIB.LENS1@" : "file:///etc/pserver/lens-params1.json",
+        "@V4L2.SHARPNESS@" : "7",
+        "@V4L2.BLACKLIGHT_COMPENSATION@" : "30"
+    }
+}
+
