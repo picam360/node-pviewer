@@ -19,6 +19,8 @@
             "streams/45mp-stereo.json",
             "streams/45mp-stereo-calib.json",
             "streams/45mp-stereo-imu.json",
+            "streams/20mp-stereo.json",
+            "streams/20mp-stereo-calib.json",
             "streams/20mp-mono.json",
             "streams/pantilt.json",
             "streams/pantilt-calib.json",

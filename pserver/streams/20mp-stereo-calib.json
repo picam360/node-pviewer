@@ -1,0 +1,16 @@
+{
+    "base" : "20mp-stereo",
+    "def" : "mux name=mux ! pgl_calibrator name=calibrator w=1024 h=1024 d=0 ! v4l2_tegra_encoder name=encoder fps=15",
+    "params" : {
+        "dealer.def" : null,
+        "mux.vin0.capture.debayer" : "1",
+        "mux.vin1.capture.debayer" : "1"
+    },
+    "replacements" : {
+    },
+    "pviewer_config_ext" : {
+        "plugin_paths" : [
+            "plugins/calib.js"
+        ]
+    }
+}
