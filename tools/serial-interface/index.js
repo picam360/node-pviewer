@@ -341,6 +341,33 @@ function main() {
         } else if (data.startsWith("REQ ")) {
             var params = data.trim().split(' ');
             switch (params[1]) {
+                case "SET_VSTATE"://from esp32
+                    try{
+                        const json_str = data.substring(14);
+                        //console.log(json_str);
+                        const vstate = JSON.parse(json_str);
+
+                        if(vstate.encoder_left !== undefined && vstate.encoder_right){
+                            const left_encoder = parseInt(vstate.encoder_left);
+                            const right_encoder = parseInt(vstate.encoder_right);
+
+                            client.publish(`pserver-encoder`, JSON.stringify({
+                                "left" : left_encoder,
+                                "right" : right_encoder,
+                            }), (err, reply) => {
+                                if (err) {
+                                    console.error('Error publishing message:', err);
+                                } else {
+                                    //console.log(`Message published to ${reply} subscribers.`);
+                                }
+                            });
+
+                            //console.log("encoder", left_encoder, right_encoder);
+                        }
+                    }catch(err){
+
+                    }
+                    break;
                 case "GET_RTCM"://from esp32
                     break;
                 case "GET_IP"://from esp32
