@@ -2,7 +2,7 @@
     "base" : "20mp-stereo",
     "def" : "dup name=dup_20mp_stereo ! sampler interval=3 ! pcuda_remapper name=remapper debalgo=linear debayer=I420 sh=0 rgb_gain=1.3,1.0,2.5 gamma=2.2 maptype=WINDOW fov=90 view_quat=0.707,0,0,0.707 ignore_view_params=1 s=@VSLAM.SIZE@ n_vstreams=1 ! mjpeg_encoder ! redis pst_pub=pserver-vslam-pst",
     "params" : {
-        "mux.vin0" : "redis param_sub=pserver-nmea param_sub=pserver-encoder param_sub=pserver-imu ! v4l2_capture name=capture s=@APP.CAM0@ fmt=BA10",
+        "mux.vin0" : "redis param_sub=pserver-nmea param_sub=pserver-encoder param_sub=pserver-imu ! v4l2_capture name=capture s=@APP.CAM0@ fmt=BA10 ae_target=@V4L2.AE_TARGET@",
         "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" passthrough:nmea=\"@GET_PARAM('redis.pserver-nmea')@\" passthrough:encoder=\"@GET_PARAM('redis.pserver-encoder')@\" passthrough:imu=\"@GET_PARAM('redis.pserver-imu')@\" />"
     },
     "replacements" : {
