@@ -43,17 +43,21 @@ function main() {
     };
     for(const server of argv.server || []){
         const nodes = server.split('@');
-        if(isValidPort(nodes[0])){
-            const port = nodes[0];
-            const wrtckey = nodes[1];
-            
-            wrtc_utils.start_wrtc_host(wrtckey, (dc) => {
-                const socket = net.createConnection({ host: 'localhost', port: port }, () => {
+        const wrtckey = nodes[1];
+        
+        wrtc_utils.start_wrtc_host(wrtckey, (dc) => {
+            let socket = null;
+            if(isValidPort(nodes[0])){
+                const port = nodes[0];
+                socket = net.createConnection({ host: 'localhost', port: port }, () => {
                     console.log('connection established');
                 });
-                wrtc_utils.bind_wrtc_and_socket(dc, socket, m_options);
-            });
-        }
+            }else if(nodes[0].startsWith('ws://')){
+                const url = nodes[0];
+                socket = new WebSocket(url);
+                wrtc_utils.bind_wrtc_and_ws(dc, socket, m_options);
+            };
+        });
     }
     for(const client of argv.client || []){
         const nodes = client.split('@');
