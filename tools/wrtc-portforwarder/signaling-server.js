@@ -1,7 +1,7 @@
 const WebSocket = require("ws");
 const url = require("url");
 
-const PORT = 3000;
+const PORT = 3600;
 const peers = new Map();
 
 const wss = new WebSocket.Server({ noServer: true });
