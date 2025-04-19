@@ -31,10 +31,9 @@ global.window.addEventListener = function(name, callback, bln) {
 
 var Signaling = require("./signaling.js").Signaling;
 
-var SIGNALING_HOST = "peer.picam360.com";
-// var SIGNALING_HOST = "test-peer-server.herokuapp.com";
-var SIGNALING_PORT = 443;
-var SIGNALING_SECURE = true;
+var SIGNALING_HOST = "wrtc-pf.picam360.com";
+var SIGNALING_PORT = 3000;
+var SIGNALING_SECURE = false;
 var P2P_API_KEY = "v8df88o1y4zbmx6r";
 
 class DataChannel2WebSocket {
@@ -110,7 +109,10 @@ class DataChannel2WebSocket {
         this.dataChannel.removeEventListener(event, listener);
     }
 }
-
+function randomString(length = 8) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
 function start_wrtc_client(p2p_uuid, callback, err_callback, options) {
     options = options || {};
 
@@ -119,8 +121,9 @@ function start_wrtc_client(p2p_uuid, callback, err_callback, options) {
         port: SIGNALING_PORT,
         secure: SIGNALING_SECURE,
         key: P2P_API_KEY,
+        local_peer_id: randomString(),
         iceServers : [
-                            {"urls": "stun:stun.l.google.com:19302"},
+                        {"urls": "stun:stun.l.google.com:19302"},
                         {"urls": "stun:stun1.l.google.com:19302"},
                         {"urls": "stun:stun2.l.google.com:19302"},
                     ],

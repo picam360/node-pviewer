@@ -172,7 +172,7 @@ function Signaling(options) {
 
 			http.open('get', url, true);
 			http.onerror = function(e) {
-				util.error('Error getDataHost', e);
+				console.log('Error getDataHost', e);
 			};
 			http.onreadystatechange = function() {
 				if (http.readyState !== 4) {

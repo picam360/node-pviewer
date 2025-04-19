@@ -45,5 +45,9 @@
   "uuid-parse": "*",
   "xmlhttprequest": "^1.8.0",
   "yargs": "^17.7.2"
+ },
+ "volta": {
+  "node": "16.20.2",
+  "npm": "8.19.4"
  }
 }
