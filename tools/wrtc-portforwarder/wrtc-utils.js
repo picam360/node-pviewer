@@ -32,7 +32,7 @@ global.window.addEventListener = function(name, callback, bln) {
 var Signaling = require("./signaling.js").Signaling;
 
 var SIGNALING_HOST = "wrtc-pf.picam360.com";
-var SIGNALING_PORT = 3000;
+var SIGNALING_PORT = 3600;
 var SIGNALING_SECURE = false;
 var P2P_API_KEY = "v8df88o1y4zbmx6r";
 
