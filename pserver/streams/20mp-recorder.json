@@ -1,7 +1,7 @@
 {
     "base" : "20mp-stereo",
     "params" : {
-        "dup_20mp_stereo.def" : "mux name=mux ! recorder path=/mnt/data-ssd/@FIRST_STORED_TIME@/@TIME_STAMP@.pif",
+        "dup_20mp_stereo.def" : "mux name=mux ! recorder path=/mnt/data-ssd/@FIRST_STORED_TIME@/@TIME_STAMP@.pif pif_split=1",
     },
     "replacements" : {
     }

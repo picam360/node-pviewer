@@ -1,0 +1,15 @@
+{
+    "def" : "dealer name=dealer_play ! v4l2_tegra_encoder name=encoder fps=@APP.FPS@ br=@APP.BITRATE_KBPS@ preset=ultrafast",
+    "params" : {
+        "dealer_play.def" : "recorder mode=play path=@APP.PATH@ ! pcuda_remapper name=remapper debalgo=malvar debayer=I420 sh=0 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
+#        "dealer_play.def" : "drecorder mode=play path=@APP.PATH@ ! pcuda_remapper name=remapper debalgo=linear debayer=I420 sh=10 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
+    },
+    "replacements" : {
+        "@APP.N_STREAMS@" : "1",
+        "@APP.BITRATE_KBPS@" : "2000",
+        "@APP.SIZE@" : "2048x1024",
+        "@APP.FPS@" : "15",
+        "@APP.RGB_GAIN@" : "1.2,1.0,2.7",
+        "@APP.PATH@" : "/mnt/data-ssd/1745205273.995717",
+    }
+}

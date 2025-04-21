@@ -1,5 +1,5 @@
 {
-    "n_clients_limit" : 2,
+    "n_clients_limit" : 10,
     "meeting" : {
         "enabled" : false
     },
@@ -24,6 +24,7 @@
             "streams/20mp-mono.json",
             "streams/20mp-vslam.json",
             "streams/20mp-recorder.json",
+            "streams/20mp-player.json",
             "streams/pantilt.json",
             "streams/pantilt-calib.json",
             "streams/vslam.json",
