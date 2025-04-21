@@ -7,6 +7,7 @@ const path = require('path');
 const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 const net = require('net');
+const yargs = require('yargs');
 
 var m_options = {};
 
@@ -246,6 +247,19 @@ function chunkDataWithSequenceAndChecksum(data, chunkSize) {
     return chunks;
 }
 function main() {
+    const argv = yargs
+        .option('debug', {
+            alias: 'd',
+            type: 'boolean',
+            default: false,
+            description: 'debug flag',
+        })
+        .help()
+        .alias('help', 'h')
+        .argv;
+
+    m_options.debug = argv.debug;
+
     const path = "/dev/ttyACM0";
     let m_msg_queue = [];
     let m_last_nmea = [];
@@ -280,6 +294,18 @@ function main() {
                 }
                 m_msg_queue.push("RES GET_RTCM end\n");
 
+            });
+
+            subscriber.subscribe('pserver-vehicle-wheel', (data, key) => {
+                var params = data.trim().split(' ');
+                switch (params[0]) {
+                    case "CMD":
+                        if(m_options.debug){
+                            console.log(`"${data}" subscribed.`, data.substring(4));
+                        }
+                        m_msg_queue.push(data.substring(4) + "\n");
+                        break;
+                }
             });
         });
     }
