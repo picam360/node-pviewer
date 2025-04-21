@@ -22,6 +22,8 @@
             "streams/20mp-stereo.json",
             "streams/20mp-stereo-calib.json",
             "streams/20mp-mono.json",
+            "streams/20mp-vslam.json",
+            "streams/20mp-recorder.json",
             "streams/pantilt.json",
             "streams/pantilt-calib.json",
             "streams/vslam.json",
