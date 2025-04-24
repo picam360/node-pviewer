@@ -31,8 +31,8 @@ class EncoderOdometry {
     // };
     static settings = {
         right_gain: 1.0,
-        meter_per_pulse: 0.000051365457364540345,
-        wheel_separation: 0.3254187353986605,
+        meter_per_pulse: 0.00004,
+        wheel_separation: 0.208,
         imu_heading_error: 0,
         left_direction: -1,
         right_direction: 1,
