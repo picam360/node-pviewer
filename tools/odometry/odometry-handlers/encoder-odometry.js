@@ -30,11 +30,11 @@ class EncoderOdometry {
     //     lock_gps_heading : true,
     // };
     static settings = {
-        right_gain: 1.0148108360301102,
+        right_gain: 1.0,
         meter_per_pulse: 0.000051365457364540345,
         wheel_separation: 0.3254187353986605,
         imu_heading_error: 0,
-        left_direction: 1,
+        left_direction: -1,
         right_direction: 1,
     
        lock_gps_heading : true,
@@ -69,7 +69,7 @@ class EncoderOdometry {
                 return;
             }
 
-            dtheta *= -1;//for jikki
+            //dtheta *= -1;//for jikki no ushiromuki
     
             let dx, dy;
             const theta = -encoder_params.heading * Math.PI / 180 + Math.PI / 2;
