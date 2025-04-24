@@ -3,6 +3,7 @@ var async = require('async');
 var fs = require("fs");
 var sprintf = require('sprintf-js').sprintf;
 var uuidgen = require('uuid/v4');
+var url = require("url");
 var EventEmitter = require('eventemitter3');
 var xmlhttprequest = require('xmlhttprequest');
 global.XMLHttpRequest = xmlhttprequest.XMLHttpRequest;
@@ -353,14 +354,15 @@ function init_data_stream(callback) {
 }
 function start_websocket(callback) {
     // websocket
-    var WebSocket = require("ws");
-    for(var server of [m_plugin_host.get_http(), m_plugin_host.get_https()]){
+    for(var server of [m_plugin_host.get_ws_server(), m_plugin_host.get_wss_server()]){
         if(!server){
             continue;
         }
-        var ws = new WebSocket.Server({ server });
-    
-        ws.on("connection", dc => {
+        server.on("connection", (dc, request) => {
+            const parsed = url.parse(request.url, true);
+            if(parsed.pathname != "/"){
+                return;
+            }
             class DataChannel extends EventEmitter {
                 constructor() {
                     super();

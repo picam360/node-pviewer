@@ -40,6 +40,7 @@
         "plugins/camera/take-picture.js",
         "plugins/camera/generate-psf.js",
         "plugins/network/host.js",
+        "plugins/network/ws_bridge.js",
         "plugins/network/http-pvf.js",
         "plugins/network/osc.js",
         "plugins/start-stream.js",

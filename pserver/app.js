@@ -10,12 +10,15 @@ const sprintf = require('sprintf-js').sprintf;
 const express = require('express');
 const cors = require('cors');
 const jsonc = require('jsonc-parser');
+const WebSocket = require("ws");
 
 const pstcore = require('node-pstcore');
 
 var express_app = null;
 var http = null;
 var https = null;
+var ws_server = null;
+var wss_server = null;
 
 var m_plugin_host = {};
 var m_plugins = [];
@@ -143,6 +146,10 @@ function start_webserver(callback) { // start up websocket server
     https.listen(https_port, function() {
         console.log('listening https on *:' + https_port);
     });
+
+	ws_server = new WebSocket.Server({ server : http });
+	wss_server = new WebSocket.Server({ server : https });
+
     callback(null);
 }
 
@@ -459,6 +466,12 @@ async.waterfall([
 		};
 		m_plugin_host.get_https = function() {
 			return https;
+		};
+		m_plugin_host.get_ws_server = function() {
+			return ws_server;
+		};
+		m_plugin_host.get_wss_server = function() {
+			return wss_server;
 		};
 		m_plugin_host.get_express_app = function() {
 			return express_app;
