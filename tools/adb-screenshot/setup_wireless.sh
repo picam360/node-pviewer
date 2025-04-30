@@ -1,5 +1,7 @@
 #!/bin/bash
 
+sudo apt install android-tools-adb
+
 # Check if adb command is available
 if ! command -v adb &> /dev/null; then
     echo "adb command not found. Please install Android Platform Tools."
