@@ -1,0 +1,10 @@
+{
+    "def" : "pipe name=capture t=H264 s=512x512",
+    "params" : {
+        "capture.def" : "adb exec-out screenrecord @APP.ADB_DEVICE@ --size @OWIDTH@x@OHEIGHT@ --output-format=h264 -"
+    },
+    "replacements" : {
+        "@APP.ADB_DEVICE@" : "", // -s 10.42.0.111:5555 
+    }
+}
+

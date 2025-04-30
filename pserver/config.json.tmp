@@ -28,7 +28,8 @@
             "streams/pantilt.json",
             "streams/pantilt-calib.json",
             "streams/vslam.json",
-            "streams/take-picture-ptpvf.json"
+            "streams/take-picture-ptpvf.json",
+            "streams/adb-screenrecord.json"
         ],
         "replacements" : {
             "@APP.BITRATE_KBPS@" : "2000",
