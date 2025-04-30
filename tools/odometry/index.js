@@ -125,12 +125,14 @@ function localization_handler(tmp_img){
 	if(m_odometry_conf[m_odometry_conf.odom_type].handler.is_ready() == false){
 		return;
 	}
-	
+
+	const timestamp = Date.now() / 1000;
 	const odom = m_odometry_conf[m_odometry_conf.odom_type].handler.getPosition();
 	m_client.publish('pserver-odometry-info', JSON.stringify({
 		"mode" : m_drive_mode,
 		"state" : "UPDATE_ODOMETRY",
 		"odom" : odom,
+		timestamp,
 	}));
 }
 
@@ -222,6 +224,10 @@ function main() {
 				tmp_img.push(Buffer.from(data, 'base64'));
 			}
 		});
+		// subscriber.subscribe('pserver-encoder', (data, key) => {
+        //     const encoder_val = JSON.parse(data);
+		// 	localization_handler(encoder_val);
+		// });
 		setInterval(() => {
 			const elapsed = Date.now() - last_ts;
 			if(elapsed > 1000){
