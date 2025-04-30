@@ -22,7 +22,7 @@ var self = {
 
                 var express_app = m_plugin_host.get_express_app();
                 
-                express_app.get('/pvf/*', function(req, res) {
+                express_app.get(/^\/pvf\/.*$/, function(req, res) {
                     var url = req.url.split("?")[0];
                     var query = req.url.split("?")[1];
                     var filepath = base_path + url.substr(4);

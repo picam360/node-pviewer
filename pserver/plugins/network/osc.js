@@ -43,7 +43,7 @@ var self = {
 
                 var express_app = m_plugin_host.get_express_app();
                 
-                express_app.all('/osc/*', function(req, res) {
+                express_app.all(/^\/osc\/.*$/, function(req, res) {
                     var url = req.url.split("?")[0];
                     var query = req.url.split("?")[1];
                     var filename = url.substr(5);

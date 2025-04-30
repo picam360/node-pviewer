@@ -61,7 +61,7 @@ function start_webserver(callback) { // start up websocket server
 	https = require('https').Server(https_options, express_app);
 	https.keepAliveTimeout = 60000;
 
-    express_app.get('/img/*.jpeg', function(req, res) {
+    express_app.get(/^\/img\/.*\.jpeg$/, function(req, res) {
 		var url = req.url.split("?")[0];
 		var query = req.url.split("?")[1];
 		var filepath = 'userdata/' + url.split("/")[2];
@@ -87,7 +87,7 @@ function start_webserver(callback) { // start up websocket server
 			}
 		});
 	});
-    express_app.get('/img/*.mp4', function(req, res) {
+    express_app.get(/^\/img\/.*\.mp4$/, function(req, res) {
         var url = req.url.split("?")[0];
         var query = req.url.split("?")[1];
         var filepath = 'userdata/' + url.split("/")[2];
