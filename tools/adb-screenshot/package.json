@@ -1,0 +1,11 @@
+{
+    "name": "adb-screenshot",
+    "version": "1.0.0",
+    "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
+    "license": "MIT",
+    "dependencies": {
+        "redis": "^4.7.0",
+        "sharp": "^0.32.6",
+        "yargs": "^17.7.2"
+    }
+}
