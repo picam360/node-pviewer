@@ -67,8 +67,8 @@ function main() {
                         if(m_options.debug){
                             console.log(`"${data}" subscribed.`, req);
                         }
-                        const speed = 0.001;
-                        const turn_speed = 0.1;
+                        const speed = 0.01;
+                        const turn_speed = 1;
                         if(req.startsWith("REQ MOVE_FORWARD")){
                             odom.x += speed * Math.sin(odom.heading);
                             odom.y += speed * Math.cos(odom.heading);
