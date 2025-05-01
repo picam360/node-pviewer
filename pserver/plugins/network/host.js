@@ -309,9 +309,6 @@ function init_data_stream(callback) {
                 if (packet.GetPayloadType() == PT_ENQUEUE) {
                     console.log("PT_ENQUEUE from client");
                 }else if (packet.GetPayloadType() == PT_SET_PARAM) { // set_param
-                    if(!conn.attr.pst){
-                        return;
-                    }
                     var str = (new TextDecoder).decode(packet.GetPayload());
                     try{
                         var list = JSON.parse(str);
@@ -321,7 +318,7 @@ function init_data_stream(callback) {
                                     var [filename, key] = ary[2].split(' ');
                                     filerequest_handler(filename, key, conn);
                                 }
-                            }else{
+                            }else if(conn.attr.pst){
                                 conn.attr.in_pt_set_param = true;
                                 pstcore.pstcore_set_param(conn.attr.pst, ary[0], ary[1], ary[2]);
                                 conn.attr.in_pt_set_param = false;
