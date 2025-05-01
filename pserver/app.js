@@ -531,17 +531,16 @@ async.waterfall([
 			let params = {};
 			let replacements = {};
 			let pviewer_config_ext = {};
-			for (let i = 0; i < name_list.length; i++) {
+			for (let i = name_list.length-1; i >= 0; i--) {
 				const name = name_list[i];
 				if(m_pstdefs[name].def){
 					if(m_pstdefs[name].def.startsWith("+ ")){
-						def = def + m_pstdefs[name].def;
+						def = def + m_pstdefs[name].def.substring(1);
 					}else if(m_pstdefs[name].def.endsWith(" +")){
-						def = m_pstdefs[name].def + def;
+						def = m_pstdefs[name].def.substring(0, m_pstdefs[name].def.length - 1) + def;
 					}else{
 						def = m_pstdefs[name].def;
 					}
-					break;
 				}
 			}
 			for (let i = name_list.length - 1; i >= 0; i--) {

@@ -67,8 +67,8 @@ function main() {
                         if(m_options.debug){
                             console.log(`"${data}" subscribed.`, req);
                         }
-                        const speed = 0.01;
-                        const turn_speed = 1.0;
+                        const speed = 0.001;
+                        const turn_speed = 0.1;
                         if(req.startsWith("REQ MOVE_FORWARD")){
                             odom.x += speed * Math.sin(odom.heading);
                             odom.y += speed * Math.cos(odom.heading);
@@ -77,7 +77,7 @@ function main() {
                             odom.y -= speed * Math.cos(odom.heading);
                         }else if(req.startsWith("REQ TURN_LEFT")){
                             odom.heading -= turn_speed;
-                        }else if(req.startsWith("REQ TURN_LEFT")){
+                        }else if(req.startsWith("REQ TURN_RIGHT")){
                             odom.heading += turn_speed;
                         }
                         break;
