@@ -70,11 +70,11 @@ function main() {
                         const speed = 0.01;
                         const turn_speed = 1;
                         if(req.startsWith("REQ MOVE_FORWARD")){
-                            odom.x += speed * Math.sin(odom.heading);
-                            odom.y += speed * Math.cos(odom.heading);
+                            odom.x += speed * Math.sin(odom.heading/180.0*Math.PI);
+                            odom.y += speed * Math.cos(odom.heading/180.0*Math.PI);
                         }else if(req.startsWith("REQ MOVE_BACKWARD")){
-                            odom.x -= speed * Math.sin(odom.heading);
-                            odom.y -= speed * Math.cos(odom.heading);
+                            odom.x -= speed * Math.sin(odom.heading/180.0*Math.PI);
+                            odom.y -= speed * Math.cos(odom.heading/180.0*Math.PI);
                         }else if(req.startsWith("REQ TURN_LEFT")){
                             odom.heading -= turn_speed;
                         }else if(req.startsWith("REQ TURN_RIGHT")){
