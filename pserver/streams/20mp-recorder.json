@@ -1,7 +1,7 @@
 {
     "base" : "20mp-stereo",
     "params" : {
-        "dup_20mp_stereo.def" : "mux name=mux ! recorder path=/mnt/data-ssd/@FIRST_STORED_TIME@/@TIME_STAMP@.pif pif_split=1",
+        "dealer.def" : "dup name=dup_20mp_stereo ! recorder path=/mnt/data-ssd/@FIRST_STORED_TIME@/@TIME_STAMP@.pif pif_split=1 ! pcuda_remapper name=remapper debalgo=malvar debayer=I420 sh=0 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
     },
     "replacements" : {
     }

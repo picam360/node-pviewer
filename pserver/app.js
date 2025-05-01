@@ -534,7 +534,13 @@ async.waterfall([
 			for (let i = 0; i < name_list.length; i++) {
 				const name = name_list[i];
 				if(m_pstdefs[name].def){
-					def = m_pstdefs[name].def;
+					if(m_pstdefs[name].def.startsWith("+ ")){
+						def = def + m_pstdefs[name].def;
+					}else if(m_pstdefs[name].def.endsWith(" +")){
+						def = m_pstdefs[name].def + def;
+					}else{
+						def = m_pstdefs[name].def;
+					}
 					break;
 				}
 			}

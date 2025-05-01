@@ -1,22 +1,24 @@
 {
     "def" : "dealer ! v4l2_tegra_encoder name=encoder fps=@APP.FPS@ br=@APP.BITRATE_KBPS@ preset=ultrafast",
     "params" : {
-        "dealer.def" : "dup name=dup_20mp_stereo ! pcuda_remapper name=remapper debalgo=malvar debayer=I420 sh=0 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
-#        "dealer.def" : "dup name=dup_20mp_stereo ! pcuda_remapper name=remapper debalgo=linear debayer=I420 sh=10 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
+#        "dealer.def" : "dup name=dup_20mp_stereo ! pcuda_remapper name=remapper debalgo=malvar debayer=I420 sh=0 rgb_gain=@APP.RGB_GAIN@ gamma=2.4 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
+        "dealer.def" : "dup name=dup_20mp_stereo ! pcuda_remapper name=remapper debalgo=linear debayer=I420 sh=10 rgb_gain=@APP.RGB_GAIN@ gamma=2.4 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
         "dup_20mp_stereo.def" : "mux name=mux",
         "mux.vin0" : "v4l2_capture name=capture s=@APP.CAM0@ fmt=BA10 ae_target=@V4L2.AE_TARGET@",
         "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS0@\" />",
         "mux.vin1" : "v4l2_capture name=capture s=@APP.CAM1@ fmt=BA10 ae_target=@V4L2.AE_TARGET@",
         "mux.vin1.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET.X@,@CALIB.DEG_OFFSET.Y@,@CALIB.DEG_OFFSET.Z@\" lens_params=\"@CALIB.LENS1@\" />",
+        "renderer.realtime" : "1"
     },
     "replacements" : {
         "@APP.N_STREAMS@" : "1",
-        "@APP.BITRATE_KBPS@" : "2000",
+        "@APP.BITRATE_KBPS@" : "2500",
         "@APP.SIZE@" : "2048x1024",
         "@APP.CAM0@" : "5120x3840@@APP.FPS@:/dev/video0",
         "@APP.CAM1@" : "5120x3840@@APP.FPS@:/dev/video1",
         "@APP.FPS@" : "15",
-        "@APP.RGB_GAIN@" : "1.2,1.0,2.7",
+#        "@APP.RGB_GAIN@" : "1.2,1.0,2.4",
+        "@APP.RGB_GAIN@" : "1.4,1.0,2.0",
         "@JPGDEC.CUDAMEM@" : "1",
         "@CALIB.DEG_OFFSET.X@" : "-90",
         "@CALIB.DEG_OFFSET.Y@" : "180",
