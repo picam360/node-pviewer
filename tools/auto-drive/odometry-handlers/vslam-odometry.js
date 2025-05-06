@@ -45,13 +45,8 @@ function quaternionToYXZ(orientation) {
 }
 
 function getYawFromRotationMatrix(matrix) {
-    // 行列要素を取得
-    const r31 = matrix[2][0];
-
-    // Y軸回転（ラジアン）を計算
-    const thetaY = Math.asin(-r31); // arcsin(-r31)
-
-    return thetaY;
+    const yaw = Math.atan2(matrix[2][0], matrix[0][0]);
+    return yaw;
 }
 
 function launchDockerContainer() {
@@ -243,7 +238,7 @@ function cal_fitting_params(vslam_waypoints, enc_waypoints, settings){
 
 function convert_transforms_to_positions(nodes, _enc_waypoints){
     function convert_transform_to_pos(node){
-        const heading = getYawFromRotationMatrix(node.transform) * 180 / Math.PI;
+        const heading = -getYawFromRotationMatrix(node.transform) * 180 / Math.PI;
         return {
             x : node.transform[0][3],
             y : node.transform[2][3],
@@ -339,7 +334,7 @@ class VslamOdometry {
     static settings = {//jetchariot
         vslam_path : '/home/picam360/github/picam360-vslam',
         vslam_option : '--disable_vis',
-        vslam_option : '',
+        //vslam_option : '',
         vslam_filename : 'waypoints.data',
         cam_offset : {
             x : 0.0,
@@ -347,16 +342,17 @@ class VslamOdometry {
             heading : 0,
         },
 
-        // dr_threashold_waypoint : 0.1,
-        // dh_threashold_waypoint : 10,
-        // dr_threashold : 0.05,
-        // dh_threashold : 10,
+        //for auto-drive
+        dr_threashold_waypoint : 0.1,
+        dh_threashold_waypoint : 10,
+        dr_threashold : 0.05,
+        dh_threashold : 10,
 
         //for map
-        dr_threashold_waypoint : 0.2,
-        dh_threashold_waypoint : 20,
-        dr_threashold : 1.0,
-        dh_threashold : 10,
+        // dr_threashold_waypoint : 0.2,
+        // dh_threashold_waypoint : 20,
+        // dr_threashold : 0.1,
+        // dh_threashold : 10,
 
         update_gain : 0.3,
         update_r_cutoff : 0.2,

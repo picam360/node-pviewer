@@ -272,8 +272,7 @@ function convert_transforms_to_positions(nodes, _ref_waypoints){
         return {
             x : node.transform[0][3],
             y : node.transform[2][3],
-            heading,
-            //heading : (heading + 180) % 360 - 180,
+            heading : ((heading + 180) % 360) - 180,//-180 < heading < 180
         };
     }
     const vslam_waypoints = {};
