@@ -19,16 +19,16 @@ function radiansToDegrees(radians) {
 }
 
 class EncoderOdometry {
-    static settings = {
-        right_gain: 1.0,
-        meter_per_pulse: 0.00902127575039515,
-        wheel_separation: 3.093597564134178,
-        imu_heading_error: 0.0,
-        left_direction: -1,
-        right_direction: 1,
+    // static settings = {
+    //     right_gain: 1.0,
+    //     meter_per_pulse: 0.00902127575039515,
+    //     wheel_separation: 3.093597564134178,
+    //     imu_heading_error: 0.0,
+    //     left_direction: -1,
+    //     right_direction: 1,
 
-        lock_gps_heading : true,
-    };
+    //     lock_gps_heading : true,
+    // };
     //static settings = {
     //     right_gain: 1.0148108360301102,
     //     meter_per_pulse: 0.000051365457364540345,
@@ -39,6 +39,16 @@ class EncoderOdometry {
     //
     //    lock_gps_heading : true,
     // };
+    static settings = {//jetchariot
+        right_gain: 1.0,
+        meter_per_pulse: 0.00004,
+        wheel_separation: 0.208,
+        imu_heading_error: 0,
+        left_direction: -1,
+        right_direction: 1,
+    
+       lock_gps_heading : true,
+    };
     constructor() {
         this.waypoints = null;
         this.enc_waypoints = null;
@@ -75,7 +85,7 @@ class EncoderOdometry {
                 return;
             }
 
-            dtheta *= -1;//for jikki
+            //dtheta *= -1;//for jikki
     
             let dx, dy;
             const theta = -encoder_params.heading * Math.PI / 180 + Math.PI / 2;
@@ -357,11 +367,46 @@ class EncoderOdometry {
     }
 
     calculateDistance(cur){
-        const key = this.waypoints_keys[cur];
-        const target_position = this.enc_waypoints[key];
-        const dx = target_position.x - this.encoder_params.x;
-        const dy = target_position.y - this.encoder_params.y;
-        return Math.sqrt(dx * dx + dy * dy);
+        function getProjectionDistances(p0, p1, p_1, p) {
+            const dx = p1.x - p_1.x;
+            const dy = p1.y - p_1.y;
+        
+            const vx = p.x - p0.x;
+            const vy = p.y - p0.y;
+        
+            const dot = vx * dx + vy * dy;
+            const len_sq = dx * dx + dy * dy;
+        
+            const proj_len = dot / Math.sqrt(len_sq);
+            //console.log("getProjectionDistances", dx, dy, vx, vy, proj_len);
+            return proj_len;
+        }
+        const key0 = this.waypoints_keys[cur];
+        const pos0 = this.enc_waypoints[key0];
+        let pos1 = pos0;
+        for(let k=cur+1;k < this.waypoints_keys.length;k++){
+            const key = this.waypoints_keys[k];
+            const pos = this.enc_waypoints[key];
+            if(pos.x != pos0.x || pos.y != pos0.y){
+                pos1 = pos;
+                break;
+            }
+        }
+        let pos_1 = pos0;
+        for(let k=cur-1;k >= 0;k--){
+            const key = this.waypoints_keys[k];
+            const pos = this.enc_waypoints[key];
+            if(pos.x != pos0.x || pos.y != pos0.y){
+                pos_1 = pos;
+                break;
+            }
+        }
+        return getProjectionDistances(pos0, pos1, pos_1, this.encoder_params);
+
+        //absolute
+        // const dx = target_position0.x - this.encoder_params.x;
+        // const dy = target_position0.y - this.encoder_params.y;
+        // return Math.sqrt(dx * dx + dy * dy);
     }
     calculateBearing(cur){
         const key = this.waypoints_keys[cur];

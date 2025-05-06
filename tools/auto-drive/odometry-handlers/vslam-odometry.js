@@ -77,25 +77,29 @@ function killDockerContainer() {
     const processName = "picam360-vslam"; // プロセス名を指定
 
     try {
-        // プロセスIDを取得
-        const output = execSync(`pgrep ${processName}`, { encoding: "utf-8" }); // 出力を文字列で取得
-        const pids = output.split("\n").filter(pid => pid); // 改行で分割し、空行を削除
+        const output = execSync(`ps -eo pid,comm,args`, { encoding: "utf-8" });
 
-        if (pids.length === 0) {
-            console.log(`No process found with name: ${processName}`);
-        } else {
-            // 各PIDを終了
-            pids.forEach(pid => {
-                try {
-                    execSync(`kill ${pid}`);
-                    console.log(`Process ${pid} (${processName}) killed successfully.`);
-                } catch (killError) {
-                    console.error(`Error killing process ${pid}: ${killError.message}`);
-                }
-            });
+        const lines = output.trim().split("\n").slice(1);
+
+        const matchingPids = lines
+            .map(line => line.trim().split(/\s+/, 3)) // [pid, comm, args]
+            .filter(([pid, comm, args]) =>
+                comm === processName || args.split(" ")[0] === processName
+            )
+            .map(([pid]) => parseInt(pid));
+
+        // kill
+        for (const pid of matchingPids) {
+            console.log(`Killing PID ${pid} (${processName})`);
+            process.kill(pid);
         }
-    } catch (error) {
-        console.error(`Error finding process: ${error.message}`);
+
+        if (matchingPids.length === 0) {
+            console.log(`No matching process found for "${processName}"`);
+        }
+
+    } catch (err) {
+        console.error("Error while killing process:", err.message);
     }
 }
 
@@ -243,7 +247,7 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
         return {
             x : node.transform[0][3],
             y : node.transform[2][3],
-            heading : (heading + 180) % 360,//back camera
+            heading : ((heading + 180) % 360) - 180,//-180 < heading < 180
         };
     }
     const keys = Object.keys(_enc_waypoints);
@@ -254,6 +258,7 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
         const cur = node['timestamp'];
         if(keys[cur] !== undefined){
             vslam_waypoints[keys[cur]] = convert_transform_to_pos(node);
+            console.log(vslam_waypoints[keys[cur]]);
             enc_waypoints[keys[cur]] = Object.assign({}, _enc_waypoints[keys[cur]]);
         }else{
             active_points[node['timestamp']] = convert_transform_to_pos(node);
@@ -311,19 +316,51 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
 }
 
 class VslamOdometry {
-    static settings = {
+    // static settings = {
+    //     vslam_path : '/home/picam360/github/picam360-vslam',
+    //     vslam_option : '--disable_vis',
+    //     vslam_filename : 'waypoints.data',
+    //     cam_offset : {
+    //         x : 0.0,
+    //         y : 2.2,
+    //         heading : 0,
+    //     },
+    //     dr_threashold_waypoint : 2.0,
+    //     dh_threashold_waypoint : 10,
+    //     dr_threashold : 1.0,
+    //     dh_threashold : 10,
+        // update_gain : 0.3,
+        // update_r_cutoff : 2.0,
+        // update_h_cutoff : 2.0,
+
+    //     launch_vslam : true,
+    //     calib_enabled : false,
+    // };
+    static settings = {//jetchariot
         vslam_path : '/home/picam360/github/picam360-vslam',
         vslam_option : '--disable_vis',
+        vslam_option : '',
         vslam_filename : 'waypoints.data',
         cam_offset : {
             x : 0.0,
-            y : 2.2,
+            y : 0.05,
             heading : 0,
         },
-        dr_threashold_waypoint : 2.0,
-        dh_threashold_waypoint : 10,
+
+        // dr_threashold_waypoint : 0.1,
+        // dh_threashold_waypoint : 10,
+        // dr_threashold : 0.05,
+        // dh_threashold : 10,
+
+        //for map
+        dr_threashold_waypoint : 0.2,
+        dh_threashold_waypoint : 20,
         dr_threashold : 1.0,
         dh_threashold : 10,
+
+        update_gain : 0.3,
+        update_r_cutoff : 0.2,
+        update_h_cutoff : 2.0,
 
         launch_vslam : true,
         calib_enabled : false,
@@ -465,32 +502,41 @@ class VslamOdometry {
                         const odom = params['odom'][params['odom'].length - 1];//last one
                         const odom_cur = odom['timestamp'];
                         if(odom_cur > this.last_odom_cur){
+                            const first_odom = (!this.current_odom);
                             this.current_odom = odom;
                             this.last_odom_cur = odom_cur;
 
                             const { vslam_waypoints, active_points } = convert_transforms_to_positions(params['transforms'], this.enc_waypoints);
                             this.active_points = Object.assign(this.active_points, active_points);
 
-                            const update_gain = 0.3;
-                            const update_r_cutoff = 2.0;
-                            const update_h_cutoff = 2.0;
-
-                            const kf_pos = this.active_points[odom_cur];
-                            const enc_pos = this.enc_positions[odom_cur];
-                            const diff_x = kf_pos.x - enc_pos.x;
-                            const diff_y = kf_pos.y - enc_pos.y;
-                            const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
-                            const diff_h = formay_angle_180(kf_pos.heading - enc_pos.heading);
-                            const diff_h_abs = Math.abs(diff_h);
-                            const update_gain_r = Math.min(diff_r, update_r_cutoff) / Math.max(diff_r, 1e-3) * update_gain;
-                            const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
-                            this.enc_odom.encoder_params.x += diff_x * update_gain_r;
-                            this.enc_odom.encoder_params.y += diff_y * update_gain_r;
-                            this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
-
-                            console.log("diff_x", diff_x, diff_x * update_gain_r);
-                            console.log("diff_y", diff_y, diff_y * update_gain_r);
-                            console.log("diff_h", diff_h, diff_h * update_gain_h);
+                            if(first_odom){
+                                const kf_pos = this.active_points[odom_cur];
+                                this.enc_odom.encoder_params.x = kf_pos.x;
+                                this.enc_odom.encoder_params.y = kf_pos.y;
+                                this.enc_odom.encoder_params.heading = kf_pos.heading;
+    
+                                console.log("first_x", kf_pos.x);
+                                console.log("first_y", kf_pos.y);
+                                console.log("first_h", kf_pos.heading);
+                            }else{
+    
+                                const kf_pos = this.active_points[odom_cur];
+                                const enc_pos = this.enc_positions[odom_cur];
+                                const diff_x = kf_pos.x - enc_pos.x;
+                                const diff_y = kf_pos.y - enc_pos.y;
+                                const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
+                                const diff_h = formay_angle_180(kf_pos.heading - enc_pos.heading);
+                                const diff_h_abs = Math.abs(diff_h);
+                                const update_gain_r = Math.min(diff_r, VslamOdometry.settings.update_r_cutoff) / Math.max(diff_r, 1e-3) * VslamOdometry.settings.update_gain;
+                                const update_gain_h = Math.min(diff_h_abs, VslamOdometry.settings.update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * VslamOdometry.settings.update_gain;
+                                this.enc_odom.encoder_params.x += diff_x * update_gain_r;
+                                this.enc_odom.encoder_params.y += diff_y * update_gain_r;
+                                this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
+    
+                                console.log("diff_x", diff_x, diff_x * update_gain_r);
+                                console.log("diff_y", diff_y, diff_y * update_gain_r);
+                                console.log("diff_h", diff_h, diff_h * update_gain_h);
+                            }
 
                             if(this.options.transforms_callback){
                                 this.options.transforms_callback(this.vslam_waypoints, this.active_points);
@@ -705,12 +751,11 @@ class VslamOdometry {
                 const dr = Math.sqrt(pos.x*pos.x + pos.y*pos.y);
                 const dh = pos.heading;
                 if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
-                    console.log("requestEstimation", `dr=${dr}, dh=${dh}`);
-            
+
                     const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
                     const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
 
-                    console.log("requestEstimation", ref_timestamps);
+                    console.log("requestEstimation", `dr=${dr}, dh=${dh}`, ref_timestamps);
             
                     //this.requestTrack(`${this.push_cur}`, jpeg_data, false, (this.backend_pending % 10) == 0);
                     this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);

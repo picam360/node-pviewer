@@ -22,6 +22,18 @@ let m_options = {
 	"waypoint_threshold_m" : 10,
 	"data_filepath" : "auto-drive-waypoints",
 	"reverse" : false,
+	//"tolerance_distance" : 2.0,
+	"tolerance_distance" : 0.2,
+
+	// "forward_pwm_base" : 50,
+	// "backward_pwm_base" : 46,
+	// "pwm_range" : 10,
+	// "pwm_control_gain" : 0.06,
+
+	"forward_pwm_base" : 60,
+	"backward_pwm_base" : 60,
+	"pwm_range" : 60,
+	"pwm_control_gain" : 0.06,
 };
 let m_argv = null;
 let m_socket = null;
@@ -202,26 +214,19 @@ function move_robot(distance) {
 }
 
 function move_pwm_robot(distance, angle) {
-	const forward_pwm_base = 50;
-	const backward_pwm_base = 46;
 
-	//const forward_pwm_base = 45;
-	//const backward_pwm_base = 42;
-
-	const max = 10;
-	const gain = 0.06;
-	if(distance > 0){
-		const left_minus = Math.min(max, angle < 0 ? max * Math.abs(angle) * gain : 0);
-		const right_minus = Math.min(max, angle > 0 ? max * Math.abs(angle) * gain : 0);
-		const left_pwd = forward_pwm_base - Math.round(left_minus);
-		const right_pwd = forward_pwm_base - Math.round(right_minus);
+	if(distance < 0){
+		const left_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
+		const right_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
+		const left_pwd = m_options.forward_pwm_base - Math.round(left_minus);
+		const right_pwd = m_options.forward_pwm_base - Math.round(right_minus);
 		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd} ${right_pwd}`);
 	}else{
-		const left_minus = Math.min(max, angle > 0 ? max * Math.abs(angle) * gain : 0);
-		const right_minus = Math.min(max, angle < 0 ? max * Math.abs(angle) * gain : 0);
-		const left_pwd = backward_pwm_base - Math.round(left_minus);
-		const right_pwd = backward_pwm_base - Math.round(right_minus);
+		const left_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
+		const right_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
+		const left_pwd = m_options.backward_pwm_base - Math.round(left_minus);
+		const right_pwd = m_options.backward_pwm_base - Math.round(right_minus);
 		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd} ${right_pwd}`);
 	}
@@ -335,10 +340,10 @@ function auto_drive_handler(tmp_img){
 		let distanceToTarget = m_odometry_conf[m_odometry_conf.odom_type].distanceToTarget;
 		let headingError = m_odometry_conf[m_odometry_conf.odom_type].headingError;
 
-		let tolerance_distance = 2.0;
+		let tolerance_distance = m_options.tolerance_distance;
 		let tolerance_heading = (m_auto_drive_heading_tuning ? 999 : 999);
 		if(cur == keys.length - 1){
-			tolerance_distance = 0.5;
+			tolerance_distance = m_options.tolerance_distance / 4;
 			// switch(m_auto_drive_last_state){
 			// case 0:
 			// 	tolerance_heading = 1.0;

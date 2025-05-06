@@ -29,7 +29,7 @@ class EncoderOdometry {
 
     //     lock_gps_heading : true,
     // };
-    static settings = {
+    static settings = {//jetchariot
         right_gain: 1.0,
         meter_per_pulse: 0.00004,
         wheel_separation: 0.208,

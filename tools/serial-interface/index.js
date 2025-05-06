@@ -303,7 +303,34 @@ function main() {
                         if(m_options.debug){
                             console.log(`"${data}" subscribed.`, data.substring(4));
                         }
-                        m_msg_queue.push(data.substring(4) + "\n");
+                        let req = data.substring(4);
+                        const VALID_MS = 400;
+                        const SERVO_SPEED_MIN = 0;
+                        const SERVO_SPEED_MAX = 1500;
+                        const SERVO_SPEED_DEFAULT = 1000;
+                        let s0 = SERVO_SPEED_DEFAULT;
+                        let s1 = SERVO_SPEED_DEFAULT;
+                        if(params[2]){
+                            s0 = (SERVO_SPEED_MAX - SERVO_SPEED_MIN) * parseFloat(params[2] / 100) + SERVO_SPEED_MIN;
+                        }
+                        if(params[3]){
+                            s1 = (SERVO_SPEED_MAX - SERVO_SPEED_MIN) * parseFloat(params[3] / 100) + SERVO_SPEED_MIN;
+                        }
+                        switch(params[1]){
+                            case "move_forward_pwm":
+                                req = `REQ MOVE_FORWARD [${s0.toFixed(0)},${s1.toFixed(0)}] ${VALID_MS.toFixed(0)}`;
+                                break;
+                            case "move_backward_pwm":
+                                req = `REQ MOVE_BACKWARD [${s0.toFixed(0)},${s1.toFixed(0)}] ${VALID_MS.toFixed(0)}`;
+                                break;
+                            case "turn_right":
+                                req = `REQ TURN_RIGHT [${s0.toFixed(0)},${s1.toFixed(0)}] ${VALID_MS.toFixed(0)}`;
+                                break;
+                            case "turn_left":
+                                req = `REQ TURN_LEFT [${s0.toFixed(0)},${s1.toFixed(0)}] ${VALID_MS.toFixed(0)}`;
+                                break;
+                        }
+                        m_msg_queue.push(req + "\n");
                         break;
                 }
             });
