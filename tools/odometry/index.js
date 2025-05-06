@@ -36,8 +36,8 @@ const ODOMETRY_TYPE = {
 	VSLAM : "VSLAM",
 };
 let m_odometry_conf = {
-//	odom_type : ODOMETRY_TYPE.VSLAM,
-	odom_type : ODOMETRY_TYPE.ENCODER,
+	odom_type : ODOMETRY_TYPE.VSLAM,
+//	odom_type : ODOMETRY_TYPE.ENCODER,
 	GPS : {
 		enabled : false
 	},
@@ -45,7 +45,7 @@ let m_odometry_conf = {
 		enabled : true
 	},
 	VSLAM : {
-		enabled : false
+		enabled : true
 	},
 };
 
@@ -84,11 +84,6 @@ function init_odometory_handlers(){
 			case ODOMETRY_TYPE.VSLAM:
 				m_odometry_conf[key].handler = new VslamOdometry({
 					//host : m_argv.host,
-					transforms_callback : (vslam_waypoints, active_points) => {
-						msg["VSLAM"] = vslam_waypoints;
-						msg["VSLAM_ACTIVE"] = active_points;
-						update_auto_drive_waypoints(msg);
-					},
 				});
 				break;
 		}

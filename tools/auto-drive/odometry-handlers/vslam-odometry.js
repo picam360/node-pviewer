@@ -383,6 +383,7 @@ class VslamOdometry {
         this.last_odom_cur = 0;
         this.reconstruction_progress = 0;
 
+        this.enc_available = false;
         this.enc_odom = new EncoderOdometry();
         this.enc_waypoints = {};
         this.enc_positions = {};
