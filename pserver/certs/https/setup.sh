@@ -5,7 +5,7 @@ if ! command -v mkcert >/dev/null 2>&1; then
     sudo mv mkcert /usr/local/bin/mkcert
     mkcert -install
 fi
-cp $(mkcert -CAROOT)/rootCA.pem ./
+cp "$(mkcert -CAROOT)/rootCA.pem" ./
 mkcert localhost
 mv localhost.pem localhost.original.pem
 cat localhost.original.pem rootCA.pem > localhost.pem
