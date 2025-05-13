@@ -261,6 +261,7 @@ async.waterfall([
 		config_json += "	\"plugin_paths\" : [\n";
 		config_json += "		\"plugins/dummy_st.so\",\n";
 		config_json += "		\"plugins/pvf_loader_st.so\",\n";
+		config_json += "		\"plugins/pvf2_loader_st.so\",\n";
 		config_json += "		\"plugins/psf_loader_st.so\",\n";
 		config_json += "		\"plugins/libde265_decoder_st.so\",\n";
 		config_json += "		\"plugins/recorder_st.so\",\n";

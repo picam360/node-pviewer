@@ -1,10 +1,10 @@
 {
-    "def" : "pvf_loader name=loader",
+    "def" : "pvf_loader name=loader loop=1",
     "params" : {
         "loader.url" : "@APP.PVF_URL@"
     },
     "replacements" : {
-        "@APP.PVF_URL@" : "https://vpm.picam360.com/4khdr_1024p_stereo_2mbps.pvf"
+        "@APP.PVF_URL@" : "https://vpm.picam360.com/nenkou_timelapse_15s.pvf"
     }
 }
 
