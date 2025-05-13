@@ -5,7 +5,7 @@ const net = require('net');
 const yargs = require('yargs');
 const wrtc_utils = require("./wrtc-utils.js");
 
-//usage : node index.js --bind gateway:target
+//usage : node index.js -s ws://localhost:36080@your-wrtc-key
 
 const m_options = {
     debug : false
@@ -17,13 +17,13 @@ function main() {
             alias: 's',
             type: 'string',
             array: true,
-            description: 'webrtc host',
+            description: '[webrtc host] exp. : -s ws://localhost:36080@your-wrtc-key',
         })
         .option('client', {
             alias: 'c',
             type: 'string',
             array: true,
-            description: 'webrtc client',
+            description: '[webrtc client] exp. : -c localhost:8888@your-wrtc-key',
         })
         .option('debug', {
             alias: 'd',
