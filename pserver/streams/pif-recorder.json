@@ -1,0 +1,11 @@
+{
+    "base" : "default",
+    "def" : "+ ! recorder force_fps=@APP.FORCE_FPS@ path=@APP.RECORD_PATH@ pif_split=1",
+    "params" : {
+    },
+    "replacements" : {
+        "@APP.FORCE_FPS@" : "0",
+        "@APP.RECORD_PATH@" : "user-record/@FIRST_STORED_TIME@/@TIME_STAMP@.pif",
+    }
+}
+

@@ -31,9 +31,10 @@
             "streams/take-picture-ptpvf.json",
             "streams/adb-screenrecord.json",
             "streams/pvf-loader.json",
-            "streams/ffmpeg-h264-texture.json",
-            "streams/ffmpeg-h265-texture.json",
-            "streams/texture-player.json"
+            "streams/ffmpeg-h264.json",
+            "streams/ffmpeg-h265.json",
+            "streams/pif-recorder.json",
+            "streams/pif-loader.json"
         ],
         "replacements" : {
             "@APP.BITRATE_KBPS@" : "2000",

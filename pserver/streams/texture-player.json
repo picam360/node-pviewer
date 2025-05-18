@@ -1,9 +1,0 @@
-{
-    "def" : "recorder mode=play @APP.FORCE_FPS@ path=@APP.PATH@",
-    "params" : {
-    },
-    "replacements" : {
-        "@APP.FORCE_FPS@" : "force_fps=30",
-        "@APP.PATH@" : "user-record/texture",
-    }
-}
