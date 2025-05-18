@@ -590,16 +590,17 @@ function start_wrtc(callback) {
 }
 
 function send_file(filename, key, conn, data) {
-    var chunksize = 63 * 1024;
+    var MAX_PAYLOAD = conn.getMaxPayload() || 16*1024;//16k is webrtc max
+    var CHUNK_SIZE = MAX_PAYLOAD - rtp_mod.PacketHeaderLength - 256;
     var length;
     for (var i = 0, seq = 0; i < data.length; i += length, seq++) {
         var eof;
-        if (i + chunksize >= data.length) {
+        if (i + CHUNK_SIZE >= data.length) {
             eof = true;
             length = data.length - i;
         } else {
             eof = false;
-            length = chunksize;
+            length = CHUNK_SIZE;
         }
         var header_str = sprintf("<picam360:file name=\"%s\" key=\"%s\" status=\"200\" seq=\"%d\" eof=\"%s\" />", filename, key, seq, eof
             .toString());

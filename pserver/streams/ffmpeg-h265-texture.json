@@ -1,0 +1,13 @@
+{
+    "def" : "pipe name=capture t=H265 s=@APP.VIDEO_SIZE@ ! recorder @APP.FORCE_FPS@ path=@APP.PATH@ pif_split=1",
+    "params" : {
+        "capture.def" : "ffmpeg -i @APP.MP4FILE@ -c:v copy -bsf:v hevc_mp4toannexb -f hevc -",
+        "capture.meta" : "<meta maptype=\"TEXTURE\" n_frame=\"@N_FRAME@\" />",
+    },
+    "replacements" : {
+        "@APP.MP4FILE@" : "user-record/h265.mp4",
+        "@APP.FORCE_FPS@" : "force_fps=30",
+        "@APP.PATH@" : "user-record/@FIRST_STORED_TIME@/@TIME_STAMP@.pif",
+    }
+}
+
