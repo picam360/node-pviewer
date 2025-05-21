@@ -354,9 +354,9 @@ class VslamOdometry {
         // dr_threashold : 0.1,
         // dh_threashold : 10,
 
-        update_gain : 0.3,
+        update_gain : 0.5,
         update_r_cutoff : 0.2,
-        update_h_cutoff : 2.0,
+        update_h_cutoff : 5.0,
 
         launch_vslam : true,
         calib_enabled : false,
@@ -733,8 +733,11 @@ class VslamOdometry {
                 this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
                 this.backend_pending++;
                 this.last_pushVslam_cur = this.push_cur;
+
+                this.push_cur++;
                 return;
             }else if(this.current_odom == null){
+                this.push_cur++;
                 return;
             }
 

@@ -282,21 +282,68 @@ function convert_transforms_to_positions(nodes, _ref_waypoints){
     return vslam_waypoints;
 }
 
+function euclidean(p1, p2) {
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function computeCentroid(points) {
+    const entries = Object.entries(points);
+    const sum = entries.reduce((acc, [, p]) => {
+        acc.x += p.x;
+        acc.y += p.y;
+        return acc;
+    }, {x: 0, y: 0});
+
+    return {
+        x: sum.x / entries.length,
+        y: sum.y / entries.length
+    };
+}
+
 class VslamOdometry {
-    static settings = {
+    // static settings = {
+    //     vslam_path : '/home/picam360/github/picam360-vslam',
+    //     vslam_option : '--disable_vis',
+    //     //vslam_option : '',
+    //     vslam_filename : 'map.data',
+    //     cam_offset : {
+    //         x : 0.0,
+    //         y : 2.2,
+    //         heading : 0,
+    //     },
+
+    //     dr_threashold_waypoint : 2.0,
+    //     dh_threashold_waypoint : 10,
+    //     dr_threashold : 1.0,
+    //     dh_threashold : 10,
+
+    //     launch_vslam : true,
+    //     calib_enabled : false,
+    // };
+    static settings = {//jetchariot
         vslam_path : '/home/picam360/github/picam360-vslam',
         vslam_option : '--disable_vis',
-        //vslam_option : '',
+        vslam_option : '',
         vslam_filename : 'map.data',
         cam_offset : {
             x : 0.0,
             y : 2.2,
             heading : 0,
         },
-        dr_threashold_waypoint : 2.0,
+
+        //for auto-drive
+        dr_threashold_waypoint : 0.1,
         dh_threashold_waypoint : 10,
-        dr_threashold : 1.0,
+        dr_threashold : 0.05,
         dh_threashold : 10,
+
+        //for map
+        // dr_threashold_waypoint : 0.2,
+        // dh_threashold_waypoint : 20,
+        // dr_threashold : 0.1,
+        // dh_threashold : 10,
 
         launch_vslam : true,
         calib_enabled : false,
@@ -382,7 +429,7 @@ class VslamOdometry {
                             const odom = params['odom'][params['odom'].length - 1];//last one
                             this.push_cur = Math.ceil(odom['timestamp'] / 10000) * 10000;
 
-                            const map_scale = 0.5 / 24;
+                            const map_scale = 1.5 / 0.15;//TODO : need to be calibrated
                             const vslam_waypoints = convert_transforms_to_positions(params['transforms']);
                             scale_positions(vslam_waypoints, map_scale);
                             this.vslam_waypoints = vslam_waypoints;
@@ -514,17 +561,25 @@ class VslamOdometry {
         this.enc_positions[this.push_cur].nmea = frame_dom['picam360:frame']['passthrough:nmea'];
 
         if(this.first_push){
-            this.first_push = false;
 
             //cal with initial angle value
             const initial_heading = 0;
-            const ref_timestamps = this.getKeysByHeading(this.vslam_waypoints, initial_heading);
+            let points = this.getKeysByHeading(this.vslam_waypoints, initial_heading, 30);
+            const num = Object.keys(points).length;
+            if(num == 0){
+                console.log("requestEstimation", "no reference");
+                return;
+            }else if(num > 5){
+                points = this.selectFarPoints(points, 5);
+            }
+            const ref_timestamps = Object.keys(points);
             console.log("requestEstimation", ref_timestamps);
 
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
             this.last_pushVslam_cur = this.push_cur;
 
             this.push_cur++;
+            this.first_push = false;
             return;
         }else if(this.current_odom == null){
             this.push_cur++;
@@ -542,7 +597,15 @@ class VslamOdometry {
             const dh = pos.heading;
             if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
         
-                const ref_timestamps = this.getKeysByHeading(this.vslam_waypoints, this.enc_positions[this.push_cur].heading);
+                let points = this.getKeysByHeading(this.vslam_waypoints, this.enc_positions[this.push_cur].heading, 30);
+                const num = Object.keys(points).length;
+                if(num == 0){
+                    console.log("requestEstimation", `dr=${dr}, dh=${dh}`, "no reference");
+                    return;
+                }else if(num > 5){
+                    points = this.selectFarPoints(points, 5);
+                }
+                const ref_timestamps = Object.keys(points);
                 console.log("requestEstimation", `dr=${dr}, dh=${dh}`, ref_timestamps);
         
                 this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
@@ -557,16 +620,64 @@ class VslamOdometry {
         this.push_cur++;
     }
 
-    getKeysByHeading(waypoints, heading) {
-        const keys = [];
+    getKeysByHeading(waypoints, heading, criteria) {
+        const points = {};
         for(const key of Object.keys(waypoints)){
             const diff_h = formay_angle_180(waypoints[key].heading - heading);
-            if(Math.abs(diff_h) < 15){
-                keys.push(key);
+            if(Math.abs(diff_h) < criteria){
+                points[key] = waypoints[key];
             }
         }
     
-        return keys;
+        return points;
+    }
+    
+    selectFarPoints(points, count) {
+        const entries = Object.entries(points).map(([key, value]) => [Number(key), value]);
+        const selected = [];
+    
+        const centroid = computeCentroid(points);
+    
+        let firstKey = null;
+        let minDist = Infinity;
+        for (const [key, p] of entries) {
+            const dist = euclidean(p, centroid);
+            if (dist < minDist) {
+                minDist = dist;
+                firstKey = key;
+            }
+        }
+    
+        selected.push(firstKey);
+    
+        while (selected.length < count) {
+            let bestKey = null;
+            let bestDistance = -1;
+    
+            for (const [key, p] of entries) {
+                if (selected.includes(key)) continue;
+    
+                const minDistToSelected = Math.min(...selected.map(selKey =>
+                    euclidean(p, points[selKey])
+                ));
+    
+                if (minDistToSelected > bestDistance) {
+                    bestDistance = minDistToSelected;
+                    bestKey = key;
+                }
+            }
+    
+            if (bestKey !== null) selected.push(bestKey);
+            else break;
+        }
+        selected.sort((a, b) => a - b);
+    
+        const result = {};
+        for (const key of selected) {
+            result[key] = points[key];
+        }
+    
+        return result;
     }
 
     getPosition() {

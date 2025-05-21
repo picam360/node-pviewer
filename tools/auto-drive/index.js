@@ -30,9 +30,10 @@ let m_options = {
 	// "pwm_range" : 10,
 	// "pwm_control_gain" : 0.06,
 
-	"forward_pwm_base" : 60,
-	"backward_pwm_base" : 60,
-	"pwm_range" : 60,
+	//for jetchariot
+	"forward_pwm_base" : 75,
+	"backward_pwm_base" : 75,
+	"pwm_range" : 75,
 	"pwm_control_gain" : 0.06,
 };
 let m_argv = null;
