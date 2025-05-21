@@ -5,6 +5,7 @@
   "pviewer": "gui.js",
   "pserver": "pserver/app.js"
  },
+ "main": "main.js",
  "scripts": {
   "install": "node setup.js"
  },

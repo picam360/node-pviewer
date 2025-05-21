@@ -33,7 +33,7 @@ const createWindow = () => {
 
     //win.webContents.openDevTools();
 
-    win.loadFile('www/index.html');
+    win.loadFile('pviewer/index.html');
 };
 
 app.commandLine.appendSwitch('enable-transparent-visuals');
