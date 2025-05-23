@@ -109,7 +109,7 @@ function localization_handler(tmp_img){
 	const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
 	const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
 
-	const conf_keys = Object.keys(m_odometry_conf)
+	const conf_keys = Object.keys(m_odometry_conf);
 	for(const key of conf_keys){
 		const conf = m_odometry_conf[key];
 		if(conf.handler){
@@ -120,7 +120,6 @@ function localization_handler(tmp_img){
 	if(m_odometry_conf[m_odometry_conf.odom_type].handler.is_ready() == false){
 		return;
 	}
-
 	const timestamp = Date.now() / 1000;
 	const odom = m_odometry_conf[m_odometry_conf.odom_type].handler.getPosition();
 	m_client.publish('pserver-odometry-info', JSON.stringify({
@@ -198,12 +197,16 @@ function main() {
 		init_odometory_handlers();
 
 		subscriber.subscribe('pserver-odometry', (data, key) => {
-			const params = data.trim().split(' ');
-			switch (params[0]) {
-				case "CMD":
-					console.log(`"${data}" subscribed.`);
-					command_handler(data.substr(params[0].length + 1));
-					break;
+			try{
+				//console.log(data);
+				const info = JSON.parse(data);
+				switch(info.cmd){
+					case "calib_odom":
+						m_odometry_conf[m_odometry_conf.odom_type].handler.calib_odom(info.dodom);
+						break;
+				}
+			}catch(err){
+				console.log(err);
 			}
 		});
 
@@ -238,16 +241,6 @@ function main() {
 			}
 		}, 1000);
 	});
-}
-
-function command_handler(cmd) {
-	let split = cmd.split(' ');
-	switch(split[0]){
-		case "START_MAPPING":
-			break;
-		case "STOP_MAPPING":
-			break;
-	}
 }
 
 if (require.main === module) {

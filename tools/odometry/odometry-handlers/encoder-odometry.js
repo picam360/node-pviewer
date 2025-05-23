@@ -194,6 +194,12 @@ class EncoderOdometry {
             heading : this.encoder_params.heading,
         };
     }
+
+    calib_odom(dodom){
+        this.encoder_params.x += dodom.x;
+        this.encoder_params.y += dodom.y;
+        this.encoder_params.heading += dodom.heading;
+    }
   }
   
   module.exports = {
