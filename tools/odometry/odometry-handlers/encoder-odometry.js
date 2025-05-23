@@ -196,9 +196,9 @@ class EncoderOdometry {
     }
 
     calib_odom(dodom){
-        this.encoder_params.x += dodom.x;
-        this.encoder_params.y += dodom.y;
-        this.encoder_params.heading += dodom.heading;
+        this.encoder_params.x += dodom.x || 0;
+        this.encoder_params.y += dodom.y || 0;
+        this.encoder_params.heading += dodom.heading || 0;
     }
   }
   
