@@ -206,7 +206,9 @@ function main() {
 				const backup = JSON.parse(json_str);
 				console.log("restore backup", backup);
 				if (backup) {
-					m_odometry_conf[m_odometry_conf.odom_type].handler.set_odom(backup.odom);
+					EncoderOdometry.settings.x_initial = backup.odom.x;
+					EncoderOdometry.settings.y_initial = backup.odom.y;
+					EncoderOdometry.settings.heading_initial = backup.odom.heading;
 				}
 			}catch(err){
 				console.log(err);

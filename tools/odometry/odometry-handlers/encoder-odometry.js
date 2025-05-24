@@ -167,9 +167,9 @@ class EncoderOdometry {
 
         if(this.encoder_params.last_left_counts === null){
             const settings = Object.assign({}, EncoderOdometry.settings);
-            settings.x_initial = 0;
-            settings.y_initial = 0;
-            settings.heading_initial = 0;
+            // settings.x_initial = 0;
+            // settings.y_initial = 0;
+            // settings.heading_initial = 0;
             this.encoder_params = {
                 right_gain : settings.right_gain,
                 meter_per_pulse : settings.meter_per_pulse,
