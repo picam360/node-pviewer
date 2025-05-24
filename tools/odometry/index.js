@@ -126,7 +126,11 @@ function localization_handler(tmp_img){
 		"mode" : m_drive_mode,
 		"state" : "UPDATE_ODOMETRY",
 		"odom" : odom,
-		timestamp,
+		"timestamp" : timestamp,
+	}));
+	m_client.set('pserver-odometry-backup', JSON.stringify({
+		"odom" : odom,
+		"timestamp" : timestamp,
 	}));
 }
 
@@ -195,6 +199,15 @@ function main() {
 		console.log('redis subscriber connected:');
 
 		init_odometory_handlers();
+
+		const backup = m_client.get('pserver-odometry-backu').then((json_str) => {
+			if (json_str) {
+				const backup = JSON.parse(json_str);
+				m_odometry_conf[m_odometry_conf.odom_type].handler.set_odom(backup.odom);
+			}
+		}).catch((err) => {
+			console.error('Odometry backup/restore failed:', err);
+		});
 
 		subscriber.subscribe('pserver-odometry', (data, key) => {
 			try{
