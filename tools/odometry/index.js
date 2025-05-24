@@ -188,6 +188,7 @@ function main() {
     client.on('error', (err) => {
         console.error('redis error:', err);
 		m_client = null;
+		process.exit(1);
     });
     client.connect().then(() => {
         console.log('redis connected:');
