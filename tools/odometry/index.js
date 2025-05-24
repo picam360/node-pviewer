@@ -223,6 +223,7 @@ function main() {
 						m_odometry_conf[m_odometry_conf.odom_type].handler.calib_odom(info.dodom);
 						break;
 					case "set_odom":
+						console.log("set_odom", info.odom);
 						m_odometry_conf[m_odometry_conf.odom_type].handler.set_odom(info.odom);
 						break;
 				}
