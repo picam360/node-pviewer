@@ -200,6 +200,12 @@ class EncoderOdometry {
         this.encoder_params.y += dodom.y || 0;
         this.encoder_params.heading += dodom.heading || 0;
     }
+
+    set_odom(odom){
+        this.encoder_params.x = odom.x || 0;
+        this.encoder_params.y = odom.y || 0;
+        this.encoder_params.heading = odom.heading || 0;
+    }
   }
   
   module.exports = {

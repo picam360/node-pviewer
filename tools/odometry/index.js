@@ -204,6 +204,9 @@ function main() {
 					case "calib_odom":
 						m_odometry_conf[m_odometry_conf.odom_type].handler.calib_odom(info.dodom);
 						break;
+					case "set_odom":
+						m_odometry_conf[m_odometry_conf.odom_type].handler.set_odom(info.odom);
+						break;
 				}
 			}catch(err){
 				console.log(err);
