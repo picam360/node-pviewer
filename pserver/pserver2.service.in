@@ -13,7 +13,7 @@ ExecStart = /usr/bin/pserver2 -c @CONFIG_PATH@
 Environment="DISPLAY=:0"
 
 Restart = always
-RestartSec = 0.5
+RestartSec = 1
 Type = simple
 
 [Install]
