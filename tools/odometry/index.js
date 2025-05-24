@@ -200,9 +200,10 @@ function main() {
 
 		init_odometory_handlers();
 
-		m_client.get('pserver-odometry-backu').then((json_str) => {
+		m_client.get('pserver-odometry-backup').then((json_str) => {
 			try{
 				const backup = JSON.parse(json_str);
+				console.log("restore backup", backup);
 				if (backup) {
 					m_odometry_conf[m_odometry_conf.odom_type].handler.set_odom(backup.odom);
 				}
