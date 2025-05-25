@@ -1,0 +1,16 @@
+{
+    "def" : "dealer name=dealer_play ! v4l2_tegra_encoder name=encoder fps=@APP.FPS@ br=@APP.BITRATE_KBPS@ preset=ultrafast ! recorder path=/mnt/data-ssd/@FIRST_STORED_TIME@/@TIME_STAMP@.pif pif_split=1",
+    "params" : {
+        "dealer_play.def" : "recorder mode=play path=@APP.PATH@ ! pcuda_remapper name=remapper maptype=WINDOW ignore_view_params=1 fom=@APP.FOV@ view_quat=@APP.VIEW_QUAT@ debalgo=malvar debayer=I420 sh=0 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 s=@APP.SIZE@",
+#        "dealer_play.def" : "drecorder mode=play path=@APP.PATH@ ! pcuda_remapper name=remapper maptype=WINDOW ignore_view_params=1 debalgo=linear debayer=I420 sh=10 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 s=@APP.SIZE@",
+    },
+    "replacements" : {
+        "@APP.FOV@" : "120",
+        "@APP.VIEW_QUAT@" : "0.707,0,0,0.707",
+        "@APP.BITRATE_KBPS@" : "2000",
+        "@APP.SIZE@" : "2048x1024",
+        "@APP.FPS@" : "15",
+        "@APP.RGB_GAIN@" : "1.2,1.0,2.7",
+        "@APP.PATH@" : "/mnt/data-ssd/kamigasa",
+    }
+}
