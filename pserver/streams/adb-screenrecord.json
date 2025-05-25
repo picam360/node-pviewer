@@ -1,7 +1,7 @@
 {
     "def" : "pipe name=capture t=H264 s=@APP.ADB_SIZE@ loop=1",
     "params" : {
-        "capture.def" : "adb @APP.ADB_DEVICE@ exec-out screenrecord --bit-rate @APP.ADB_BITRATE_BPS@ --size @OWIDTH@x@OHEIGHT@ --output-format=h264 -",
+        "capture.def" : "adb-screenrecord @APP.ADB_DEVICE@ exec-out screenrecord --bit-rate @APP.ADB_BITRATE_BPS@ --size @OWIDTH@x@OHEIGHT@ --output-format=h264 -",
         "capture.meta" : "<meta maptype=\"TEXTURE\" />",
     },
     "replacements" : {
