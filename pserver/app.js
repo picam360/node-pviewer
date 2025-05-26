@@ -536,32 +536,33 @@ async.waterfall([
 				let name = pstdef.base;
 				while(name && name_list.length < 10){
 					if (m_pstdefs[name]) {
+
+						{//dynamic update
+							const pstdef = m_pstdefs[name];
+							const new_pstdef = m_plugin_host.load_pstdef(pstdef.path);
+							if(!new_pstdef || new_pstdef.name != pstdef.name){
+								console.error("Invalid Operation", new_pstdef, pstdef);
+								if(callback){
+									callback( { pstcore, pst : null } );
+								}
+								return;
+							}
+							m_pstdefs[name] = new_pstdef;
+						}
+
 						name_list.push(name);
 						name = m_pstdefs[name].base;
 						if(!name){
 							break;
 						}
 					}else{
-						console.log("no stream definition : " + name);
+						console.error("no stream definition : " + name);
 						if(callback){
 							callback( { pstcore, pst : null } );
 						}
 						return;
 					}
 				}
-			}
-			for (let i = name_list.length-1; i >= 0; i--) {//dynamic update
-				const name = name_list[i];
-				const pstdef = m_pstdefs[name];
-				const new_pstdef = m_plugin_host.load_pstdef(pstdef.path);
-				if(!new_pstdef || new_pstdef.name != pstdef.name || new_pstdef.base != pstdef.base){
-					console.error("Invalid Operation", new_pstdef, pstdef);
-					if(callback){
-						callback( { pstcore, pst : null } );
-					}
-					return;
-				}
-				m_pstdefs[name] = new_pstdef;
 			}
 			let def = "";
 			let params = {};
