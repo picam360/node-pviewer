@@ -1,8 +1,14 @@
 {
-    "def" : "dealer name=dealer_play ! v4l2_tegra_encoder name=encoder fps=@APP.FPS@ br=@APP.BITRATE_KBPS@ preset=ultrafast ! recorder path=/mnt/data-ssd/@FIRST_STORED_TIME@/@TIME_STAMP@.pif pif_split=1",
+    "def" : "dealer name=dealer_converter ! v4l2_tegra_encoder name=encoder fps=@APP.FPS@ br=@APP.BITRATE_KBPS@ preset=ultrafast ! recorder path=/mnt/data-ssd/@FIRST_STORED_TIME@/@TIME_STAMP@.pif pif_split=1",
     "params" : {
-        "dealer_play.def" : "recorder mode=play path=@APP.PATH@ ! pcuda_remapper name=remapper maptype=WINDOW ignore_view_params=1 fom=@APP.FOV@ view_quat=@APP.VIEW_QUAT@ debalgo=malvar debayer=I420 sh=0 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 s=@APP.SIZE@",
-#        "dealer_play.def" : "drecorder mode=play path=@APP.PATH@ ! pcuda_remapper name=remapper maptype=WINDOW ignore_view_params=1 debalgo=linear debayer=I420 sh=10 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 s=@APP.SIZE@",
+        "dealer_converter.def" : "recorder mode=play path=@APP.PATH@ ! pcuda_remapper name=remapper maptype=WINDOW fov=@APP.FOV@ view_quat=@APP.VIEW_QUAT@ debayer=I420 sh=0 rgb_gain=@APP.RGB_GAIN@ gamma=2.2 s=@APP.SIZE@",
+        "dealer_converter.remapper.fov" : "@APP.FOV@",
+        "dealer_converter.remapper.view_quat" : "@APP.VIEW_QUAT@",
+        "dealer_converter.remapper.debalgo" : "malvar",
+        "dealer_converter.remapper.sh" : "0",
+#        "dealer_converter.remapper.debalgo" : "linear",
+#        "dealer_converter.remapper.sh" : "10",
+        "dealer_converter.remapper.ignore_view_params" : "1",
     },
     "replacements" : {
         "@APP.FOV@" : "120",
