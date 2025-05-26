@@ -491,6 +491,27 @@ async.waterfall([
 				}
 			}
 		};
+		m_plugin_host.load_pstdef = function(pstdef_path) {
+			console.log("loading... " + pstdef_path);
+			if (fs.existsSync(pstdef_path)) {
+				const lines = fs.readFileSync(pstdef_path, 'utf-8').replace(/\r/g, '').split('\n')
+				for(var i=0;i<lines.length;i++){
+					if(lines[i][0] == '#'){
+						lines[i] = "";
+					}
+				}
+				const json_str = lines.join("\n");
+				const pstdef = jsonc.parse(json_str);
+				if(!pstdef.name){
+					pstdef.name = path.basename(pstdef_path, path.extname(pstdef_path));
+				}
+				pstdef.path = pstdef_path
+				return pstdef;
+			}else{
+				console.log("loading... not found " + pstdef_path);
+				return null;
+			}
+		};
 		/**
 		 * build pstreamer
 		 *
@@ -528,6 +549,19 @@ async.waterfall([
 						return;
 					}
 				}
+			}
+			for (let i = name_list.length-1; i >= 0; i--) {//dynamic update
+				const name = name_list[i];
+				const pstdef = m_pstdefs[name];
+				const new_pstdef = m_plugin_host.load_pstdef(pstdef.path);
+				if(!new_pstdef || new_pstdef.name != pstdef.name || new_pstdef.base != pstdef.base){
+					console.error("Invalid Operation", new_pstdef, pstdef);
+					if(callback){
+						callback( { pstcore, pst : null } );
+					}
+					return;
+				}
+				m_pstdefs[name] = new_pstdef;
 			}
 			let def = "";
 			let params = {};
@@ -600,23 +634,9 @@ async.waterfall([
 		if (m_options["pstdefs"]) {
 			for (var k in m_options["pstdefs"]["paths"]) {
 				const pstdef_path = m_options["pstdefs"]["paths"][k];
-				console.log("loading... " + pstdef_path);
-				if (fs.existsSync(pstdef_path)) {
-					const lines = fs.readFileSync(pstdef_path, 'utf-8').replace(/\r/g, '').split('\n')
-					for(var i=0;i<lines.length;i++){
-						if(lines[i][0] == '#'){
-							lines[i] = "";
-						}
-					}
-					const json_str = lines.join("\n");
-					const pstdef = jsonc.parse(json_str);
-					let name = pstdef.name;
-					if(!name){
-						name = path.basename(pstdef_path, path.extname(pstdef_path));
-					}
-					m_pstdefs[name] = pstdef;
-				}else{
-					console.log("loading... not found " + pstdef_path);
+				const pstdef = m_plugin_host.load_pstdef(pstdef_path);
+				if(pstdef){
+					m_pstdefs[pstdef.name] = pstdef;
 				}
 			}
 		}
