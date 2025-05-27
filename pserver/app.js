@@ -272,6 +272,7 @@ async.waterfall([
 		config_json += "        \"plugins/suspender_st.so\",\n";
 		config_json += "        \"plugins/sampler_st.so\",\n";
 		config_json += "        \"plugins/redis_st.so\",\n";
+		config_json += "        \"plugins/debayer_st.so\",\n";
 		if(process.platform === 'darwin') {
 			config_json += "		\"plugins/vt_decoder_st.so\",\n";
 			config_json += "        \"plugins/oal_capture_st.so\",\n";
