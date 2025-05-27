@@ -435,8 +435,16 @@ class VslamOdometry {
                             this.vslam_waypoints = vslam_waypoints;
                             
                             if(callback){
-                                callback(this.vslam_waypoints);
+                                callback();
                             }
+
+                            setInterval(() => {
+                                m_client.publish('pserver-odometry-info', JSON.stringify({
+                                    "mode" : "INFO",
+                                    "state" : "REFPOINTS",
+                                    "refpoints" : this.vslam_waypoints,
+                                }));
+                            }, 1000);
 
                             this.update_reconstruction_progress(100);
                         }
@@ -479,8 +487,6 @@ class VslamOdometry {
             if(VslamOdometry.settings.launch_vslam){
                 killDockerContainer();
                 launchDockerContainer();
-            }else{
-                push_keyframes();
             }
         });//end of redis connected
     }

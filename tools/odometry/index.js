@@ -36,16 +36,16 @@ const ODOMETRY_TYPE = {
 	VSLAM : "VSLAM",
 };
 let m_odometry_conf = {
-//	odom_type : ODOMETRY_TYPE.VSLAM,
-	odom_type : ODOMETRY_TYPE.ENCODER,
+	odom_type : ODOMETRY_TYPE.VSLAM,
+//	odom_type : ODOMETRY_TYPE.ENCODER,
 	GPS : {
 		enabled : false
 	},
 	ENCODER : {
-		enabled : true
+		enabled : false
 	},
 	VSLAM : {
-		enabled : false
+		enabled : true
 	},
 };
 
