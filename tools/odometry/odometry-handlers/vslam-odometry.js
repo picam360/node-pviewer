@@ -347,6 +347,13 @@ class VslamOdometry {
 
         launch_vslam : true,
         calib_enabled : false,
+
+        refpoints_calib : {
+            x : 0,
+            y : 0,
+            heading : 0,
+            scale : 1,
+        },
     };
     constructor(options) {
         this.options = options || {};
@@ -429,20 +436,24 @@ class VslamOdometry {
                             const odom = params['odom'][params['odom'].length - 1];//last one
                             this.push_cur = Math.ceil(odom['timestamp'] / 10000) * 10000;
 
-                            const map_scale = 1.5 / 0.15;//TODO : need to be calibrated
-                            const vslam_waypoints = convert_transforms_to_positions(params['transforms']);
-                            scale_positions(vslam_waypoints, map_scale);
-                            this.vslam_waypoints = vslam_waypoints;
+                            this.vslam_waypoints = convert_transforms_to_positions(params['transforms']);
                             
                             if(callback){
                                 callback();
                             }
 
                             setInterval(() => {
+                                const refpoints = JSON.parse(JSON.stringify(this.vslam_waypoints));
+                                add_offset_from_positions(refpoints, {
+                                    x : VslamOdometry.settings.refpoints_calib.x,
+                                    y : VslamOdometry.settings.refpoints_calib.y,
+                                });
+                                rotate_positions(refpoints, VslamOdometry.settings.refpoints_calib.heading);
+                                scale_positions(refpoints, VslamOdometry.settings.refpoints_calib.scale);
                                 m_client.publish('pserver-odometry-info', JSON.stringify({
                                     "mode" : "INFO",
                                     "state" : "REFPOINTS",
-                                    "refpoints" : this.vslam_waypoints,
+                                    "refpoints" : refpoints,
                                 }));
                             }, 1000);
 
@@ -688,6 +699,17 @@ class VslamOdometry {
 
     getPosition() {
         return this.enc_odom.getPosition();
+    }
+
+    calib_odom(dodom){
+        VslamOdometry.settings.refpoints_calib.x += dodom.x || 0;
+        VslamOdometry.settings.refpoints_calib.y += dodom.y || 0;
+        VslamOdometry.settings.refpoints_calib.heading += dodom.heading || 0;
+        VslamOdometry.settings.refpoints_calib.scale *= dodom.scale || 1.0;
+    }
+
+    set_odom(odom){
+        this.enc_odom.set_odom(odom);
     }
 }
 
