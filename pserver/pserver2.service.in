@@ -10,7 +10,9 @@ Description = pserver2 daemon
 ExecStart = /usr/bin/pserver2 -c @CONFIG_PATH@
 #ExecStop = -/usr/bin/docker kill pserver
 
+User=picam360
 Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/home/picam360/.Xauthority"
 
 Restart = always
 RestartSec = 1
