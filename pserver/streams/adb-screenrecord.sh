@@ -42,7 +42,7 @@ else
     # -----------------------
     # Get serial number from USB port
     # -----------------------
-    SERIAL=$(adb devices -l | awk -v port="$USB_PORT" '{for(i=1;i<=NF;i++) if($i==port){print $1; exit}}')
+    SERIAL=$(adb devices -l | awk -v port="$USB_PORT" '{for(i=1;i<=NF;i++) if($i ~ port){print $1; exit}}')
 
     if [ -z "$SERIAL" ]; then
         echo "No serial number found for port $USB_PORT" >&2
