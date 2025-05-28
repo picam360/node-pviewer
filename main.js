@@ -1,6 +1,11 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const yargs = require('yargs/yargs');
+const { hideBin } = require('yargs/helpers');
+const argv = yargs(hideBin(process.argv)).argv;
+const query = argv.query || ''; // "param1=value1&param2=value2"
+const devTools = argv.devTools || false;
 
 const createWindow = () => {
     let appIcon;
@@ -18,7 +23,7 @@ const createWindow = () => {
         height: 600,
         icon: appIcon,
         webPreferences: {
-            //devTools: true,
+            devTools: devTools,
             nodeIntegration: false,
             contextIsolation: false,
             enableRemoteModule: true,
@@ -31,9 +36,10 @@ const createWindow = () => {
         frame: false,
     });
 
-    //win.webContents.openDevTools();
-
-    win.loadFile('pviewer/index.html');
+    if(devTools){
+        win.webContents.openDevTools();
+    }
+    win.loadURL(`file://${__dirname}/pviewer/index.html?${query}`);
 };
 
 app.commandLine.appendSwitch('enable-transparent-visuals');
