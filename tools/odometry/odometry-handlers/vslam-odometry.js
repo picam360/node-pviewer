@@ -362,6 +362,8 @@ class VslamOdometry {
         this.initialized = false;
         this.waypoints = null;
         this.vslam_waypoints = null;
+        this.vslam_refpoints = null;
+        this.vslam_actpoints = null;
         this.push_cur = 0;
         this.m_client = null;
         this.m_subscriber = null;
@@ -412,6 +414,17 @@ class VslamOdometry {
             this.m_subscriber.connect().then(() => {
                 console.log('redis connected:');
 
+                function apply_calib(points){
+                    const new_points= JSON.parse(JSON.stringify(points));
+                    add_offset_from_positions(new_points, {
+                        x : VslamOdometry.settings.refpoints_calib.x,
+                        y : VslamOdometry.settings.refpoints_calib.y,
+                    });
+                    rotate_positions(new_points, VslamOdometry.settings.refpoints_calib.heading);
+                    scale_positions(new_points, VslamOdometry.settings.refpoints_calib.scale);
+                    return new_points;
+                }
+
                 this.m_subscriber.subscribe('picam360-vslam-odom', (data, key) => {
                     //console.log(data);
                     const params = JSON.parse(data);
@@ -437,23 +450,20 @@ class VslamOdometry {
                             this.push_cur = Math.ceil(odom['timestamp'] / 10000) * 10000;
 
                             this.vslam_waypoints = convert_transforms_to_positions(params['transforms']);
+                            this.vslam_refpoints = apply_calib(this.vslam_waypoints);
                             
                             if(callback){
                                 callback();
                             }
 
                             setInterval(() => {
-                                const refpoints = JSON.parse(JSON.stringify(this.vslam_waypoints));
-                                add_offset_from_positions(refpoints, {
-                                    x : VslamOdometry.settings.refpoints_calib.x,
-                                    y : VslamOdometry.settings.refpoints_calib.y,
-                                });
-                                rotate_positions(refpoints, VslamOdometry.settings.refpoints_calib.heading);
-                                scale_positions(refpoints, VslamOdometry.settings.refpoints_calib.scale);
+                                this.vslam_refpoints = apply_calib(this.vslam_waypoints);//update
+
                                 m_client.publish('pserver-odometry-info', JSON.stringify({
                                     "mode" : "INFO",
                                     "state" : "REFPOINTS",
-                                    "refpoints" : refpoints,
+                                    "refpoints" : this.vslam_refpoints,
+                                    "actpoints" : this.vslam_actpoints,
                                 }));
                             }, 1000);
 
@@ -466,15 +476,16 @@ class VslamOdometry {
                             this.current_odom = odom;
                             this.last_odom_cur = odom_cur;
 
-                            const vslam_waypoints = convert_transforms_to_positions(params['transforms']);
-                            const map_scale = calcScaleFromPointPairs(vslam_waypoints, this.vslam_waypoints);
-                            scale_positions(vslam_waypoints, map_scale);
+                            const vslam_actpoints = convert_transforms_to_positions(params['transforms']);
+                            const map_scale = calcScaleFromPointPairs(vslam_actpoints, this.vslam_refpoints);
+                            scale_positions(vslam_actpoints, map_scale);
+                            this.vslam_actpoints = vslam_actpoints;
 
                             const update_gain = 0.3;
                             const update_r_cutoff = 2.0;
                             const update_h_cutoff = 2.0;
 
-                            const kf_pos = vslam_waypoints[odom_cur];
+                            const kf_pos = this.vslam_actpoints[odom_cur];
                             const enc_pos = this.enc_positions[odom_cur];
                             const diff_x = kf_pos.x - enc_pos.x;
                             const diff_y = kf_pos.y - enc_pos.y;
