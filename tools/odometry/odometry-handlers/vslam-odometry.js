@@ -352,7 +352,7 @@ class VslamOdometry {
 
         launch_vslam : true,
         calib_enabled : false,
-        kf_mode : "manual",//"manual", "auto"
+        kfmode : "manual",//"manual", "auto"
 
         refpoints_calib : {
             x : 0,
@@ -373,7 +373,7 @@ class VslamOdometry {
         this.push_cur = 0;
         this.m_client = null;
         this.m_subscriber = null;
-        this.req_first_estimation = (VslamOdometry.settings.kf_mode == "auto");
+        this.req_first_estimation = (VslamOdometry.settings.kfmode == "auto");
         this.waiting_first_estimation = false;
         this.req_manual_estimation = false;
         this.last_pushVslam_cur = 0;
@@ -627,7 +627,7 @@ class VslamOdometry {
         }
 
         let req_estimation = false;
-        if(this.enc_available && VslamOdometry.settings.kf_mode == "auto"){
+        if(this.enc_available && VslamOdometry.settings.kfmode == "auto"){
             const pos = {
                 x : this.enc_positions[this.push_cur].x - this.enc_positions[this.last_pushVslam_cur].x,
                 y : this.enc_positions[this.push_cur].y - this.enc_positions[this.last_pushVslam_cur].y,
@@ -742,11 +742,11 @@ class VslamOdometry {
         VslamOdometry.settings.refpoints_calib.scale *= dodom.scale || 1.0;
     }
 
-    setKfMode(mode) {
-        if(mode == "manual" && VslamOdometry.settings.kf_mode == "manual"){
+    set_kfmode(mode) {
+        if(mode == "manual" && VslamOdometry.settings.kfmode == "manual"){
             this.req_manual_estimation = true;
         }
-        VslamOdometry.settings.kf_mode = mode;
+        VslamOdometry.settings.kfmode = mode;
     }
 
     set_odom(odom){
