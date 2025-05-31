@@ -31,6 +31,7 @@ function createWindow() {
     if (devTools) {
         mainWindow.webContents.openDevTools();
     }
+    mainWindow.setMenu(null);
     mainWindow.loadURL(`file://${__dirname}/index.html?${query}`);
 }
 
