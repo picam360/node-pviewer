@@ -1,5 +1,5 @@
 {
-  "name": "ubuntu-writer",
+  "name": "bkp-restore",
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
@@ -9,6 +9,7 @@
     "electron": "^36.3.2"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
     "node-ssh": "^13.2.1",
     "unzipper": "^0.10.11",

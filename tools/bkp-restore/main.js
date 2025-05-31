@@ -6,6 +6,7 @@ const os = require("os");
 const { exec } = require('child_process');
 const unzipper = require('unzipper'); // npm install unzipper
 const archiver = require("archiver");
+const AdmZip = require('adm-zip');
 
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
@@ -125,9 +126,11 @@ ipcMain.on("start-backup", async (event, { ip, folders }) => {
 
         archive.pipe(output);
         archive.directory(tmpDir, false);
+        output.on('close', () => {
+            console.log("ZIP 完了:", archive.pointer(), "bytes");
+            event.sender.send("backup-complete", filePath);
+        });
         await archive.finalize();
-
-        event.sender.send("backup-complete", filePath);
     } catch (err) {
         console.error("バックアップ失敗:", err);
         event.sender.send("backup-failed", err.message);
@@ -147,6 +150,7 @@ ipcMain.on('open-zip-dialog', async () => {
     if (canceled || filePaths.length === 0) return;
 
     const zipPath = filePaths[0];
+    mainWindow.webContents.send('zip-selected', zipPath);
 
     try {
         const directory = await unzipper.Open.file(zipPath);
@@ -165,17 +169,58 @@ ipcMain.on('open-zip-dialog', async () => {
     }
 });
 
-// IPアドレス受け取ってコマンド実行（例: ping）
-ipcMain.on('start-write', (event, ip) => {
-    console.log(`送信先IP: ${ip}`);
+function unzipToTemp(zipPath) {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "restore-"));
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo(tmpDir, true);
+    return tmpDir;
+}
 
-    // ここで書き込み処理を行う（例: ping, scp, ssh など）
-    exec(`ping -c 2 ${ip}`, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`エラー: ${error.message}`);
-            return;
+function getTimestampSuffix() {
+    const now = new Date();
+    return now.toISOString().replace(/[-:T]/g, "").slice(0, 14); // 例: 20240531164512
+}
+
+ipcMain.on("start-restore", async (event, { ip, zipPath }) => {
+    const ssh = new NodeSSH();
+    const [userpass, host] = ip.split("@");
+    const [username, password] = userpass.split(":");
+
+    try {
+        const tmpDir = unzipToTemp(zipPath);
+
+        const syncListPath = path.join(tmpDir, "sync_list.txt");
+        if (!fs.existsSync(syncListPath)) {
+            throw new Error("sync_list.txt が ZIP 内にありません");
         }
-        console.log(`出力: ${stdout}`);
-    });
-});
 
+        const folders = fs.readFileSync(syncListPath, "utf-8")
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(line => line.length > 0);
+
+        await ssh.connect({ host, username, password });
+
+        const timestamp = getTimestampSuffix();
+        for (const folder of folders) {
+            const backupPath = `${folder}_${timestamp}`;
+            await ssh.execCommand(`if [ -d "${folder}" ]; then mv "${folder}" "${backupPath}"; fi`);
+        }
+
+        for (const folder of folders) {
+            const base = path.basename(folder);
+            const localFolder = path.join(tmpDir, base);
+            if (fs.existsSync(localFolder)) {
+                await ssh.putDirectory(localFolder, folder, { recursive: true });
+            } else {
+                console.warn(`ZIPに ${base} が見つかりません`);
+            }
+        }
+
+        event.sender.send("restore-complete", folders.length);
+    } catch (err) {
+        event.sender.send("restore-failed", err.message);
+    } finally {
+        ssh.dispose();
+    }
+});
