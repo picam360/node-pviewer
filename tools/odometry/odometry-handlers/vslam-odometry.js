@@ -332,6 +332,11 @@ class VslamOdometry {
             y : 2.2,
             heading : 0,
         },
+        initial_pos : {
+            x : 0,
+            y : 0.6,
+            heading : 180,
+        },
 
         //for auto-drive
         dr_threashold_waypoint : 0.1,
@@ -347,6 +352,7 @@ class VslamOdometry {
 
         launch_vslam : true,
         calib_enabled : false,
+        kf_mode : "manual",//"manual", "auto"
 
         refpoints_calib : {
             x : 0,
@@ -367,7 +373,9 @@ class VslamOdometry {
         this.push_cur = 0;
         this.m_client = null;
         this.m_subscriber = null;
-        this.first_push = true;
+        this.req_first_estimation = (VslamOdometry.settings.kf_mode == "auto");
+        this.waiting_first_estimation = false;
+        this.req_manual_estimation = false;
         this.last_pushVslam_cur = 0;
         this.last_odom_cur = 0;
         this.reconstruction_progress = 0;
@@ -481,26 +489,35 @@ class VslamOdometry {
                             scale_positions(vslam_actpoints, map_scale);
                             this.vslam_actpoints = vslam_actpoints;
 
-                            const update_gain = 0.3;
-                            const update_r_cutoff = 2.0;
-                            const update_h_cutoff = 2.0;
-
                             const kf_pos = this.vslam_actpoints[odom_cur];
-                            const enc_pos = this.enc_positions[odom_cur];
-                            const diff_x = kf_pos.x - enc_pos.x;
-                            const diff_y = kf_pos.y - enc_pos.y;
-                            const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
-                            const diff_h = formay_angle_180(kf_pos.heading - enc_pos.heading);
-                            const diff_h_abs = Math.abs(diff_h);
-                            const update_gain_r = Math.min(diff_r, update_r_cutoff) / Math.max(diff_r, 1e-3) * update_gain;
-                            const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
-                            this.enc_odom.encoder_params.x += diff_x * update_gain_r;
-                            this.enc_odom.encoder_params.y += diff_y * update_gain_r;
-                            this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
+                            if(this.waiting_first_estimation){
+                                this.waiting_first_estimation = false;
+                                
+                                this.enc_odom.encoder_params.x = kf_pos.x;
+                                this.enc_odom.encoder_params.y = kf_pos.y;
+                                this.enc_odom.encoder_params.heading = kf_pos.heading;
+                            }else{
 
-                            console.log("diff_x", diff_x, diff_x * update_gain_r);
-                            console.log("diff_y", diff_y, diff_y * update_gain_r);
-                            console.log("diff_h", diff_h, diff_h * update_gain_h);
+                                const update_gain = 0.3;
+                                const update_r_cutoff = 2.0;
+                                const update_h_cutoff = 2.0;
+
+                                const enc_pos = this.enc_positions[odom_cur];
+                                const diff_x = kf_pos.x - enc_pos.x;
+                                const diff_y = kf_pos.y - enc_pos.y;
+                                const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
+                                const diff_h = formay_angle_180(kf_pos.heading - enc_pos.heading);
+                                const diff_h_abs = Math.abs(diff_h);
+                                const update_gain_r = Math.min(diff_r, update_r_cutoff) / Math.max(diff_r, 1e-3) * update_gain;
+                                const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
+                                this.enc_odom.encoder_params.x += diff_x * update_gain_r;
+                                this.enc_odom.encoder_params.y += diff_y * update_gain_r;
+                                this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
+
+                                console.log("diff_x", diff_x, diff_x * update_gain_r);
+                                console.log("diff_y", diff_y, diff_y * update_gain_r);
+                                console.log("diff_h", diff_h, diff_h * update_gain_h);
+                            }
                         }
                     }
                 });
@@ -588,33 +605,29 @@ class VslamOdometry {
         const frame_dom = xml_parser.parse(meta);
         this.enc_positions[this.push_cur].nmea = frame_dom['picam360:frame']['passthrough:nmea'];
 
-        if(this.first_push){
+        if(this.req_first_estimation){
 
-            //cal with initial angle value
-            const initial_heading = 0;
-            let points = this.getKeysByHeading(this.vslam_waypoints, initial_heading, 30);
-            const num = Object.keys(points).length;
-            if(num == 0){
-                console.log("requestEstimation", "no reference");
-                return;
-            }else if(num > 5){
-                points = this.selectFarPoints(points, 5);
-            }
-            const ref_timestamps = Object.keys(points);
+            const keys = Object.keys(this.vslam_waypoints);
+            const ref_timestamps = keys.slice(0, 5);
+            this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
             console.log("requestEstimation", ref_timestamps);
 
-            this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
             this.last_pushVslam_cur = this.push_cur;
 
             this.push_cur++;
-            this.first_push = false;
+            this.req_first_estimation = false;
+            this.waiting_first_estimation = true;
             return;
+
         }else if(this.current_odom == null){
+
             this.push_cur++;
             return;
+            
         }
 
-        if(this.enc_available){
+        let req_estimation = false;
+        if(this.enc_available && VslamOdometry.settings.kf_mode == "auto"){
             const pos = {
                 x : this.enc_positions[this.push_cur].x - this.enc_positions[this.last_pushVslam_cur].x,
                 y : this.enc_positions[this.push_cur].y - this.enc_positions[this.last_pushVslam_cur].y,
@@ -624,25 +637,31 @@ class VslamOdometry {
             const dr = Math.sqrt(pos.x*pos.x + pos.y*pos.y);
             const dh = pos.heading;
             if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
-        
-                let points = this.getKeysByHeading(this.vslam_waypoints, this.enc_positions[this.push_cur].heading, 30);
-                const num = Object.keys(points).length;
-                if(num == 0){
-                    console.log("requestEstimation", `dr=${dr}, dh=${dh}`, "no reference");
-                    return;
-                }else if(num > 5){
-                    points = this.selectFarPoints(points, 5);
-                }
-                const ref_timestamps = Object.keys(points);
-                console.log("requestEstimation", `dr=${dr}, dh=${dh}`, ref_timestamps);
-        
-                this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
-                this.last_pushVslam_cur = this.push_cur;
-
-                this.enc_positions[this.push_cur].keyframe = true;
+                req_estimation = true;
             }
-        }else{
-            console.log("no encoder value");
+        }
+
+        if(this.req_manual_estimation){
+            this.req_manual_estimation = false;
+            req_estimation = true;
+        }
+
+        if(req_estimation){
+            let points = this.getKeysByHeading(this.vslam_waypoints, this.enc_positions[this.push_cur].heading, 30);
+            const num = Object.keys(points).length;
+            if(num == 0){
+                console.log("requestEstimation", `dr=${dr}, dh=${dh}`, "no reference");
+                return;
+            }else if(num > 5){
+                points = this.selectFarPoints(points, 5);
+            }
+            const ref_timestamps = Object.keys(points);
+            console.log("requestEstimation", `dr=${dr}, dh=${dh}`, ref_timestamps);
+    
+            this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
+            this.last_pushVslam_cur = this.push_cur;
+
+            this.enc_positions[this.push_cur].keyframe = true;
         }
 
         this.push_cur++;
@@ -713,14 +732,29 @@ class VslamOdometry {
     }
 
     calib_odom(dodom){
+        this.enc_odom.calib_odom(dodom);
+    }
+
+    calib_refpoints(dodom){
         VslamOdometry.settings.refpoints_calib.x += dodom.x || 0;
         VslamOdometry.settings.refpoints_calib.y += dodom.y || 0;
         VslamOdometry.settings.refpoints_calib.heading += dodom.heading || 0;
         VslamOdometry.settings.refpoints_calib.scale *= dodom.scale || 1.0;
     }
 
+    setKfMode(mode) {
+        if(mode == "manual" && VslamOdometry.settings.kf_mode == "manual"){
+            this.req_manual_estimation = true;
+        }
+        VslamOdometry.settings.kf_mode = mode;
+    }
+
     set_odom(odom){
         this.enc_odom.set_odom(odom);
+
+        if(odom.heading == VslamOdometry.settings.initial_pos.heading){
+            this.req_first_estimation = true;
+        }
     }
 }
 
