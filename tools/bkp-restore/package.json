@@ -2,11 +2,19 @@
   "name": "bkp-restore",
   "version": "1.0.0",
   "main": "main.js",
+  "build": {
+    "appId": "com.picam360.bkp-restore",
+    "win": {
+      "target": "portable"
+    }
+  },
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder"
   },
   "devDependencies": {
-    "electron": "^36.3.2"
+    "electron": "^36.3.2",
+    "electron-builder": "^26.0.12"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
