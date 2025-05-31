@@ -225,6 +225,12 @@ function main() {
 					case "calib_odom":
 						m_odometry_conf[m_odometry_conf.odom_type].handler.calib_odom(info.dodom);
 						break;
+					case "calib_refpoints":
+						m_odometry_conf[m_odometry_conf.odom_type].handler.calib_refpoints(info.dodom);
+						break;
+					case "set_kfmode":
+						m_odometry_conf[m_odometry_conf.odom_type].handler.set_kfmode(info.kfmode);
+						break;
 					case "set_odom":
 						console.log("set_odom", info.odom);
 						m_odometry_conf[m_odometry_conf.odom_type].handler.set_odom(info.odom);
