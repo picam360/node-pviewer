@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Ubuntu 書き込みツール</title>
+</head>
+
+<body>
+
+    <!-- モード選択 -->
+    <h2>操作を選んでください</h2>
+    <button id="backupModeBtn">バックアップ</button>
+    <button id="restoreModeBtn">リストア</button>
+
+    <!-- バックアップ用セクション -->
+    <div id="backupSection" style="display:none; margin-top:20px;">
+        <h2>sync_list.txtを選択してください</h2>
+        <button id="selectSyncListBtn">sync_list.txtファイル選択</button>
+        <ul id="folderListBackup"></ul>
+    </div>
+
+    <!-- リストア用セクション -->
+    <div id="restoreSection" style="display:none; margin-top:20px;">
+        <h2>リストアしたいZIPを選択してください</h2>
+        <button id="selectZipBtn">ZIPファイル選択</button>
+        <ul id="folderListRestore"></ul>
+    </div>
+
+    <!-- ターゲットセクション -->
+    <div id="targetSection" style="display:none; margin-top:20px;">
+        <h2>対象のユーザ名:パスワード@IPアドレスを入力</h2>
+        <input type="text" id="ipInput" value="picam360:picam360@192.168.55.1" />
+        <button id="backupBtn" style="display: none;">バックアップ</button>
+        <button id="restoreBtn" style="display: none;">リストア</button>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+
+</html>
