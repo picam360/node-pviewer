@@ -609,10 +609,11 @@ class VslamOdometry {
 
             const keys = Object.keys(this.vslam_waypoints);
             const ref_timestamps = keys.slice(0, 5);
-            this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
             console.log("requestEstimation", ref_timestamps);
-
+    
+            this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
             this.last_pushVslam_cur = this.push_cur;
+            this.enc_positions[this.push_cur].keyframe = true;
 
             this.push_cur++;
             this.req_first_estimation = false;
@@ -638,6 +639,7 @@ class VslamOdometry {
             const dh = pos.heading;
             if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
                 req_estimation = true;
+                console.log("requestEstimation", `dr=${dr}, dh=${dh}`);
             }
         }
 
@@ -650,17 +652,16 @@ class VslamOdometry {
             let points = this.getKeysByHeading(this.vslam_waypoints, this.enc_positions[this.push_cur].heading, 30);
             const num = Object.keys(points).length;
             if(num == 0){
-                console.log("requestEstimation", `dr=${dr}, dh=${dh}`, "no reference");
+                console.log("requestEstimation", "no reference");
                 return;
             }else if(num > 5){
                 points = this.selectFarPoints(points, 5);
             }
             const ref_timestamps = Object.keys(points);
-            console.log("requestEstimation", `dr=${dr}, dh=${dh}`, ref_timestamps);
+            console.log("requestEstimation", ref_timestamps);
     
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
             this.last_pushVslam_cur = this.push_cur;
-
             this.enc_positions[this.push_cur].keyframe = true;
         }
 
@@ -754,6 +755,7 @@ class VslamOdometry {
 
         if(odom.heading == VslamOdometry.settings.initial_pos.heading){
             this.req_first_estimation = true;
+            this.req_manual_estimation = false;
         }
     }
 }
