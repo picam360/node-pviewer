@@ -418,7 +418,7 @@ class VslamOdometry {
     static settings = {//jetchariot
         vslam_path: '/home/picam360/github/picam360-vslam',
         vslam_option: '--disable_vis',
-        vslam_option: '',
+        //vslam_option: '',
         vslam_filename: 'map.data',
         cam_offset: {
             x: 0.0,
