@@ -741,7 +741,7 @@ class VslamOdometry {
         }
 
         if (req_estimation) {
-            let points = this.getKeysByHeading(this.vslam_waypoints, this.enc_positions[this.push_cur].heading, 30);
+            let points = this.getKeysByHeading(this.vslam_refpoints, this.enc_positions[this.push_cur].heading, 30);
             const num = Object.keys(points).length;
             if (num == 0) {
                 console.log("requestEstimation", "no reference");
