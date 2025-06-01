@@ -518,11 +518,11 @@ class VslamOdometry {
                 function apply_calib(points) {
                     const new_points = JSON.parse(JSON.stringify(points));
                     rotate_positions(new_points, VslamOdometry.settings.refpoints_calib.heading);
+                    scale_positions(new_points, VslamOdometry.settings.refpoints_calib.scale);
                     add_offset_from_positions(new_points, {
                         x: VslamOdometry.settings.refpoints_calib.x,
                         y: VslamOdometry.settings.refpoints_calib.y,
                     });
-                    scale_positions(new_points, VslamOdometry.settings.refpoints_calib.scale);
                     return new_points;
                 }
 
