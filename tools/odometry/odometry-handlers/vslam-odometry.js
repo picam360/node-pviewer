@@ -156,10 +156,10 @@ function aply_cam_offset(positions, cam_offset) {
         positions[key].y += offset.y;
     }
 }
-function formay_angle_180(angle) {
-    angle = (angle % 360);
+function format_angle_180(angle) {
+    angle = ((angle % 360) + 360) % 360; // 0〜359 に正規化
     if (angle > 180) {
-        angle -= 360;
+        angle -= 360; // -179.999...〜180 に変換
     }
     return angle;
 }
@@ -376,7 +376,7 @@ function applyTransformToPoint(point, transform) {
     const xNew = matrix[0][0] * x + matrix[0][1] * y + translation.tx;
     const yNew = matrix[1][0] * x + matrix[1][1] * y + translation.ty;
 
-    const newHeading = formay_angle_180(point.heading - angleDeg); // ←ここが減算！
+    const newHeading = format_angle_180(point.heading - angleDeg); // ←ここが減算！
 
     return {
         x: xNew,
@@ -434,7 +434,7 @@ class VslamOdometry {
         //for auto-drive
         dr_threashold_waypoint: 0.1,
         dh_threashold_waypoint: 10,
-        dr_threashold: 0.05,
+        dr_threashold: 0.1,
         dh_threashold: 10,
 
         //for map
@@ -592,13 +592,13 @@ class VslamOdometry {
 
                                 const update_gain = 0.3;
                                 const update_r_cutoff = 2.0;
-                                const update_h_cutoff = 2.0;
+                                const update_h_cutoff = 10.0;
 
                                 const enc_pos = this.enc_positions[odom_cur];
                                 const diff_x = kf_pos.x - enc_pos.x;
                                 const diff_y = kf_pos.y - enc_pos.y;
                                 const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
-                                const diff_h = formay_angle_180(kf_pos.heading - enc_pos.heading);
+                                const diff_h = format_angle_180(kf_pos.heading - enc_pos.heading);
                                 const diff_h_abs = Math.abs(diff_h);
                                 const update_gain_r = Math.min(diff_r, update_r_cutoff) / Math.max(diff_r, 1e-3) * update_gain;
                                 const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
@@ -763,7 +763,7 @@ class VslamOdometry {
     getKeysByHeading(waypoints, heading, criteria) {
         const points = {};
         for (const key of Object.keys(waypoints)) {
-            const diff_h = formay_angle_180(waypoints[key].heading - heading);
+            const diff_h = format_angle_180(waypoints[key].heading - heading);
             if (Math.abs(diff_h) < criteria) {
                 points[key] = waypoints[key];
             }
