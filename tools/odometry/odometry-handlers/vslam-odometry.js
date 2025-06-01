@@ -833,7 +833,7 @@ class VslamOdometry {
         VslamOdometry.settings.refpoints_calib.y += dodom.y || 0;
         VslamOdometry.settings.refpoints_calib.heading += dodom.heading || 0;
         VslamOdometry.settings.refpoints_calib.scale *= dodom.scale || 1.0;
-        console.log('"refpoints_calib"=', VslamOdometry.settings.refpoints_calib);
+        console.log('"refpoints_calib":', JSON.stringify(VslamOdometry.settings.refpoints_calib));
     }
 
     set_kfmode(mode) {
