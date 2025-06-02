@@ -434,7 +434,7 @@ class VslamOdometry {
         //for auto-drive
         dr_threashold_waypoint: 0.1,
         dh_threashold_waypoint: 10,
-        dr_threashold: 0.1,
+        dr_threashold: 0.05,
         dh_threashold: 10,
 
         //for map
@@ -705,7 +705,7 @@ class VslamOdometry {
             const ref_timestamps = keys.slice(0, 5);
             console.log("requestEstimation", ref_timestamps);
 
-            this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
+            this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
             this.last_pushVslam_cur = this.push_cur;
             this.enc_positions[this.push_cur].keyframe = true;
 
@@ -745,8 +745,8 @@ class VslamOdometry {
         if (req_estimation && !this.waiting_estimation) {
             let points = this.getKeysByHeading(this.vslam_refpoints, this.enc_positions[this.push_cur].heading, 30);
             const num = Object.keys(points).length;
-            if (num == 0) {
-                console.log("requestEstimation", "no reference");
+            if (num < 3) {
+                console.log("requestEstimation", "too few reference points");
                 return;
             } else if (num > 5) {
                 points = this.selectFarPoints(points, 5);
