@@ -468,6 +468,7 @@ class VslamOdometry {
         this.m_subscriber = null;
         this.req_first_estimation = (VslamOdometry.settings.kfmode == "auto");
         this.waiting_first_estimation = false;
+        this.waiting_estimation = false;
         this.req_manual_estimation = false;
         this.last_pushVslam_cur = 0;
         this.last_odom_cur = 0;
@@ -589,6 +590,7 @@ class VslamOdometry {
                                 this.enc_odom.encoder_params.y = kf_pos.y;
                                 this.enc_odom.encoder_params.heading = kf_pos.heading;
                             } else {
+                                this.waiting_estimation = false;
 
                                 const update_gain = 0.3;
                                 const update_r_cutoff = 2.0;
@@ -740,7 +742,7 @@ class VslamOdometry {
             req_estimation = true;
         }
 
-        if (req_estimation) {
+        if (req_estimation && !this.waiting_estimation) {
             let points = this.getKeysByHeading(this.vslam_refpoints, this.enc_positions[this.push_cur].heading, 30);
             const num = Object.keys(points).length;
             if (num == 0) {
@@ -755,6 +757,7 @@ class VslamOdometry {
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
             this.last_pushVslam_cur = this.push_cur;
             this.enc_positions[this.push_cur].keyframe = true;
+            this.waiting_estimation = true;
         }
 
         this.push_cur++;
