@@ -839,8 +839,11 @@ class VslamOdometry {
     set_kfmode(mode) {
         if (mode == "manual" && VslamOdometry.settings.kfmode == "manual") {
             this.req_manual_estimation = true;
+
+            console.log("manual estimation requested");
         }
         VslamOdometry.settings.kfmode = mode;
+        console.log("kfmode", mode);
     }
 
     set_odom(odom) {
