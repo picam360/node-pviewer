@@ -477,7 +477,7 @@ class VslamOdometry {
         this.waiting_first_estimation = false;
         this.waiting_estimation = false;
         this.req_manual_estimation = false;
-        this.last_pushVslam_cur = 0;
+        this.last_vslam_updated_cur = -1;
         this.last_odom_cur = 0;
         this.reconstruction_progress = 0;
 
@@ -619,6 +619,7 @@ class VslamOdometry {
                                 console.log("diff_y", diff_y, diff_y * update_gain_r);
                                 console.log("diff_h", diff_h, diff_h * update_gain_h);
                             }
+                            this.last_vslam_updated_cur = this.push_cur + 1;
                         }
                     }
                 });
@@ -713,7 +714,7 @@ class VslamOdometry {
             console.log("requestEstimation", ref_timestamps);
 
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
-            this.last_pushVslam_cur = this.push_cur;
+            this.last_vslam_updated_cur = -1;
             this.enc_positions[this.push_cur].keyframe = true;
 
             this.push_cur++;
@@ -729,11 +730,11 @@ class VslamOdometry {
         }
 
         let req_estimation = false;
-        if (this.enc_available && VslamOdometry.settings.kfmode == "auto") {
+        if (this.enc_available && VslamOdometry.settings.kfmode == "auto" && this.enc_positions[this.last_vslam_updated_cur]) {
             const pos = {
-                x: this.enc_positions[this.push_cur].x - this.enc_positions[this.last_pushVslam_cur].x,
-                y: this.enc_positions[this.push_cur].y - this.enc_positions[this.last_pushVslam_cur].y,
-                heading: this.enc_positions[this.push_cur].heading - this.enc_positions[this.last_pushVslam_cur].heading,
+                x: this.enc_positions[this.push_cur].x - this.enc_positions[this.last_vslam_updated_cur].x,
+                y: this.enc_positions[this.push_cur].y - this.enc_positions[this.last_vslam_updated_cur].y,
+                heading: this.enc_positions[this.push_cur].heading - this.enc_positions[this.last_vslam_updated_cur].heading,
             };
 
             const dr = Math.sqrt(pos.x * pos.x + pos.y * pos.y);
@@ -777,7 +778,7 @@ class VslamOdometry {
             console.log("requestEstimation", ref_timestamps);
 
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
-            this.last_pushVslam_cur = this.push_cur;
+            this.last_vslam_updated_cur = -1;
             this.enc_positions[this.push_cur].keyframe = true;
             this.waiting_estimation = true;
         }
