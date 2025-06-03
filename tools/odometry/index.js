@@ -206,9 +206,18 @@ function main() {
 				const backup = JSON.parse(json_str);
 				console.log("restore backup", backup);
 				if (backup) {
-					EncoderOdometry.settings.x_initial = backup.odom.x;
-					EncoderOdometry.settings.y_initial = backup.odom.y;
-					EncoderOdometry.settings.heading_initial = backup.odom.heading;
+					if(m_odometry_conf.odom_type == ODOMETRY_TYPE.ENCODER) {
+						EncoderOdometry.settings.x_initial = backup.odom.x;
+						EncoderOdometry.settings.y_initial = backup.odom.y;
+						EncoderOdometry.settings.heading_initial = backup.odom.heading;
+						console.log("restore EncoderOdometry", EncoderOdometry.settings);
+					}else if(m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM){
+						EncoderOdometry.settings.x_initial = backup.odom.x;
+						EncoderOdometry.settings.y_initial = backup.odom.y;
+						EncoderOdometry.settings.heading_initial = backup.odom.heading;
+						m_odometry_conf[m_odometry_conf.odom_type].handler.current_odom = {};//TODO
+						console.log("restore VslamOdometry", EncoderOdometry.settings);
+					}
 				}
 			}catch(err){
 				console.log(err);
