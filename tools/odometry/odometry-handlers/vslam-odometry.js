@@ -778,6 +778,7 @@ class VslamOdometry {
             // const ref_timestamps = Object.keys(points);
 
             const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_refpoints);
+            const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 2);
             if(center_key < 0){
                 console.log("requestEstimation", "refpoint not found");
                 return;
