@@ -453,6 +453,13 @@ class VslamOdometry {
             heading: 0,
             scale: 1,
         },
+        auto_area : {
+            sx : -0.5,
+            ex : 0.5,
+            sy : -0.5,
+            ey : 0.5,
+        },
+
     };
     constructor(options) {
         this.options = options || {};
@@ -734,6 +741,21 @@ class VslamOdometry {
             if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
                 req_estimation = true;
                 console.log("requestEstimation", `dr=${dr}, dh=${dh}`);
+            }
+
+            const encpos = {
+                x: this.enc_positions[this.push_cur].x,
+                y: this.enc_positions[this.push_cur].y,
+                heading: this.enc_positions[this.push_cur].heading,
+            };
+            if(req_estimation && VslamOdometry.settings.auto_area){
+                if(VslamOdometry.settings.auto_area.sx < encpos.x && encpos.x < VslamOdometry.settings.auto_area.ex && 
+                   VslamOdometry.settings.auto_area.sx < encpos.y && encpos.y < VslamOdometry.settings.auto_area.ey){
+                    //passthrough
+                }else{
+                    req_estimation = false;
+                    console.log("out of area", `x=${encpos.x}, y=${encpos.y}`);
+                }
             }
         }
 
