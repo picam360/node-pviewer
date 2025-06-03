@@ -445,7 +445,7 @@ class VslamOdometry {
 
         launch_vslam: true,
         calib_enabled: false,
-        kfmode: "manual",//"manual", "auto"
+        kfmode: "auto",//"manual", "auto"
 
         refpoints_calib: {
             x: 0,
@@ -778,11 +778,11 @@ class VslamOdometry {
             // const ref_timestamps = Object.keys(points);
 
             const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_refpoints);
-            const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 2);
             if(center_key < 0){
                 console.log("requestEstimation", "refpoint not found");
                 return;
             }
+            const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 2);
             console.log("requestEstimation", ref_timestamps);
 
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
