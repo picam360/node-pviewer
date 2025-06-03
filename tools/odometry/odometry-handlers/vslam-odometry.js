@@ -600,8 +600,10 @@ class VslamOdometry {
                                 this.waiting_estimation = false;
 
                                 const update_gain = 0.3;
-                                const update_r_cutoff = 2.0;
-                                const update_h_cutoff = 10.0;
+                                const update_r_cutoff = 0.1;
+                                const update_h_cutoff = 5.0;
+                                const update_r_limit = 0.2;
+                                const update_h_limit = 10.0;
 
                                 const enc_pos = this.enc_positions[odom_cur];
                                 const diff_x = kf_pos.x - enc_pos.x;
@@ -609,15 +611,19 @@ class VslamOdometry {
                                 const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
                                 const diff_h = format_angle_180(kf_pos.heading - enc_pos.heading);
                                 const diff_h_abs = Math.abs(diff_h);
-                                const update_gain_r = Math.min(diff_r, update_r_cutoff) / Math.max(diff_r, 1e-3) * update_gain;
-                                const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
-                                this.enc_odom.encoder_params.x += diff_x * update_gain_r;
-                                this.enc_odom.encoder_params.y += diff_y * update_gain_r;
-                                this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
-
-                                console.log("diff_x", diff_x, diff_x * update_gain_r);
-                                console.log("diff_y", diff_y, diff_y * update_gain_r);
-                                console.log("diff_h", diff_h, diff_h * update_gain_h);
+                                if(diff_r < update_r_limit && diff_h_abs < update_h_limit){
+                                    const update_gain_r = Math.min(diff_r, update_r_cutoff) / Math.max(diff_r, 1e-3) * update_gain;
+                                    const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
+                                    this.enc_odom.encoder_params.x += diff_x * update_gain_r;
+                                    this.enc_odom.encoder_params.y += diff_y * update_gain_r;
+                                    this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
+        
+                                    console.log("diff_x", diff_x, diff_x * update_gain_r);
+                                    console.log("diff_y", diff_y, diff_y * update_gain_r);
+                                    console.log("diff_h", diff_h, diff_h * update_gain_h);
+                                }else{
+                                    console.log("vslam update too match shift", diff_r, diff_h_abs);
+                                }
                             }
                             this.last_vslam_updated_cur = this.push_cur + 1;
                         }
