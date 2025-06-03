@@ -480,6 +480,7 @@ class VslamOdometry {
         this.last_vslam_updated_cur = -1;
         this.last_odom_cur = 0;
         this.reconstruction_progress = 0;
+        this.current_odom = null;
 
         this.enc_available = false;
         this.enc_odom = new EncoderOdometry();
@@ -553,7 +554,6 @@ class VslamOdometry {
                         this.update_reconstruction_progress(Math.min(this.reconstruction_progress + 1, 90));
                         if (params['type'] == 'load') {
                             this.initialized = true;
-                            this.current_odom = null;
 
                             const odom = params['odom'][params['odom'].length - 1];//last one
                             this.push_cur = Math.ceil(odom['timestamp'] / 10000) * 10000;
