@@ -658,7 +658,7 @@ class VslamOdometry {
     }
 
     is_ready() {
-        return (this.current_odom != null);
+        return (this.current_odom != null && this.initialized && this.push_cur > 1);
     }
 
     static cal_xy(waypoints) {
