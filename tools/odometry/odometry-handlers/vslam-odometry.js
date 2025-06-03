@@ -454,10 +454,10 @@ class VslamOdometry {
             scale: 1,
         },
         auto_area : {
-            sx : -0.5,
-            ex : 0.5,
-            sy : -0.5,
-            ey : 0.5,
+            sx : -1.0,
+            ex : 1.0,
+            sy : -1.0,
+            ey : 1.0,
         },
 
     };
@@ -777,9 +777,11 @@ class VslamOdometry {
             // }
             // const ref_timestamps = Object.keys(points);
 
-            const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
-            const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
-
+            const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_refpoints);
+            if(center_key < 0){
+                console.log("requestEstimation", "refpoint not found");
+                return;
+            }
             console.log("requestEstimation", ref_timestamps);
 
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
@@ -851,22 +853,22 @@ class VslamOdometry {
         return result;
     }
 
-    findClosestWaypoint(point, waypoints, dheading_limit = 30) {
-        let closestKey = null;
+    findClosestWaypoint(point, waypoints, drlimit = 0.2, dheading_limit = 30) {
+        let closestKey = -1;
         let minDistance = Infinity;
         const calculateDistance = (p1, p2) => {
             const dx = p1.x - p2.x;
             const dy = p1.y - p2.y;
             const dheading = format_angle_180(p1.heading - p2.heading);
-            if(abs(dheading) > dheading_limit){
+            if(Math.abs(dheading) > dheading_limit){
                 return 9999;
             }
             return Math.sqrt(dx * dx + dy * dy);
         };
         for (const [key, waypoint] of Object.entries(waypoints)) {
-            const distance = calculateDistance(point, waypoint);
-            if (distance < minDistance) {
-                minDistance = distance;
+            const dr = calculateDistance(point, waypoint);
+            if (dr < drlimit && dr < minDistance) {
+                minDistance = dr;
                 closestKey = key;
             }
         }
