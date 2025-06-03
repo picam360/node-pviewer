@@ -766,15 +766,20 @@ class VslamOdometry {
         }
 
         if (req_estimation && !this.waiting_estimation) {
-            let points = this.getKeysByHeading(this.vslam_refpoints, this.enc_positions[this.push_cur].heading, 30);
-            const num = Object.keys(points).length;
-            if (num < 3) {
-                console.log("requestEstimation", "too few reference points");
-                return;
-            } else if (num > 5) {
-                points = this.selectFarPoints(points, 5);
-            }
-            const ref_timestamps = Object.keys(points);
+
+            // let points = this.getKeysByHeading(this.vslam_refpoints, this.enc_positions[this.push_cur].heading, 30);
+            // const num = Object.keys(points).length;
+            // if (num < 3) {
+            //     console.log("requestEstimation", "too few reference points");
+            //     return;
+            // } else if (num > 5) {
+            //     points = this.selectFarPoints(points, 5);
+            // }
+            // const ref_timestamps = Object.keys(points);
+
+            const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
+            const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
+
             console.log("requestEstimation", ref_timestamps);
 
             this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 4);
@@ -844,6 +849,50 @@ class VslamOdometry {
         }
 
         return result;
+    }
+
+    findClosestWaypoint(point, waypoints, dheading_limit = 30) {
+        let closestKey = null;
+        let minDistance = Infinity;
+        const calculateDistance = (p1, p2) => {
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            const dheading = format_angle_180(p1.heading - p2.heading);
+            if(abs(dheading) > dheading_limit){
+                return 9999;
+            }
+            return Math.sqrt(dx * dx + dy * dy);
+        };
+        for (const [key, waypoint] of Object.entries(waypoints)) {
+            const distance = calculateDistance(point, waypoint);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestKey = key;
+            }
+        }
+    
+        return closestKey;
+    }
+    
+    getSurroundingKeys(keys, centerKey, range = 5) {
+        const centerIndex = keys.indexOf(centerKey);
+    
+        if (centerIndex === -1) {
+            throw new Error("Center key not found in keys array.");
+        }
+    
+        const totalKeys = keys.length;
+        const startIndex = Math.max(0, centerIndex - range); // 前方の開始インデックス
+        const endIndex = Math.min(totalKeys, centerIndex + range + 1); // 後方の終了インデックス（+1はslice用）
+    
+        // 前後の範囲を考慮して不足分を調整
+        const preKeys = centerIndex - startIndex; // 前方に取れたキー数
+        const postKeys = endIndex - centerIndex - 1; // 後方に取れたキー数
+    
+        const adjustStartIndex = Math.max(0, startIndex - (range - postKeys)); // 後方不足分を前方に補う
+        const adjustEndIndex = Math.min(totalKeys, endIndex + (range - preKeys)); // 前方不足分を後方に補う
+    
+        return keys.slice(adjustStartIndex, adjustEndIndex);
     }
 
     getPosition() {
