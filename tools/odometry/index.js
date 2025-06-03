@@ -216,6 +216,7 @@ function main() {
 						EncoderOdometry.settings.y_initial = backup.odom.y;
 						EncoderOdometry.settings.heading_initial = backup.odom.heading;
 						m_odometry_conf[m_odometry_conf.odom_type].handler.current_odom = {};//TODO
+						m_odometry_conf[m_odometry_conf.odom_type].handler.last_vslam_updated_cur = 10000;
 						console.log("restore VslamOdometry", EncoderOdometry.settings);
 					}
 				}
