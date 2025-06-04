@@ -50,10 +50,11 @@ function getYawFromRotationMatrix(matrix) {
 }
 
 function launchDockerContainer() {
+    const fov_option = `--fov ${VslamOdometry.settings.vslam_fov}`;
     const command = `
         source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
         conda activate droidslam && \
-        python ${VslamOdometry.settings.vslam_path}/vslam.py ${VslamOdometry.settings.vslam_option}
+        python ${VslamOdometry.settings.vslam_path}/vslam.py ${fov_option} ${VslamOdometry.settings.vslam_option}
     `;
     const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(VslamOdometry.settings.vslam_path) });
     vslam_process.stdout.on('data', (data) => {
@@ -416,6 +417,7 @@ class VslamOdometry {
     //     calib_enabled : false,
     // };
     static settings = {//jetchariot
+        vslam_fov: 120,
         vslam_path: '/home/picam360/github/picam360-vslam',
         vslam_option: '--disable_vis',
         //vslam_option: '',
