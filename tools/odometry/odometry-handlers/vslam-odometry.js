@@ -475,7 +475,7 @@ class VslamOdometry {
         this.push_cur = 0;
         this.m_client = null;
         this.m_subscriber = null;
-        this.req_first_estimation = (VslamOdometry.settings.kfmode == "auto");
+        this.req_first_estimation = false;
         this.waiting_first_estimation = false;
         this.waiting_estimation = false;
         this.req_manual_estimation = false;
