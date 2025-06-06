@@ -4,7 +4,7 @@
 Description = @SERVICE_NAME@ daemon
 
 [Service]
-ExecStart = /usr/bin/@SERVICE_NAME@
+ExecStart = /usr/bin/@SERVICE_NAME@ -c @CONFIG_PATH@
 WorkingDirectory=@SCRIPT_DIR@
 
 Restart = always
