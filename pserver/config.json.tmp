@@ -31,6 +31,7 @@
             "streams/vslam.json",
             "streams/take-picture-ptpvf.json",
             "streams/adb-screenrecord.json",
+            "streams/mq-screenrecord.json",
             "streams/pvf-loader.json",
             "streams/ffmpeg-h264.json",
             "streams/ffmpeg-h265.json",
