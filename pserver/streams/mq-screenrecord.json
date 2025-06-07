@@ -1,7 +1,7 @@
 {
     "base" : "adb-screenrecord",
     "params" : {
-        "capture.meta" : "<meta maptype=\"FISH\" sbs=\"1\" deg_offset=\"0,-20,0\" lens_params=\"data:application/json;base64,eyJrIjpbMC4yLDAuMCwwLjAsMC4wXSwiZiI6WzAuMzUsMC4zNV0sImMiOlswLjUsMC41XX0=\" />",
+        "capture.meta" : "<meta maptype=\"FISH\" sbs=\"1\" deg_offset=\"0,-20,0\" lens_params=\"data:application/json;base64,eyJrIjpbMC4yLDAuMCwwLjAsMC4wXSwiZiI6WzAuNSwwLjVdLCJjIjpbMC41LDAuNV19\" />",
     },
     "replacements" : {
         "@APP.ADB_BITRATE_BPS@" : "2000000",
