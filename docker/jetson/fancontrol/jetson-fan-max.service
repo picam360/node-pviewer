@@ -1,0 +1,11 @@
+[Unit]
+Description=Set Jetson fan to max using jetson_clocks
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/jetson_clocks --fan
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
