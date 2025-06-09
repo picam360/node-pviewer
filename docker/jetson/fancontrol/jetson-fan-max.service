@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/sbin/jetson_clocks --fan
+ExecStart=/usr/bin/jetson_clocks --fan
 RemainAfterExit=true
 
 [Install]
