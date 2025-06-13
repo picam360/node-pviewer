@@ -483,6 +483,11 @@ class VslamOdometry {
         this.last_odom_cur = 0;
         this.reconstruction_progress = 0;
         this.current_odom = null;
+        this.vslam_update_dodom = {
+            x: 0,
+            y: 0,
+            heading: 0,
+        };
 
         this.enc_available = false;
         this.enc_odom = new EncoderOdometry();
@@ -616,9 +621,9 @@ class VslamOdometry {
                                 if(diff_r < update_r_limit && diff_h_abs < update_h_limit){
                                     const update_gain_r = Math.min(diff_r, update_r_cutoff) / Math.max(diff_r, 1e-3) * update_gain;
                                     const update_gain_h = Math.min(diff_h_abs, update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * update_gain;
-                                    this.enc_odom.encoder_params.x += diff_x * update_gain_r;
-                                    this.enc_odom.encoder_params.y += diff_y * update_gain_r;
-                                    this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
+                                    this.vslam_update_dodom.x += diff_x * update_gain_r;
+                                    this.vslam_update_dodom.y += diff_y * update_gain_r;
+                                    this.vslam_update_dodom.heading += diff_h * update_gain_h;
         
                                     console.log("diff_x", diff_x, diff_x * update_gain_r);
                                     console.log("diff_y", diff_y, diff_y * update_gain_r);
@@ -704,6 +709,59 @@ class VslamOdometry {
         }
         this.enc_odom.push(header, meta, jpeg_data);
         this.enc_positions[this.push_cur] = this.enc_odom.getPosition();
+
+        if(this.enc_positions[this.push_cur - 1]){//vslam_update_dodom
+            const degree_per_meter = 90;
+            const dx = this.enc_positions[this.push_cur].x - this.enc_positions[this.push_cur - 1].x;
+            const dy = this.enc_positions[this.push_cur].y - this.enc_positions[this.push_cur - 1].y;
+            const dheading = this.enc_positions[this.push_cur].heading - this.enc_positions[this.push_cur - 1].heading;
+            const dr = Math.sqrt(dx**2 + dy**2);
+            const dhr = Math.abs(dheading) / degree_per_meter;
+            const dxy_update = Math.max(dr, dhr)/2;
+
+            if(this.vslam_update_dodom.x != 0){
+                if(Math.abs(this.vslam_update_dodom.x) < dxy_update){
+                    this.enc_odom.encoder_params.x += this.vslam_update_dodom.x;
+                    this.vslam_update_dodom.x = 0;
+                    console.log("complete x", this.vslam_update_dodom);
+                }else if(this.vslam_update_dodom.x > 0){
+                    this.enc_odom.encoder_params.x += dxy_update;
+                    this.vslam_update_dodom.x -= dxy_update;
+                }else if(this.vslam_update_dodom.x < 0){
+                    this.enc_odom.encoder_params.x += -dxy_update;
+                    this.vslam_update_dodom.x -= -dxy_update;
+                }
+            }
+
+            if(this.vslam_update_dodom.y != 0){
+                if(Math.abs(this.vslam_update_dodom.y) < dxy_update){
+                    this.enc_odom.encoder_params.y += this.vslam_update_dodom.y;
+                    this.vslam_update_dodom.y = 0;
+                    console.log("complete y", this.vslam_update_dodom);
+                }else if(this.vslam_update_dodom.y > 0){
+                    this.enc_odom.encoder_params.y += dxy_update;
+                    this.vslam_update_dodom.y -= dxy_update;
+                }else if(this.vslam_update_dodom.y < 0){
+                    this.enc_odom.encoder_params.y += -dxy_update;
+                    this.vslam_update_dodom.y -= -dxy_update;
+                }
+            }
+
+            if(this.vslam_update_dodom.heading != 0){
+                const dheading_update = dxy_update * degree_per_meter;
+                if(Math.abs(this.vslam_update_dodom.heading) < dheading_update){
+                    this.enc_odom.encoder_params.heading += this.vslam_update_dodom.heading;
+                    this.vslam_update_dodom.heading = 0;
+                    console.log("complete h", this.vslam_update_dodom);
+                }else if(this.vslam_update_dodom.heading > 0){
+                    this.enc_odom.encoder_params.heading += dheading_update;
+                    this.vslam_update_dodom.heading -= dheading_update;
+                }else if(this.vslam_update_dodom.heading < 0){
+                    this.enc_odom.encoder_params.heading += -dheading_update;
+                    this.vslam_update_dodom.heading -= -dheading_update;
+                }
+            }
+        }
 
         if (!this.enc_available) {
             const frame_dom = xml_parser.parse(meta);
