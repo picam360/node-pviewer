@@ -31,8 +31,13 @@ class EncoderOdometry {
     // };
     static settings = {//jetchariot
         right_gain: 1.0,
-        meter_per_pulse: 0.00004,
-        wheel_separation: 0.208,
+
+        meter_per_pulse: 0.00004032,
+        wheel_separation: 0.211765,
+
+        // meter_per_pulse: 0.00004,
+        // wheel_separation: 0.208,
+
         imu_heading_error: 0,
         left_direction: -1,
         right_direction: 1,
