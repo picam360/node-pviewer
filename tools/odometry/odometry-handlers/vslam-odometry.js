@@ -714,13 +714,14 @@ class VslamOdometry {
         this.enc_positions[this.push_cur] = this.enc_odom.getPosition();
 
         if(this.enc_positions[this.push_cur - 1]){//vslam_update_dodom
+            const update_gain = 0.3;
             const degree_per_meter = 90;
             const dx = this.enc_positions[this.push_cur].x - this.enc_positions[this.push_cur - 1].x;
             const dy = this.enc_positions[this.push_cur].y - this.enc_positions[this.push_cur - 1].y;
             const dheading = this.enc_positions[this.push_cur].heading - this.enc_positions[this.push_cur - 1].heading;
             const dr = Math.sqrt(dx**2 + dy**2);
             const dhr = Math.abs(dheading) / degree_per_meter;
-            const dxy_update = Math.max(dr, dhr)/2;
+            const dxy_update = Math.max(dr, dhr) * update_gain;
 
             if(this.vslam_update_dodom.x != 0){
                 if(Math.abs(this.vslam_update_dodom.x) < dxy_update){
