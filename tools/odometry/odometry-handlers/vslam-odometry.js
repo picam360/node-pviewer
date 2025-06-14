@@ -588,7 +588,10 @@ class VslamOdometry {
                     } else {
                         const odom = params['odom'][params['odom'].length - 1];//last one
                         const odom_cur = odom['timestamp'];
-                        if (odom_cur > this.last_odom_cur) {
+                        const confidence = params['confidence'][odom_cur];
+                        if(confidence !== undefined && confidence < 0.01){
+                            console.log("too low confidence", confidence, params['confidence']);
+                        }else if (odom_cur > this.last_odom_cur) {
                             this.current_odom = odom;
                             this.last_odom_cur = odom_cur;
 
