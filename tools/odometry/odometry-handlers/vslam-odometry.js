@@ -614,10 +614,10 @@ class VslamOdometry {
                             } else {
 
                                 const update_gain = 0.3;
-                                const update_r_cutoff = 0.1;
-                                const update_h_cutoff = 10.0;
-                                const update_r_limit = 0.5;
-                                const update_h_limit = 30.0;
+                                const update_r_cutoff = 0.5;
+                                const update_h_cutoff = 30.0;
+                                const update_r_limit = 0.75;
+                                const update_h_limit = 45.0;
 
                                 const enc_pos = this.enc_positions[odom_cur];
                                 const diff_x = kf_pos.x - enc_pos.x;
