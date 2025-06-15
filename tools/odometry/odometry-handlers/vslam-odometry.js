@@ -587,6 +587,7 @@ class VslamOdometry {
                         }
                     } else {
                         this.waiting_estimation = false;
+                        this.last_vslam_updated_cur = this.push_cur + 1;
 
                         const odom = params['odom'][params['odom'].length - 1];//last one
                         const odom_cur = odom['timestamp'];
@@ -638,7 +639,6 @@ class VslamOdometry {
                                     console.log("vslam update too match shift", diff_r, diff_h_abs);
                                 }
                             }
-                            this.last_vslam_updated_cur = this.push_cur + 1;
                         }
                     }
                 });
