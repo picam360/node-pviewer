@@ -586,6 +586,8 @@ class VslamOdometry {
                             this.update_reconstruction_progress(100);
                         }
                     } else {
+                        this.waiting_estimation = false;
+
                         const odom = params['odom'][params['odom'].length - 1];//last one
                         const odom_cur = odom['timestamp'];
                         const confidence = params['confidence'][odom_cur];
@@ -609,7 +611,6 @@ class VslamOdometry {
                                 this.enc_odom.encoder_params.y = kf_pos.y;
                                 this.enc_odom.encoder_params.heading = kf_pos.heading;
                             } else {
-                                this.waiting_estimation = false;
 
                                 const update_gain = 0.3;
                                 const update_r_cutoff = 0.1;
@@ -792,6 +793,7 @@ class VslamOdometry {
             this.push_cur++;
             this.req_first_estimation = false;
             this.waiting_first_estimation = true;
+            this.waiting_estimation = true;
             return;
 
         } else if (this.current_odom == null) {
