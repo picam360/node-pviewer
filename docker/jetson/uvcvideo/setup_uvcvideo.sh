@@ -21,8 +21,8 @@ zcat /proc/config.gz > .config
 cd drivers/media/usb/uvc
 bash $SCRIPT_DIR/insert_code.sh
 make -C /lib/modules/$(uname -r)/build M=$(pwd) modules
-sudo mv /usr/lib/modules/5.10.216-tegra/kernel/drivers/media/usb/uvc/uvcvideo.ko /usr/lib/modules/5.10.216-tegra/kernel/drivers/media/usb/uvc/uvcvideo.ko.bk
-sudo cp uvcvideo.ko /usr/lib/modules/5.10.216-tegra/kernel/drivers/media/usb/uvc/uvcvideo.ko
+sudo mv /usr/lib/modules/$(uname -r)/kernel/drivers/media/usb/uvc/uvcvideo.ko /usr/lib/modules/$(uname -r)/kernel/drivers/media/usb/uvc/uvcvideo.ko.bk
+sudo cp uvcvideo.ko /usr/lib/modules/$(uname -r)/kernel/drivers/media/usb/uvc/uvcvideo.ko
 sudo cp $SCRIPT_DIR/../etc/modeprobe.d/uvcvideo.conf /etc/modeprobe.d/uvcvideo.conf
 
 cd $SCRIPT_DIR
