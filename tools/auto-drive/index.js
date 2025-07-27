@@ -177,18 +177,20 @@ function record_waypoints_handler(tmp_img){
 		timestamp = `${ary[0]}.${ary[1].padStart(6, '0')}`;
 	}
 	const pif_filepath = `${m_record_pif_dirpath}/${timestamp}.pif`;
-	fs.writeFile(pif_filepath, data, (err) => {
-		if (err) {
-			console.error('pif file dump faild', err);
-		}
-	});
+	try {
+		fs.writeFileSync(pif_filepath, data);
+	} catch (err) {
+		console.error('pif file dump failed', err);
+		return;
+	}
 	const jpeg_data = tmp_img[2];
 	const jpeg_filepath = pif_filepath + ".0.0.JPEG";
-	fs.writeFile(jpeg_filepath, jpeg_data, (err) => {
-		if (err) {
-			console.error('jpeg file dump faild', err);
-		}
-	});
+	try {
+		fs.writeFileSync(jpeg_filepath, jpeg_data);
+	} catch (err) {
+		console.error('jpeg file dump faild', err);
+		return;
+	}
 
 	if(m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM && m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler){
 		m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.push(header, meta, jpeg_data);
@@ -216,20 +218,21 @@ function move_robot(distance) {
 
 function move_pwm_robot(distance, angle) {
 
+	let ts = Date.now();
 	if(distance < 0){
 		const left_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const right_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const left_pwd = m_options.forward_pwm_base - Math.round(left_minus);
 		const right_pwd = m_options.forward_pwm_base - Math.round(right_minus);
 		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
-		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd} ${right_pwd}`);
+		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd} ${right_pwd} ${ts}`);
 	}else{
 		const left_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const right_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const left_pwd = m_options.backward_pwm_base - Math.round(left_minus);
 		const right_pwd = m_options.backward_pwm_base - Math.round(right_minus);
 		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
-		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd} ${right_pwd}`);
+		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd} ${right_pwd} ${ts}`);
 	}
 }
 
@@ -574,6 +577,7 @@ function command_handler(cmd) {
 	let split = cmd.split(' ');
 	switch(split[0]){
 		case "START_RECORD":
+			stop_robot();
 			if(m_drive_mode == "STANBY") {
 				const extend_mode = (split[1] == "EXTEND");
 
@@ -639,8 +643,10 @@ function command_handler(cmd) {
 							},
 						});
 						m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.init(waypoints, () => {
-							m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.deinit();
-							m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler = null;
+							if(m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler){
+								m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.deinit();
+								m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler = null;
+							}
 						});
 					});
 				}
@@ -648,6 +654,7 @@ function command_handler(cmd) {
 			console.log("drive mode", m_drive_mode);
 			break;
 		case "STOP_RECORD":{
+			stop_robot();
 			m_drive_mode = "STANBY";
 			execSync('sync');
 			const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
