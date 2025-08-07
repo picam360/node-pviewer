@@ -558,16 +558,29 @@ function main() {
 			}
 		});
 		setInterval(() => {
+
+			const sysinfo = {};
+			try {
+				const path = '/sys/class/thermal/thermal_zone0/temp';
+				const raw = fs.readFileSync(path, 'utf8');
+				const tempC = parseInt(raw.trim()) / 1000;
+				sysinfo.temp = tempC;
+			} catch (err) {
+				console.error('Error reading temperature:', err);
+			}
+
 			const elapsed = Date.now() - last_ts;
 			if(elapsed > 1000){
 				m_client.publish('pserver-auto-drive-info', JSON.stringify({
 					"mode" : m_drive_mode,
 					"state" : "WAITING_PST",
+					"sysinfo" : sysinfo,
 				}));
 			}else{
 				m_client.publish('pserver-auto-drive-info', JSON.stringify({
 					"mode" : m_drive_mode,
 					"state" : "RECEIVING_PST",
+					"sysinfo" : sysinfo,
 				}));
 			}
 		}, 1000);
