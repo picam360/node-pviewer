@@ -20,7 +20,7 @@ const { VslamOdometry } = require('./odometry-handlers/vslam-odometry');
 
 let m_options = {
 	"waypoint_threshold_m" : 10,
-	"data_filepath" : "auto-drive-waypoints",
+	"data_filepath" : "/home/picam360/.auto-drive/auto-drive-waypoints",
 	"reverse" : false,
 	//"tolerance_distance" : 2.0,
 	"tolerance_distance" : 0.2,
