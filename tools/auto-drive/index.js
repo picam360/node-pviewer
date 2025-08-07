@@ -219,19 +219,19 @@ function move_robot(distance) {
 function move_pwm_robot(distance, angle) {
 
 	let ts = Date.now();
-	if(distance < 0){
+	if(distance > 0){
 		const left_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const right_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const left_pwd = m_options.forward_pwm_base - Math.round(left_minus);
 		const right_pwd = m_options.forward_pwm_base - Math.round(right_minus);
-		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
+		console.log("move_forward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd} ${right_pwd} ${ts}`);
 	}else{
 		const left_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const right_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const left_pwd = m_options.backward_pwm_base - Math.round(left_minus);
 		const right_pwd = m_options.backward_pwm_base - Math.round(right_minus);
-		console.log("move_pwm_robot", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
+		console.log("move_backward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd} ${right_pwd} ${ts}`);
 	}
 }
@@ -317,12 +317,13 @@ function auto_drive_handler(tmp_img){
 		for(const key of conf_keys){
 			const conf = m_odometry_conf[key];
 			if(conf.handler && conf.handler.is_ready()){
-				const { x, y, heading} = conf.handler.getPosition();
+				const { x, y, heading, confidence} = conf.handler.getPosition();
 				conf.x = x;
 				conf.y = y;
 				conf.heading = heading;
+				conf.confidence = confidence;
 
-				let distanceToTarget = conf.handler.calculateDistance(cur);
+				let [distanceToTarget, shiftToTarget] = conf.handler.calculateDistance(cur);
 				let headingError = conf.handler.calculateHeadingError(cur);
 
 				if(Math.abs(headingError) > 90){//backward
@@ -337,6 +338,7 @@ function auto_drive_handler(tmp_img){
 				}
 
 				conf.distanceToTarget = distanceToTarget;
+				conf.shiftToTarget = shiftToTarget;
 				conf.headingError = headingError;
 			}
 		}
@@ -388,7 +390,9 @@ function auto_drive_handler(tmp_img){
 					"x" : conf.x,
 					"y" : conf.y,
 					"heading" : conf.heading,
+					"confidence" : conf.confidence,
 					"waypoint_distance" : conf.distanceToTarget,
+					"waypoint_shift" : conf.shiftToTarget,
 					"heading_error" : conf.headingError,
 				}
 			}

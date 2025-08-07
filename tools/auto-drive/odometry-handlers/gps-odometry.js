@@ -149,12 +149,12 @@ class GpsOdometry {
         const key = this.waypoints_keys[cur];
         const target_waypoint = this.waypoints[key];
         if(!target_waypoint['nmea']){
-            return 999;
+            return [999, 999];
         }
 		const target_nmea = nmea.parseNmeaSentence(target_waypoint['nmea']);
-        return calculateDistance(
+        return [calculateDistance(
             target_nmea.latitude, target_nmea.longitude,
-            this.current_nmea.latitude, this.current_nmea.longitude);
+            this.current_nmea.latitude, this.current_nmea.longitude), 0];
     }
     calculateBearing(cur){
         const key = this.waypoints_keys[cur];

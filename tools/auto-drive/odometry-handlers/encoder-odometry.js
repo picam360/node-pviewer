@@ -357,59 +357,30 @@ class EncoderOdometry {
     }
 
     calculateDistance(cur){
-        function getProjectionDistances(p0, p1, p_1, p) {
-            const dx = p1.x - p_1.x;
-            const dy = p1.y - p_1.y;
-        
-            const vx = p.x - p0.x;
-            const vy = p.y - p0.y;
-        
-            const dot = vx * dx + vy * dy;
-            const len_sq = dx * dx + dy * dy;
-        
-            const proj_len = dot / Math.sqrt(len_sq);
-            //console.log("getProjectionDistances", dx, dy, vx, vy, proj_len);
-            return proj_len;
+        function getVerticalAndHorizontalDistance(X, Y, headingDeg, Px, Py) {
+            const theta = (90 - headingDeg) * Math.PI / 180;
+            
+            const dx = Px - X;
+            const dy = Py - Y;
+            
+            const forwardX = Math.cos(theta);
+            const forwardY = Math.sin(theta);
+          
+            const rightX = Math.cos(theta + Math.PI / 2);
+            const rightY = Math.sin(theta + Math.PI / 2);
+            const forwardDist = dx * forwardX + dy * forwardY;
+            const rightDist = dx * rightX + dy * rightY;
+          
+            return [forwardDist, rightDist];
         }
-        const key0 = this.waypoints_keys[cur];
-        const pos0 = this.enc_waypoints[key0];
-        let pos1 = pos0;
-        for(let k=cur+1;k < this.waypoints_keys.length;k++){
-            const key = this.waypoints_keys[k];
-            const pos = this.enc_waypoints[key];
-            if(pos.x != pos0.x || pos.y != pos0.y){
-                pos1 = pos;
-                break;
-            }
-        }
-        let pos_1 = pos0;
-        for(let k=cur-1;k >= 0;k--){
-            const key = this.waypoints_keys[k];
-            const pos = this.enc_waypoints[key];
-            if(pos.x != pos0.x || pos.y != pos0.y){
-                pos_1 = pos;
-                break;
-            }
-        }
-        return getProjectionDistances(pos0, pos1, pos_1, this.encoder_params);
-
-        //absolute
-        // const dx = target_position0.x - this.encoder_params.x;
-        // const dy = target_position0.y - this.encoder_params.y;
-        // return Math.sqrt(dx * dx + dy * dy);
-    }
-    calculateBearing(cur){
         const key = this.waypoints_keys[cur];
-        const target_position = this.enc_waypoints[key];
-        const dx = target_position.x - this.encoder_params.x;
-        const dy = target_position.y - this.encoder_params.y;
-        const θ = Math.atan2(dy, dx);
-        const bearing = (Math.PI / 2 - θ)
-        return (radiansToDegrees(bearing) + 360) % 360; // Bearing in degrees
+        const pos = this.enc_waypoints[key];
+        return getVerticalAndHorizontalDistance(this.encoder_params.x, this.encoder_params.y, this.encoder_params.heading, pos.x, pos.y);
     }
     calculateHeadingError(cur){
-        const targetHeading = this.calculateBearing(cur);
-		let headingError = targetHeading - this.encoder_params.heading;
+        const key = this.waypoints_keys[cur];
+        const target_position = this.enc_waypoints[key];
+		let headingError = target_position.heading - this.encoder_params.heading;
 		if(headingError <= -180){
 			headingError += 360;
 		}else if(headingError > 180){
