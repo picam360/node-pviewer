@@ -19,7 +19,7 @@ function radiansToDegrees(radians) {
 }
 
 class EncoderOdometry {
-    // static settings = {
+    // static settings = {//juki
     //     right_gain: 1.0,
     //     meter_per_pulse: 0.00902127575039515,
     //     wheel_separation: 3.093597564134178,
@@ -28,16 +28,6 @@ class EncoderOdometry {
     //     right_direction: 1,
 
     //     lock_gps_heading : true,
-    // };
-    //static settings = {
-    //     right_gain: 1.0148108360301102,
-    //     meter_per_pulse: 0.000051365457364540345,
-    //     wheel_separation: 0.3254187353986605,
-    //     imu_heading_error: 0,
-    //     left_direction: 1,
-    //     right_direction: 1,
-    //
-    //    lock_gps_heading : true,
     // };
     static settings = {//jetchariot
         right_gain: 1.0,

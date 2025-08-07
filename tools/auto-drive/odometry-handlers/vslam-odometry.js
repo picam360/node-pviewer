@@ -311,7 +311,7 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
 }
 
 class VslamOdometry {
-    // static settings = {
+    // static settings = {//juki
     //     vslam_path : '/home/picam360/github/picam360-vslam',
     //     vslam_option : '--disable_vis',
     //     vslam_filename : 'waypoints.data',
