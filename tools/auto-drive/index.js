@@ -23,7 +23,7 @@ let m_options = {
 	"data_filepath" : "/home/picam360/.auto-drive/auto-drive-waypoints",
 	"reverse" : false,
 	//"tolerance_distance" : 2.0,
-	"tolerance_distance" : 0.2,
+	"tolerance_distance" : 0.1,
 
 	// "forward_pwm_base" : 50,
 	// "backward_pwm_base" : 46,
@@ -344,12 +344,13 @@ function auto_drive_handler(tmp_img){
 		}
 
 		let distanceToTarget = m_odometry_conf[m_odometry_conf.odom_type].distanceToTarget;
+		let shiftToTarget = m_odometry_conf[m_odometry_conf.odom_type].shiftToTarget;
 		let headingError = m_odometry_conf[m_odometry_conf.odom_type].headingError;
 
 		let tolerance_distance = m_options.tolerance_distance;
 		let tolerance_heading = (m_auto_drive_heading_tuning ? 999 : 999);
 		if(cur == keys.length - 1){
-			tolerance_distance = m_options.tolerance_distance / 4;
+			tolerance_distance = m_options.tolerance_distance / 10;
 			// switch(m_auto_drive_last_state){
 			// case 0:
 			// 	tolerance_heading = 1.0;
@@ -378,7 +379,8 @@ function auto_drive_handler(tmp_img){
 				rotate_robot(headingError);
 				m_auto_drive_heading_tuning = true;
 			} else {
-				move_pwm_robot(distanceToTarget, headingError);
+				let tune = (distanceToTarget > 0 ? -1 : 1) * shiftToTarget*100;
+				move_pwm_robot(distanceToTarget, headingError + tune);
 				//move_robot(distanceToTarget);
 				m_auto_drive_heading_tuning = false;
 			}
