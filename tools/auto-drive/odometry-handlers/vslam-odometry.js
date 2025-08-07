@@ -347,6 +347,7 @@ class VslamOdometry {
         dh_threashold_waypoint : 10,
         dr_threashold : 0.05,
         dh_threashold : 10,
+        confidence_penalty_gain : 5,//percentage per meter
 
         //for map
         // dr_threashold_waypoint : 0.2,
@@ -376,10 +377,11 @@ class VslamOdometry {
         this.backend_pending = 0;
         this.m_client = null;
         this.m_subscriber = null;
-        this.first_push = true;
+        this.waiting_estimation = false;
         this.last_pushVslam_cur = 0;
         this.last_odom_cur = 0;
         this.reconstruction_progress = 0;
+        this.confidence = 0;//[0-100], The probability that the current distance error is within the acceptable range
 
         this.enc_available = false;
         this.enc_odom = new EncoderOdometry();
@@ -498,8 +500,18 @@ class VslamOdometry {
                             this.update_reconstruction_progress(100);
                         }
                     }else{
+
+                        const cal_confidence = function(v){
+                            const maxv = 0.20;
+                            const minv = 0.01;
+                            return Math.max(0, Math.min((v - minv)/(maxv - minv)*100), 100);
+                        }
+
+                        this.waiting_estimation = false;
+
                         const odom = params['odom'][params['odom'].length - 1];//last one
                         const odom_cur = odom['timestamp'];
+                        const confidence = cal_confidence(params['confidence'][odom_cur]);
                         if(odom_cur > this.last_odom_cur){
                             const first_odom = (!this.current_odom);
                             this.current_odom = odom;
@@ -513,31 +525,38 @@ class VslamOdometry {
                                 this.enc_odom.encoder_params.x = kf_pos.x;
                                 this.enc_odom.encoder_params.y = kf_pos.y;
                                 this.enc_odom.encoder_params.heading = kf_pos.heading;
+                                this.confidence = confidence;
     
                                 console.log("first_x", kf_pos.x);
                                 console.log("first_y", kf_pos.y);
                                 console.log("first_h", kf_pos.heading);
                             }else{
+                                if(confidence !== undefined && confidence < 5){
+                                    console.log("too low confidence", confidence, params['confidence']);
+                                }else if (odom_cur > this.last_odom_cur) {
+                                    console.log("enough confidence", confidence, params['confidence']);
     
-                                const kf_pos = this.active_points[odom_cur];
-                                const enc_pos = this.enc_positions[odom_cur];
-                                const diff_x = kf_pos.x - enc_pos.x;
-                                const diff_y = kf_pos.y - enc_pos.y;
-                                const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
-                                const diff_h = formay_angle_180(kf_pos.heading - enc_pos.heading);
-                                const diff_h_abs = Math.abs(diff_h);
-                                if(diff_r < VslamOdometry.settings.update_r_limit && diff_h_abs < VslamOdometry.settings.update_h_limit){
-                                    const update_gain_r = Math.min(diff_r, VslamOdometry.settings.update_r_cutoff) / Math.max(diff_r, 1e-3) * VslamOdometry.settings.update_gain;
-                                    const update_gain_h = Math.min(diff_h_abs, VslamOdometry.settings.update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * VslamOdometry.settings.update_gain;
-                                    this.enc_odom.encoder_params.x += diff_x * update_gain_r;
-                                    this.enc_odom.encoder_params.y += diff_y * update_gain_r;
-                                    this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
-        
-                                    console.log("diff_x", diff_x, diff_x * update_gain_r);
-                                    console.log("diff_y", diff_y, diff_y * update_gain_r);
-                                    console.log("diff_h", diff_h, diff_h * update_gain_h);
-                                }else{
-                                    console.log("vslam update too match shift", diff_r, diff_h_abs);
+                                    const kf_pos = this.active_points[odom_cur];
+                                    const enc_pos = this.enc_positions[odom_cur];
+                                    const diff_x = kf_pos.x - enc_pos.x;
+                                    const diff_y = kf_pos.y - enc_pos.y;
+                                    const diff_r = Math.sqrt(diff_x ** 2 + diff_y ** 2);
+                                    const diff_h = formay_angle_180(kf_pos.heading - enc_pos.heading);
+                                    const diff_h_abs = Math.abs(diff_h);
+                                    if(diff_r < VslamOdometry.settings.update_r_limit && diff_h_abs < VslamOdometry.settings.update_h_limit){
+                                        const update_gain_r = Math.min(diff_r, VslamOdometry.settings.update_r_cutoff) / Math.max(diff_r, 1e-3) * VslamOdometry.settings.update_gain;
+                                        const update_gain_h = Math.min(diff_h_abs, VslamOdometry.settings.update_h_cutoff) / Math.max(diff_h_abs, 1e-3) * VslamOdometry.settings.update_gain;
+                                        this.enc_odom.encoder_params.x += diff_x * update_gain_r;
+                                        this.enc_odom.encoder_params.y += diff_y * update_gain_r;
+                                        this.enc_odom.encoder_params.heading += diff_h * update_gain_h;
+                                        this.confidence = this.confidence * (1.0 - VslamOdometry.settings.update_gain) + confidence * VslamOdometry.settings.update_gain;
+            
+                                        console.log("diff_x", diff_x, diff_x * update_gain_r);
+                                        console.log("diff_y", diff_y, diff_y * update_gain_r);
+                                        console.log("diff_h", diff_h, diff_h * update_gain_h);
+                                    }else{
+                                        console.log("vslam update too match shift", diff_r, diff_h_abs);
+                                    }
                                 }
                             }
 
@@ -729,9 +748,10 @@ class VslamOdometry {
             
             const frame_dom = xml_parser.parse(meta);
             this.enc_positions[this.push_cur].nmea = frame_dom['picam360:frame']['passthrough:nmea'];
-
-            if(this.first_push){
-                this.first_push = false;
+            if(this.waiting_estimation){//skip
+                this.push_cur++;
+                return;
+            }else if(this.current_odom == null){//first estimation
 
                 const keys = Object.keys(this.vslam_waypoints);
                 //this.requestTrack(`${this.push_cur}`, jpeg_data, true, 1);
@@ -739,10 +759,8 @@ class VslamOdometry {
                 this.requestEstimation(ref_timestamps, `${this.push_cur}`, jpeg_data, 8);
                 this.backend_pending++;
                 this.last_pushVslam_cur = this.push_cur;
+                this.waiting_estimation = true;
 
-                this.push_cur++;
-                return;
-            }else if(this.current_odom == null){
                 this.push_cur++;
                 return;
             }
@@ -768,7 +786,11 @@ class VslamOdometry {
                     this.backend_pending++;
                     this.last_pushVslam_cur = this.push_cur;
 
+                    const confidence_penalty = dr * VslamOdometry.settings.confidence_penalty_gain;
+                    this.confidence = Math.max(0, Math.min(this.confidence + confidence_penalty, 100));
+
                     this.enc_positions[this.push_cur].keyframe = true;
+                    this.waiting_estimation = true;
                 }
             }else{
                 if (this.push_cur - this.last_pushVslam_cur > 10) {
@@ -789,6 +811,7 @@ class VslamOdometry {
                     this.last_pushVslam_cur = this.push_cur;
 
                     this.enc_positions[this.push_cur].keyframe = true;
+                    this.waiting_estimation = true;
                 }
             }
 
@@ -837,7 +860,8 @@ class VslamOdometry {
     }
 
     getPosition() {
-        return this.enc_odom.getPosition();
+        const pos = this.enc_odom.getPosition();
+        pos.confidence = this.confidence;
     }
     calculateDistance(cur) {
         return this.enc_odom.calculateDistance(cur);
