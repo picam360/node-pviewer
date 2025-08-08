@@ -242,7 +242,7 @@ function convert_transforms_to_positions(nodes, _enc_waypoints){
         return {
             x : node.transform[0][3],
             y : node.transform[2][3],
-            heading : ((heading + 180) % 360) - 180,//-180 < heading < 180
+            heading : ((heading + 180 + VslamOdometry.settings.cam_heading) % 360) - 180,//-180 < heading < 180
         };
     }
     const keys = Object.keys(_enc_waypoints);
@@ -336,11 +336,12 @@ class VslamOdometry {
         vslam_option : '--disable_vis',
         //vslam_option : '',
         vslam_filename : 'waypoints.data',
-        cam_offset : {
+        cam_offset : {//enc fitting
             x : 0.0,
             y : 0.05,
             heading : 0,
         },
+        cam_heading : 180,//physical
 
         //for auto-drive
         dr_threashold_waypoint : 0.1,
@@ -363,6 +364,9 @@ class VslamOdometry {
 
         launch_vslam : true,
         calib_enabled : false,
+    };
+    static status = {
+        latest_confidence : 0,
     };
     constructor(options) {
         this.options = options || {};
@@ -502,8 +506,8 @@ class VslamOdometry {
                     }else{
 
                         const cal_confidence = function(v){
-                            const maxv = 0.20;
-                            const minv = 0.01;
+                            const maxv = 0.2;
+                            const minv = 0.0;
                             return Math.max(0, Math.min((v - minv)/(maxv - minv)*100, 100));
                         }
 
@@ -512,6 +516,7 @@ class VslamOdometry {
                         const odom = params['odom'][params['odom'].length - 1];//last one
                         const odom_cur = odom['timestamp'];
                         const confidence = cal_confidence(params['confidence'][odom_cur]);
+                        VslamOdometry.status.latest_confidence = confidence;
                         if(confidence !== undefined && confidence < 5){
                             console.log("too low confidence", confidence, params['confidence']);
                         }else if (odom_cur > this.last_odom_cur) {

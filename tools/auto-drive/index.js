@@ -574,6 +574,8 @@ function main() {
 			} catch (err) {
 				console.error('Error reading temperature:', err);
 			}
+			sysinfo.latest_confidence = VslamOdometry.status.latest_confidence;
+
 
 			const elapsed = Date.now() - last_ts;
 			if(elapsed > 1000){
