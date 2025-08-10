@@ -64,7 +64,7 @@ class GpsOdometry {
         this.current_imu = null;
     }
 
-    init(waypoints, callback){
+    init(waypoints, callback, reverse){
         this.waypoints = waypoints;
         this.waypoints_keys = Object.keys(waypoints);
         this.gps_waypoints = GpsOdometry.cal_xy(waypoints);

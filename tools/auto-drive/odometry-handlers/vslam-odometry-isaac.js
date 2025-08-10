@@ -63,7 +63,7 @@ class VslamOdometry {
         this.m_ros_timestamp_base_ms = Date.now();
     }
 
-    init(waypoints, callback){
+    init(waypoints, callback, reverse){
         const keys = Object.keys(waypoints);
 
         this.waypoints = waypoints;

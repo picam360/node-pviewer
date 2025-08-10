@@ -132,6 +132,9 @@ function formay_angle_180(angle){
     if(angle > 180){
         angle -= 360;
     }
+    if(angle < -180){
+        angle += 360;
+    }
     return angle;
 }
 function minus_offset_from_positions(positions, offset){
@@ -338,10 +341,10 @@ class VslamOdometry {
         vslam_filename : 'waypoints.data',
         cam_offset : {//enc fitting
             x : 0.0,
-            y : 0.05,
+            y : 0.0,
             heading : 0,
         },
-        cam_heading : 180,//physical
+        cam_heading : 0,//physical
 
         //for auto-drive
         dr_threashold_waypoint : 0.1,
@@ -359,8 +362,8 @@ class VslamOdometry {
         update_gain : 0.5,
         update_r_cutoff : 0.3,
         update_h_cutoff : 15.0,
-        update_r_limit : 0.2,
-        update_h_limit : 10.0,
+        update_r_limit : 1.0,
+        update_h_limit : 45.0,
 
         launch_vslam : true,
         calib_enabled : false,
@@ -414,7 +417,7 @@ class VslamOdometry {
         }
     }
 
-    init(waypoints, callback) {
+    init(waypoints, callback, reverse) {
         this.enc_odom.init(waypoints, (enc_waypoints) => {
             this.enc_waypoints = enc_waypoints;
 
@@ -506,7 +509,7 @@ class VslamOdometry {
                     }else{
 
                         const cal_confidence = function(v){
-                            const maxv = 0.2;
+                            const maxv = 0.4;
                             const minv = 0.0;
                             return Math.max(0, Math.min((v - minv)/(maxv - minv)*100, 100));
                         }
@@ -527,27 +530,28 @@ class VslamOdometry {
                             this.last_odom_cur = odom_cur;
 
                             const { vslam_waypoints, active_points } = convert_transforms_to_positions(params['transforms'], this.enc_waypoints);
-                            {
-                                let dx = 0;
-                                let dy = 0;
-                                let dh = 0;
-                                let count = 0;
-                                for(const ts in vslam_waypoints){
-                                    dx += vslam_waypoints[ts].x - this.vslam_waypoints[ts].x;
-                                    dy += vslam_waypoints[ts].y - this.vslam_waypoints[ts].y;
-                                    dh += formay_angle_180(vslam_waypoints[ts].heading - this.vslam_waypoints[ts].heading);
-                                    count++;
-                                }
-                                dx /= count;
-                                dy /= count;
-                                dh /= count;
-                                for(const ts in active_points){
-                                    active_points[ts].x -= dx;
-                                    active_points[ts].y -= dy;
-                                    active_points[ts].heading -= dh;
-                                }
-                                console.log("vslam_waypoints changed", dx, dy, dh);
-                            }
+
+                            // {
+                            //     let dx = 0;
+                            //     let dy = 0;
+                            //     let dh = 0;
+                            //     let count = 0;
+                            //     for(const ts in vslam_waypoints){
+                            //         dx += vslam_waypoints[ts].x - this.vslam_waypoints[ts].x;
+                            //         dy += vslam_waypoints[ts].y - this.vslam_waypoints[ts].y;
+                            //         dh += formay_angle_180(vslam_waypoints[ts].heading - this.vslam_waypoints[ts].heading);
+                            //         count++;
+                            //     }
+                            //     dx /= count;
+                            //     dy /= count;
+                            //     dh /= count;
+                            //     for(const ts in active_points){
+                            //         active_points[ts].x -= dx;
+                            //         active_points[ts].y -= dy;
+                            //         active_points[ts].heading -= dh;
+                            //     }
+                            //     console.log("vslam_waypoints changed", dx, dy, dh);
+                            // }
 
                             this.active_points = Object.assign(this.active_points, active_points);
 
@@ -616,7 +620,7 @@ class VslamOdometry {
             }else{
                 startup_callback();
             }
-        });//end of redis connected
+        }, reverse);//end of init
     }
 
     update_reconstruction_progress(progress){
@@ -802,7 +806,7 @@ class VslamOdometry {
                 if (dr > VslamOdometry.settings.dr_threashold || Math.abs(dh) > VslamOdometry.settings.dh_threashold) {
 
                     const center_key = this.findClosestWaypoint(this.enc_positions[this.push_cur], this.vslam_waypoints);
-                    const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 1);
+                    const ref_timestamps = this.getSurroundingKeys(Object.keys(this.vslam_waypoints), center_key, 2);
 
                     console.log("requestEstimation", `dr=${dr}, dh=${dh}`, ref_timestamps);
             

@@ -33,6 +33,8 @@ let m_options = {
 	//for jetchariot
 	"forward_pwm_base" : 75,
 	"backward_pwm_base" : 75,
+	"lr_ratio_forward" : 0.999,
+	"lr_ratio_backward" : 1.050,
 	"pwm_range" : 75,
 	"pwm_control_gain" : 0.06,
 };
@@ -225,14 +227,14 @@ function move_pwm_robot(distance, angle) {
 		const left_pwd = m_options.forward_pwm_base - Math.round(left_minus);
 		const right_pwd = m_options.forward_pwm_base - Math.round(right_minus);
 		console.log("move_forward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
-		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd} ${right_pwd} ${ts}`);
+		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd*m_options.lr_ratio_forward} ${right_pwd} ${ts}`);
 	}else{
 		const left_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const right_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const left_pwd = m_options.backward_pwm_base - Math.round(left_minus);
 		const right_pwd = m_options.backward_pwm_base - Math.round(right_minus);
 		console.log("move_backward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
-		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd} ${right_pwd} ${ts}`);
+		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd*m_options.lr_ratio_backward} ${right_pwd} ${ts}`);
 	}
 }
 
@@ -326,16 +328,16 @@ function auto_drive_handler(tmp_img){
 				let [distanceToTarget, shiftToTarget] = conf.handler.calculateDistance(cur);
 				let headingError = conf.handler.calculateHeadingError(cur);
 
-				if(Math.abs(headingError) > 90){//backward
-					distanceToTarget *= -1;
-					headingError = 180 - headingError;
-					if(headingError <= -180){
-						headingError += 360;
-					}else if(headingError > 180){
-						headingError -= 360;
-					}
-					headingError *= -1;
-				}
+				// if(Math.abs(headingError) > 90){//backward
+				// 	distanceToTarget *= -1;
+				// 	headingError = 180 - headingError;
+				// 	if(headingError <= -180){
+				// 		headingError += 360;
+				// 	}else if(headingError > 180){
+				// 		headingError -= 360;
+				// 	}
+				// 	headingError *= -1;
+				// }
 
 				conf.distanceToTarget = distanceToTarget;
 				conf.shiftToTarget = shiftToTarget;
@@ -770,7 +772,7 @@ function command_handler(cmd) {
 								});
 								break;
 						}
-						m_odometry_conf[key].handler.init(waypoints, next_cb);
+						m_odometry_conf[key].handler.init(waypoints, next_cb, m_options.reverse);
 					}
 					build_odometry_handler(0);
 				});
