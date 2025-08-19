@@ -613,7 +613,7 @@ async.waterfall([
 					if(value === null){
 						continue;
 					}
-					replaced[key] = replace(value, replacements);
+					replaced[replace(key, replacements)] = replace(value, replacements);
 				}
 				params = replaced;
 			}
