@@ -22,6 +22,7 @@
             "streams/20mp-stereo.json",
             "streams/20mp-stereo-calib.json",
             "streams/20mp-mono.json",
+            "streams/20mp-sphere.json",
             "streams/20mp-vslam.json",
             "streams/20mp-recorder.json",
             "streams/20mp-player.json",
