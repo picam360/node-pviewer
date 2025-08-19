@@ -1,5 +1,5 @@
 {
-    "def" : "dealer ! v4l2_tegra_encoder name=encoder fps=@APP.FPS@ br=@APP.BITRATE_KBPS@ preset=ultrafast",
+    "def" : "dealer name=@DEALER.NAME@ ! v4l2_tegra_encoder name=encoder fps=@APP.FPS@ br=@APP.BITRATE_KBPS@ preset=ultrafast",
     "params" : {
 #        "dealer.def" : "dup name=dup_20mp_stereo ! pcuda_remapper name=remapper debalgo=malvar debayer=I420 sh=0 rgb_gain=@APP.RGB_GAIN@ gamma=2.4 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
         "dealer.def" : "dup name=dup_20mp_stereo ! pcuda_remapper name=remapper debalgo=linear debayer=I420 sh=10 rgb_gain=@APP.RGB_GAIN@ gamma=2.4 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
@@ -11,6 +11,7 @@
         "renderer.realtime" : "1"
     },
     "replacements" : {
+        "@DEALER.NAME@" : "dealer",
         "@APP.N_STREAMS@" : "1",
         "@APP.BITRATE_KBPS@" : "2500",
         "@APP.SIZE@" : "2048x1024",
