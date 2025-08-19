@@ -4,6 +4,7 @@
     "params" : {
     },
     "replacements" : {
+        "@V4L2.CUDAMEM@" : "0"
     },
     "pviewer_config_ext" : {
         "plugin_paths" : [

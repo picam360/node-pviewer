@@ -1,0 +1,10 @@
+{
+    "base" : "20mp-stereo",
+    "params" : {
+    },
+    "replacements" : {
+        "@CALIB.DEG_OFFSET1.X@" : "90",
+        "@CALIB.DEG_OFFSET1.Y@" : "0",
+        "@CALIB.DEG_OFFSET1.Z@" : "0"
+    }
+}
