@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#sudo apt install dnsmasq
+#sudo apt install hostapd
+
 SCRIPT_DIR=$(dirname "$0")
 cd "$SCRIPT_DIR" || exit
 
