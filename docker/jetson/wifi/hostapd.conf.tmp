@@ -1,0 +1,27 @@
+# ---- Basic settings ----
+interface=wlan0
+driver=nl80211
+ssid=%SSID%
+hw_mode=g
+channel=6
+country_code=JP
+ieee80211n=1
+ieee80211ac=1
+wmm_enabled=1
+
+# ---- Security (WPA2/WPA3 transitional mode) ----
+wpa=2
+auth_algs=1
+wpa_key_mgmt=WPA-PSK SAE
+rsn_pairwise=CCMP
+
+# Management Frame Protection (required for WPA3)
+ieee80211w=1
+sae_require_mfp=1
+
+# Shared passphrase (same for WPA2 and WPA3)
+wpa_passphrase=%PWD%
+
+
+#sudo ip addr add 10.42.0.%ADDRESS%/24 dev wlan0
+#sudo ip link set wlan0 up
