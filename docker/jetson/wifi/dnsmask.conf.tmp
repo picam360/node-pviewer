@@ -1,0 +1,12 @@
+# Do not run a DNS server (avoid port 53 conflict)
+port=0
+
+# Bind only to wlan0
+interface=wlan0
+bind-interfaces
+
+# DHCP range
+dhcp-range=10.42.0.10,10.42.0.50,255.255.255.0,24h
+dhcp-option=3,10.42.0.%ADDRESS%        # gateway
+dhcp-option=6,1.1.1.1,8.8.8.8    # DNS
+dhcp-authoritative
