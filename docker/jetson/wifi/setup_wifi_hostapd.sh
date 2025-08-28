@@ -42,8 +42,10 @@ sudo sed -i "s/%PWD%/$PWD/g" /etc/hostapd/hostapd.conf
 #sudo sed -i "s/%MACADDRESS%/$MACADDRESS/g" /etc/hostapd/hostapd.conf
 sudo chmod 600 /etc/hostapd/hostapd.conf
 
+sudo systemctl enable dnsmasq
+sudo systemctl restart dnsmasq
 sudo systemctl unmask hostapd
 sudo systemctl enable hostapd
 sudo systemctl restart hostapd
-sudo ip addr add 10.42.0.%ADDRESS%/24 dev wlan0
+sudo ip addr add 10.42.0.$ADDRESS/24 dev wlan0
 sudo ip link set wlan0 up
