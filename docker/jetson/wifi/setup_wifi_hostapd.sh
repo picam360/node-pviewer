@@ -35,17 +35,20 @@ sleep 1
 sudo systemctl stop NetworkManager
 sudo systemctl disable NetworkManager
 
+sudo cp dnsmasq.conf.tmp /etc/dnsmasq.conf
+sudo sed -i "s/%ADDRESS%/$ADDRESS/g" /etc/dnsmasq.conf
+sudo chmod 644 /etc/dnsmasq.conf
+
 sudo cp hostapd.conf.tmp /etc/hostapd/hostapd.conf
 sudo sed -i "s/%SSID%/$SSID/g" /etc/hostapd/hostapd.conf
 sudo sed -i "s/%PWD%/$PWD/g" /etc/hostapd/hostapd.conf
-#sudo sed -i "s/%ADDRESS%/$ADDRESS/g" /etc/hostapd/hostapd.conf
-#sudo sed -i "s/%MACADDRESS%/$MACADDRESS/g" /etc/hostapd/hostapd.conf
 sudo chmod 600 /etc/hostapd/hostapd.conf
+
+sudo ip addr add 10.42.0.$ADDRESS/24 dev wlan0
+sudo ip link set wlan0 up
 
 sudo systemctl enable dnsmasq
 sudo systemctl restart dnsmasq
 sudo systemctl unmask hostapd
 sudo systemctl enable hostapd
 sudo systemctl restart hostapd
-sudo ip addr add 10.42.0.$ADDRESS/24 dev wlan0
-sudo ip link set wlan0 up
