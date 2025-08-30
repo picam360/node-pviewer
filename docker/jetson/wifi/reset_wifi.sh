@@ -6,4 +6,5 @@ sudo systemctl stop hostapd
 sudo systemctl disable hostapd
 
 sudo rm /etc/NetworkManager/system-connections/* 2>/dev/null
+sudo systemctl enable NetworkManager
 sudo systemctl restart NetworkManager
