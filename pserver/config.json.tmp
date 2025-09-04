@@ -1,5 +1,7 @@
 {
     "n_clients_limit" : 10,
+    "http_port" : 36080,
+    "http2_port" : 36443,
     "meeting" : {
         "enabled" : false
     },
