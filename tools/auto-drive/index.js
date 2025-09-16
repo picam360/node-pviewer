@@ -52,6 +52,7 @@ let m_auto_drive_cur = 0;
 let m_auto_drive_heading_tuning = false;
 let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
+let m_object_tracking_state = 0;
 const ODOMETRY_TYPE = {
 	GPS : "GPS",
 	ENCODER : "ENCODER",
@@ -196,6 +197,16 @@ function record_waypoints_handler(tmp_img){
 
 	if(m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM && m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler){
 		m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.push(header, meta, jpeg_data);
+	}
+
+	if(m_object_tracking_state == 1){
+		m_object_tracking_state = 2;
+
+		m_client.publish('picam360-vord', JSON.stringify({
+			"cmd" : "detect",
+			"test" : true,
+			"jpeg_data" : jpeg_data,
+		}));
 	}
 
 	if(m_options.debug){
@@ -565,6 +576,21 @@ function main() {
 				tmp_img.push(Buffer.from(data, 'base64'));
 			}
 		});
+
+
+		subscriber.subscribe('picam360-vord-output', (data, key) => {
+			//console.log(data);
+			const params = JSON.parse(data);
+
+			if(params['type'] == 'info'){
+				if(params['msg'] == 'startup'){
+					m_object_tracking_state = 1;
+				}
+			}else if(params['type'] == 'detect'){
+				console.log(params['objects']);
+			}
+		});
+
 		setInterval(() => {
 
 			const sysinfo = {};
@@ -701,6 +727,10 @@ function command_handler(cmd) {
 
 			break;
 		}
+		case "START_TREE_TRACKING":
+			if(m_drive_mode == "RECORD") {
+			}
+			break;
 		case "START_AUTO":
 			stop_robot();
 			if(m_drive_mode == "STANBY") {
