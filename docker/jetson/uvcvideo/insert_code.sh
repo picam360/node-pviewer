@@ -18,11 +18,14 @@ while IFS= read -r line; do
     fi
 
     # If "}" is found and "uvc_fixup_video_ctrl" has been encountered
-    # snipet : pr_info("dwMaxPayloadTransferSize=%d\n", ctrl->dwMaxPayloadTransferSize);
     if [[ "$found_func" == true && "$line" == "}" && "$insert_code" == false ]]; then
-        echo "        if (format->flags & UVC_FMT_FLAG_COMPRESSED) {" >> "$temp_file"
-        echo "                ctrl->dwMaxPayloadTransferSize = 0x600;" >> "$temp_file"
-        echo "        }" >> "$temp_file"
+        cat >> "$temp_file" <<'EOF'
+        if (format->flags & UVC_FMT_FLAG_COMPRESSED) {
+                __u32 tmp = ctrl->dwMaxPayloadTransferSize;
+                ctrl->dwMaxPayloadTransferSize = 0x600;
+                pr_info("dwMaxPayloadTransferSize=%u from %u\n", ctrl->dwMaxPayloadTransferSize, tmp);
+        }
+EOF
         insert_code=true
     fi
 
