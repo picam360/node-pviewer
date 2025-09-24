@@ -5,6 +5,7 @@ const path = require("path");
 const nmea = require('nmea-simple');
 const utm = require('utm');
 const { execSync } = require('child_process');
+const { spawn } = require('child_process');
 const yargs = require('yargs');
 const fxp = require('fast-xml-parser');
 const xml_parser = new fxp.XMLParser({
@@ -46,6 +47,7 @@ let m_options = {
 let m_argv = null;
 let m_socket = null;
 let m_drive_mode = "STANBY";
+let m_drive_submode = "";
 let m_averaging_nmea = null;
 let m_averaging_count = 0;
 let m_last_nmea = null;
@@ -58,6 +60,7 @@ let m_auto_drive_heading_tuning = false;
 let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
 let m_object_tracking_state = 0;
+let m_object_tracking_objects = [];
 const ODOMETRY_TYPE = {
 	GPS : "GPS",
 	ENCODER : "ENCODER",
@@ -76,6 +79,57 @@ let m_odometry_conf = {
 		enabled : true
 	},
 };
+
+function launchVord() {
+    const vord_path = "/home/picam360/github/picam360-vord";
+	const vord_options = "";
+    const command = `
+        source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
+        conda activate perceptree && \
+        python ${vord_path}/vord.py ${vord_options}
+    `;
+    const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vord_path) });
+    vslam_process.stdout.on('data', (data) => {
+        console.log(`PICAM360_VORD STDOUT: ${data}`);
+    });
+
+    vslam_process.stderr.on('data', (data) => {
+        console.error(`PICAM360_VORD STDERR: ${data}`);
+    });
+
+    vslam_process.on('close', (code) => {
+        console.log(`PICAM360_VORD STDOUT CLOSED(: ${code})`);
+    });
+}
+function killVord() {
+    const processName = "picam360-vord"; // プロセス名を指定
+
+    try {
+        const output = execSync(`ps -eo pid,comm,args`, { encoding: "utf-8" });
+
+        const lines = output.trim().split("\n").slice(1);
+
+        const matchingPids = lines
+            .map(line => line.trim().split(/\s+/, 3)) // [pid, comm, args]
+            .filter(([pid, comm, args]) =>
+                comm === processName || args.split(" ")[0] === processName
+            )
+            .map(([pid]) => parseInt(pid));
+
+        // kill
+        for (const pid of matchingPids) {
+            console.log(`Killing PID ${pid} (${processName})`);
+            process.kill(pid);
+        }
+
+        if (matchingPids.length === 0) {
+            console.log(`No matching process found for "${processName}"`);
+        }
+
+    } catch (err) {
+        console.error("Error while killing process:", err.message);
+    }
+}
 
 function latLonToXY(lat1, lon1, lat2, lon2) {
 	const R = 6378137; // Earth's radius in meters
@@ -219,6 +273,23 @@ function record_waypoints_handler(tmp_img){
 
 	if(m_options.debug){
 		console.log(`${pif_filepath} recorded.`);
+	}
+}
+
+function tracking_handler(objects){
+	if(!objects || objects.length == 0){
+		stop_robot();
+		return;
+	}
+	const img_width = 512;
+	const fov = 90;
+	const x = (objects[0].bbox[0] + objects[0].bbox[2]) / 2 - img_width / 2;
+	const ten_deg_pixels = Math.tan(10) * img_width / 2 / Math.tan(fov/2);
+	const angle = x / ten_deg_pixels * 10;
+	if(Math.abs(x) < ten_deg_pixels){
+		move_pwm_robot(1.0, angle);
+	}else{
+		rotate_robot(angle);
 	}
 }
 
@@ -580,6 +651,10 @@ function main() {
 				switch(m_drive_mode){
 				case "RECORD":
 					record_waypoints_handler(tmp_img);
+
+					if(m_drive_submode == "TRACKING"){
+						tracking_handler(m_object_tracking_objects);
+					}
 					break;
 				case "AUTO":
 					if(m_auto_drive_ready){
@@ -604,10 +679,16 @@ function main() {
 				}
 			}else if(params['type'] == 'detect'){
 				m_object_tracking_state = 1;
+				m_object_tracking_objects = params['objects'];
 
 				console.log(params['objects']);
 			}
 		});
+
+		if(m_options["vord_enabled"]){
+			killVord();
+			launchVord();
+		}
 
 		setInterval(() => {
 
@@ -646,7 +727,7 @@ function command_handler(cmd) {
 		case "START_RECORD":
 			stop_robot();
 			if(m_drive_mode == "STANBY") {
-				const extend_mode = (split[1] == "EXTEND");
+				const extend_mode = (split[1] == "EXTEND" || split[1] == "TRACKING");
 
 				let pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				let succeeded = false;
@@ -691,6 +772,7 @@ function command_handler(cmd) {
 				}
 				m_record_pif_dirpath = pif_dirpath;
 				m_drive_mode = "RECORD";
+				m_drive_submode = split[1] || "";
 				m_client.publish('pserver-auto-drive-info', JSON.stringify({
 					"mode" : "RECORD",
 					"state" : "START_RECORD",
@@ -745,11 +827,6 @@ function command_handler(cmd) {
 
 			break;
 		}
-		case "START_TRACKING":
-			if(m_drive_mode == "RECORD") {
-				m_options.tracking_target = (split[1] == "REVERSE");
-			}
-			break;
 		case "START_AUTO":
 			stop_robot();
 			if(m_drive_mode == "STANBY") {

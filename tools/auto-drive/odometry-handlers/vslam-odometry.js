@@ -521,7 +521,10 @@ class VslamOdometry {
 
                         const odom = params['odom'][params['odom'].length - 1];//last one
                         const odom_cur = odom['timestamp'];
-                        const confidence = cal_confidence(params['confidence'][odom_cur]);
+                        let confidence = 0;
+                        if(params['confidence']){
+                            confidence = cal_confidence(params['confidence'][odom_cur]);
+                        }
                         VslamOdometry.status.latest_confidence = confidence;
                         if(confidence !== undefined && confidence < 5){
                             console.log("too low confidence", confidence, params['confidence']);

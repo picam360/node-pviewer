@@ -344,12 +344,24 @@ class EncoderOdometry {
 
         if(this.encoder_params.last_left_counts === null){
             const settings = Object.assign({}, EncoderOdometry.settings);
-            settings.x_initial = 0;
-            settings.y_initial = 0;
-            if(this.waypoints.length){
-                settings.heading_initial = EncoderOdometry.cal_heading(this.waypoints, this.waypoints_reverse);
+            if(typeof this.encoder_params.x === "number"){
+                settings.x_initial = this.encoder_params.x;
             }else{
-                settings.heading_initial = this.current_imu.heading;//jissaitonozure ha kouryosubeki
+                settings.x_initial = 0;
+            }
+            if(typeof this.encoder_params.y === "number"){
+                settings.y_initial = this.encoder_params.y;
+            }else{
+                settings.y_initial = 0;
+            }
+            if(typeof this.encoder_params.heading === "number"){
+                settings.heading_initial = this.encoder_params.heading;
+            }else{
+                if(this.waypoints.length){
+                    settings.heading_initial = EncoderOdometry.cal_heading(this.waypoints, this.waypoints_reverse);
+                }else{
+                    settings.heading_initial = this.current_imu.heading;//jissaitonozure ha kouryosubeki
+                }
             }
             this.encoder_params = {
                 lr_ratio_forward : settings.lr_ratio_forward,
