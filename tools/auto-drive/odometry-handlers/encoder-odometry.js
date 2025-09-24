@@ -19,27 +19,29 @@ function radiansToDegrees(radians) {
 }
 
 class EncoderOdometry {
-    // static settings = {//juki
-    //     lr_ratio_forward: 1.0,
-    //     lr_ratio_backward: 1.0,
-    //     meter_per_pulse: 0.00902127575039515,
-    //     wheel_separation: 3.093597564134178,
-    //     imu_heading_error: 0.0,
-    //     left_direction: -1,
-    //     right_direction: 1,
+    static settings = {//juki
+        "lr_ratio_forward": 1.0,
+        "lr_ratio_backward": 1.0,
+        "right_gain" : 1.0,
+        "meter_per_pulse" : 0.00902127575039515,
+        "wheel_separation" : 3.093597564134178,
+        "imu_heading_error" : 0.0,
+        "left_direction" : -1,
+        "right_direction" : 1,
 
-    //     lock_gps_heading : true,
-    // };
+        "lock_gps_heading" : true,
+    };
     static settings = {//jetchariot
-        lr_ratio_forward: 1.04,
-        lr_ratio_backward: 0.96,
-        meter_per_pulse: 0.00004,
-        wheel_separation: 0.208,
-        imu_heading_error: 0,
-        left_direction: -1,
-        right_direction: 1,
-    
-       lock_gps_heading : true,
+        "lr_ratio_forward": 1.04,
+        "lr_ratio_backward": 0.96,
+        "right_gain" : 1.0,
+        "meter_per_pulse" : 0.00004,
+        "wheel_separation" : 0.208,
+        "imu_heading_error" : 0.0,
+        "left_direction" : -1,
+        "right_direction" : 1,
+
+        "lock_gps_heading" : true,
     };
     constructor() {
         this.waypoints = null;
@@ -84,7 +86,7 @@ class EncoderOdometry {
                 return;
             }
 
-            dtheta *= -1;//for jikki//TODO:20250917
+            //dtheta *= -1;//for jikki//TODO:20250917
     
             let dx, dy;
             const theta = -encoder_params.heading * Math.PI / 180 + Math.PI / 2;
@@ -327,12 +329,17 @@ class EncoderOdometry {
             this.current_imu = {heading : 0};
         }
         if(frame_dom['picam360:frame']['passthrough:encoder']){
-            this.current_encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
+            const encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
+            if(!this.current_encoder){
+                this.current_encoder = encoder;
+                return false;
+            }else if(Math.abs(encoder.left - this.current_encoder.left) < 5 && Math.abs(encoder.right - this.current_encoder.right) < 5){
+                //console.log("ENCODER not changed : skip");
+                return false;
+            }
+            this.current_encoder = encoder;
         }else{
-            this.current_encoder = {
-                left : 0,
-                right : 0,
-            };
+            return false;
         }
 
         if(this.encoder_params.last_left_counts === null){
@@ -360,6 +367,8 @@ class EncoderOdometry {
             this.encoder_params,
             this.current_encoder.left * EncoderOdometry.settings.left_direction,
             this.current_encoder.right * EncoderOdometry.settings.right_direction);
+
+        return true;
     }
 
     getPosition(){

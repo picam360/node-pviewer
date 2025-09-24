@@ -345,38 +345,31 @@ class VslamOdometry {
         "calib_enabled" : false,
     };
     // static settings = {//jetchariot
-    //     vslam_path : '/home/picam360/github/picam360-vslam',
-    //     vslam_option : '--disable_vis',
-    //     //vslam_option : '',
-    //     vslam_filename : 'waypoints.data',
-    //     cam_offset : {//enc fitting
-    //         x : 0.0,
-    //         y : 0.0,
-    //         heading : 0,
+    //     "vslam_path" : "/home/picam360/github/picam360-vslam",
+    //     "vslam_option" : "--disable_vis",
+    //     "vslam_filename" : "waypoints.data",
+    //     "cam_offset" : {
+    //         "x" : 0.0,
+    //         "y" : 0.0,
+    //         "heading" : 0,
     //     },
-    //     cam_heading : 0,//physical
+    //     "cam_heading" : 0,//physical
 
-    //     //for auto-drive
-    //     dr_threashold_waypoint : 0.1,
-    //     dh_threashold_waypoint : 10,
-    //     dr_threashold : 0.05,
-    //     dh_threashold : 10,
-    //     confidence_penalty_gain : 5,//percentage per meter
+    // //     //for auto-drive
+    //     "dr_threashold_waypoint" : 0.1,
+    //     "dh_threashold_waypoint" : 10,
+    //     "dr_threashold" : 0.05,
+    //     "dh_threashold" : 10,
+    //     "confidence_penalty_gain" : 5,//percentage per meter
+    
+    //     "update_gain" : 0.5,
+    //     "update_r_cutoff" : 0.3,
+    //     "update_h_cutoff" : 15.0,
+    //     "update_r_limit" : 1.0,
+    //     "update_h_limit" : 45.0,
 
-    //     //for map
-    //     // dr_threashold_waypoint : 0.2,
-    //     // dh_threashold_waypoint : 20,
-    //     // dr_threashold : 0.1,
-    //     // dh_threashold : 10,
-
-    //     update_gain : 0.5,
-    //     update_r_cutoff : 0.3,
-    //     update_h_cutoff : 15.0,
-    //     update_r_limit : 1.0,
-    //     update_h_limit : 45.0,
-
-    //     launch_vslam : true,
-    //     calib_enabled : false,
+    //     "launch_vslam" : true,
+    //     "calib_enabled" : false,
     // };
     static status = {
         latest_confidence : 0,
@@ -656,6 +649,8 @@ class VslamOdometry {
                 const dy = pos.y - ref_pos.y;
                 if(dx != 0 || dy != 0){
                     this.requestTrack(`${this.reconstruction._enc_waypoints.length - 1}`, this.reconstruction.pushed_data.jpeg_data, true);
+                }else{
+                    console.log("no need to track last frame");
                 }
             }
     
@@ -729,9 +724,12 @@ class VslamOdometry {
         if(!this.reconstruction.finalized){//incremental reconstruction
             if(!this.initialized){
                 //TODO
-                return;
+                return false;
             }
-            this.reconstruction._enc_odom.push(header, meta, jpeg_data);
+            const enc_succeeded = this.reconstruction._enc_odom.push(header, meta, jpeg_data);
+            if(enc_succeeded === false){
+                return false;
+            }
             this.reconstruction._enc_waypoints.push(this.reconstruction._enc_odom.getPosition());
 
 
@@ -768,7 +766,7 @@ class VslamOdometry {
                 this.reconstruction.pushed_data = { header, meta, jpeg_data };
 
                 if (!need_truck) {
-                    return;
+                    return true;
                 }
 
                 this.requestTrack(`${cur}`, jpeg_data, is_keyframe);
@@ -780,6 +778,8 @@ class VslamOdometry {
                 this.reconstruction.ref_cur = cur;
             }
 
+            return true;
+
         }else{
 
             this.enc_odom.push(header, meta, jpeg_data);
@@ -789,7 +789,7 @@ class VslamOdometry {
             this.enc_positions[this.push_cur].nmea = frame_dom['picam360:frame']['passthrough:nmea'];
             if(this.waiting_estimation){//skip
                 this.push_cur++;
-                return;
+                return true;
             }else if(this.current_odom == null){//first estimation
 
                 //TODO : 20250917 : this.vslam_waypoints=null
@@ -802,7 +802,7 @@ class VslamOdometry {
                 this.waiting_estimation = true;
 
                 this.push_cur++;
-                return;
+                return true;
             }
 
             if(this.enc_available){
@@ -856,6 +856,7 @@ class VslamOdometry {
             }
 
             this.push_cur++;
+            return true;
         }
     }
 

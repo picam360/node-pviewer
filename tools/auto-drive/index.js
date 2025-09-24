@@ -22,6 +22,8 @@ let m_options = {
 	"waypoint_threshold_m" : 10,
 	"data_filepath" : "/home/picam360/.auto-drive/auto-drive-waypoints",
 	"reverse" : false,
+	"vord_enabled" : true,
+	"vord_debug" : false,
 
 	//juki
 	"tolerance_distance" : 2.0,
@@ -191,6 +193,23 @@ function record_waypoints_handler(tmp_img){
 	}
 	const jpeg_data = tmp_img[2];
 	const jpeg_filepath = pif_filepath + ".0.0.JPEG";
+
+	m_client.publish('pserver-auto-drive-info', JSON.stringify({
+		"mode" : "RECORD",
+		"state" : "RECORDING",
+		"pif_filepath" : pif_filepath,
+	}));
+
+	if(m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM && m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler){
+		const succeeded = m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.push(header, meta, jpeg_data);
+		if(succeeded === false){
+			if(m_options.debug){
+				console.log(`VSLAM.hander.push skip`);
+			}
+			return;
+		}
+	}
+
 	try {
 		fs.writeFileSync(jpeg_filepath, jpeg_data);
 	} catch (err) {
@@ -198,30 +217,9 @@ function record_waypoints_handler(tmp_img){
 		return;
 	}
 
-	if(m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM && m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler){
-		m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.push(header, meta, jpeg_data);
-	}
-
-	if(m_object_tracking_state == 1){
-		m_object_tracking_state = 2;
-
-		m_client.publish('picam360-vord', JSON.stringify({
-			"cmd" : "detect",
-			"test" : false,
-			"show" : true,
-			"jpeg_data" : jpeg_data.toString("base64"),
-		}));
-	}
-
 	if(m_options.debug){
 		console.log(`${pif_filepath} recorded.`);
 	}
-
-	m_client.publish('pserver-auto-drive-info', JSON.stringify({
-		"mode" : "RECORD",
-		"state" : "RECORDING",
-		"pif_filepath" : pif_filepath,
-	}));
 }
 
 function move_robot(distance) {
@@ -565,6 +563,20 @@ function main() {
 		subscriber.subscribe('pserver-vslam-pst', (data, key) => {
 			last_ts = Date.now();
 			if(data.length == 0 && tmp_img.length != 0){
+				if(m_options["vord_enabled"] && tmp_img.length == 3){
+					const jpeg_data = tmp_img[2];
+
+					if(m_object_tracking_state == 1){
+						m_object_tracking_state = 2;
+						
+						m_client.publish('picam360-vord', JSON.stringify({
+							"cmd" : "detect",
+							"test" : false,
+							"show" : m_options["vord_debug"],
+							"jpeg_data" : jpeg_data.toString("base64"),
+						}));
+					}
+				}
 				switch(m_drive_mode){
 				case "RECORD":
 					record_waypoints_handler(tmp_img);
@@ -733,8 +745,9 @@ function command_handler(cmd) {
 
 			break;
 		}
-		case "START_TREE_TRACKING":
+		case "START_TRACKING":
 			if(m_drive_mode == "RECORD") {
+				m_options.tracking_target = (split[1] == "REVERSE");
 			}
 			break;
 		case "START_AUTO":

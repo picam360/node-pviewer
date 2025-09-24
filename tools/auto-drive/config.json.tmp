@@ -3,13 +3,50 @@
 
     },
     "encoder_odom" : {
+        "right_gain" : 1.0,
+        "meter_per_pulse" : 0.00902127575039515,
+        "wheel_separation" : 3.093597564134178,
+        "imu_heading_error" : 0.0,
+        "left_direction" : -1,
+        "right_direction" : 1,
 
+        "lock_gps_heading" : true,
     },
     "vslam_odom" : {
+        "vslam_path" : "/home/picam360/github/picam360-vslam",
+        "vslam_option" : "--disable_vis",
+        "vslam_filename" : "waypoints.data",
 
+        "cam_offset" : {
+            "x" : 0.0,
+            "y" : 0.0,
+            "heading" : 0
+        },
+        "cam_heading" : 0,//physical
+
+        //for auto-drive
+        "dr_threashold_waypoint" : 0.1,
+        "dh_threashold_waypoint" : 10,
+        "dr_threashold" : 0.05,
+        "dh_threashold" : 10,
+        "confidence_penalty_gain" : 5,//percentage per meter
+    
+        "update_gain" : 0.5,
+        "update_r_cutoff" : 0.3,
+        "update_h_cutoff" : 15.0,
+        "update_r_limit" : 1.0,
+        "update_h_limit" : 45.0,
+
+        "launch_vslam" : true,
+        "calib_enabled" : false,
     },
 	"waypoint_threshold_m" : 10,
-	"data_filepath" : "auto-drive-waypoints",
-	"reverse" : false,
+	"data_filepath" : "/var/auto-drive/data",
+
+	"forward_pwm_base" : 50,
+	"backward_pwm_base" : 46,
+	"pwm_range" : 10,
+	"pwm_control_gain" : 0.06,
+
     "debug" : 0
 }
