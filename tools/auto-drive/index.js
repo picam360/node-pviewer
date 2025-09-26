@@ -90,7 +90,7 @@ function launchVord() {
     `;
     const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vord_path) });
     vslam_process.stdout.on('data', (data) => {
-        console.log(`PICAM360_VORD STDOUT: ${data}`);
+        //console.log(`PICAM360_VORD STDOUT: ${data}`);
     });
 
     vslam_process.stderr.on('data', (data) => {
@@ -102,7 +102,7 @@ function launchVord() {
     });
 }
 function killVord() {
-    const processName = "picam360-vord"; // プロセス名を指定
+    const processName = "picam360-vord";
 
     try {
         const output = execSync(`ps -eo pid,comm,args`, { encoding: "utf-8" });
@@ -276,6 +276,16 @@ function record_waypoints_handler(tmp_img){
 	}
 }
 
+function pixelToAngle(dx, width = 512, fovDeg = 120) {
+	const center = width / 2;
+	const halfFovRad = (fovDeg / 2) * Math.PI / 180;
+	
+	const f = center / Math.tan(halfFovRad);
+  
+	const angleRad = Math.atan(dx / f);
+	return angleRad * 180 / Math.PI;
+  }
+
 function tracking_handler(objects){
 	if(!objects || objects.length == 0){
 		stop_robot();
@@ -285,11 +295,12 @@ function tracking_handler(objects){
 		obj.score > max.score ? obj : max
 	);
 	const img_width = 512;
-	const fov = 90;
+	const fov = 120;
 	const x = (best.bbox[0] + best.bbox[2]) / 2 - img_width / 2;
-	const ten_deg_pixels = Math.tan(10) * img_width / 2 / Math.tan(fov/2);
-	const angle = x / ten_deg_pixels * 10;
-	if(Math.abs(x) < ten_deg_pixels){
+	const forward_range = 45;
+	const angle = pixelToAngle(x, img_width, fov);
+	console.log(`DEBUG : x=${x}, ${angle}`);
+	if(Math.abs(angle) < forward_range){
 		move_pwm_robot(1.0, angle);
 	}else{
 		rotate_robot(angle);
@@ -405,7 +416,7 @@ function auto_drive_handler(tmp_img){
 	while(cur < keys.length){
 		for(const key of conf_keys){
 			const conf = m_odometry_conf[key];
-			if(conf.handler && conf.handler.is_ready()){
+			if(conf.handler && conf.handler.is_ready() && conf == m_odometry_conf[m_odometry_conf.odom_type]){
 				const { x, y, heading, confidence} = conf.handler.getPosition();
 				conf.x = x;
 				conf.y = y;
@@ -684,7 +695,7 @@ function main() {
 				m_object_tracking_state = 1;
 				m_object_tracking_objects = params['objects'];
 
-				console.log(params['objects']);
+				//console.log(params['objects']);
 			}
 		});
 
@@ -752,7 +763,6 @@ function command_handler(cmd) {
 							String(now.getMinutes()).padStart(2, '0') + "_" +
 							String(now.getSeconds()).padStart(2, '0');
 						try {
-							// フォルダを同期的にリネームして移動
 							fs.renameSync(m_options.data_filepath, `${m_options.data_filepath}.${formattedDate}`);
 							console.log(`folder moved to ${m_options.data_filepath}.${formattedDate}`);
 						} catch (err) {
