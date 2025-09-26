@@ -14,7 +14,6 @@ const xml_parser = new fxp.XMLParser({
 });
 const pif_utils = require('./pif-utils');
 const jsonc = require('jsonc-parser');
-const cv = require('opencv4nodejs');
 
 const { GpsOdometry } = require('./odometry-handlers/gps-odometry');
 const { EncoderOdometry } = require('./odometry-handlers/encoder-odometry');
@@ -279,42 +278,6 @@ function record_waypoints_handler(tmp_img) {
 }
 
 //START OF TRACKING CODE
-function analyzeObject(base64str) {
-	const buffer = Buffer.from(base64str, 'base64');
-	const mat = cv.imdecode(buffer, cv.IMREAD_UNCHANGED);
-
-	const widths = new Array(mat.rows).fill(0);
-	const centers = new Array(mat.rows).fill(0);
-
-	for (let y = 0; y < mat.rows; y++) {
-		let left = -1;
-		let right = -1;
-
-		for (let x = 0; x < mat.cols; x++) {
-			const pixel = mat.at(y, x);  // {x: B, y: G, z: R, w: A}
-			const b = pixel.x;
-			const g = pixel.y;
-			const r = pixel.z;
-			const a = pixel.w;
-
-			if (a > 0 && !(r === 0 && g === 0 && b === 0)) {
-				if (left === -1) left = x;
-				right = x;
-			}
-		}
-
-		if (left !== -1 && right !== -1) {
-			widths[y] = right - left + 1;
-			centers[y] = (left + right) / 2;
-		}
-	}
-
-	return {
-		widths,
-		centers,
-	};
-}
-
 function medianIndex(arr) {
 	const filtered = arr
 		.map((v, i) => ({ v, i }))
@@ -352,17 +315,20 @@ function tracking_handler(objects) {
 	const best = objects.reduce((max, obj) =>
 		obj.score > max.score ? obj : max
 	);
-	const info = analyzeObject(best.mask);
-	const yMedian = medianIndex(info.widths);
+	const yMedian = medianIndex(best.widths);
 	if (yMedian < 0) {
 		stop_robot();
 		return;
 	}
-	const obj_width = info.widths[yMedian];
-	const obj_center = info.centers[yMedian];
-	if (obj_width / img_width > 0.3) {
-		console.log("tracking : too near");
+	const obj_width = best.widths[yMedian];
+	const obj_center = best.centers[yMedian];
+	if (obj_width > 20) {
+		console.log("tracking : done");
 		stop_robot();
+		setTimeout(() => {
+			stop_robot();
+		}, 200);
+		m_drive_submode = "";
 		return;
 	}
 
@@ -739,7 +705,7 @@ function main() {
 						record_waypoints_handler(tmp_img);
 
 						if (m_drive_submode == "TRACKING") {
-							if(now - m_object_tracking_objects_ts > 5000){
+							if(now - m_object_tracking_objects_ts > 3000){
 								tracking_handler([]);//stop_robot
 							}else{
 								tracking_handler(m_object_tracking_objects);
