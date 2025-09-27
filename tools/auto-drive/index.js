@@ -322,7 +322,8 @@ function tracking_handler(objects) {
 	}
 	const obj_width = best.widths[yMedian];
 	const obj_center = best.centers[yMedian];
-	if (obj_width > 20) {
+	const obj_width_target = 20;
+	if (obj_width > obj_width_target) {
 		console.log("tracking : done");
 		stop_robot();
 		setTimeout(() => {
@@ -337,6 +338,7 @@ function tracking_handler(objects) {
 	const angle = pixelToAngle(x, img_width, fov);
 	console.log(`DEBUG : x=${x}, angle=${angle}, width=${obj_width}`);
 	if (Math.abs(angle) < forward_range) {
+		const minus = obj_width / obj_width_target * 5;
 		move_pwm_robot(1.0, angle);
 	} else {
 		rotate_robot(angle);
@@ -353,21 +355,21 @@ function move_robot(distance) {
 	}
 }
 
-function move_pwm_robot(distance, angle) {
+function move_pwm_robot(distance, angle, minus=0) {
 
 	let ts = Date.now();
 	if (distance > 0) {
 		const left_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const right_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
-		const left_pwd = m_options.forward_pwm_base - Math.round(left_minus);
-		const right_pwd = m_options.forward_pwm_base - Math.round(right_minus);
+		const left_pwd = m_options.forward_pwm_base - Math.round(left_minus) - minus;
+		const right_pwd = m_options.forward_pwm_base - Math.round(right_minus) - minus;
 		console.log("move_forward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd * m_options.lr_ratio_forward} ${right_pwd} ${ts}`);
 	} else {
 		const left_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const right_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
-		const left_pwd = m_options.backward_pwm_base - Math.round(left_minus);
-		const right_pwd = m_options.backward_pwm_base - Math.round(right_minus);
+		const left_pwd = m_options.backward_pwm_base - Math.round(left_minus) - minus;
+		const right_pwd = m_options.backward_pwm_base - Math.round(right_minus) - minus;
 		console.log("move_backward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd * m_options.lr_ratio_backward} ${right_pwd} ${ts}`);
 	}
@@ -980,7 +982,8 @@ function command_handler(cmd) {
 			}
 			break;
 		case "STOP_AUTO":
-			if (m_drive_mode == "STANBY") {
+			if (m_drive_mode == "STANBY" || m_drive_mode == "RECORD") {
+				console.log("skip STOP_AUTO : drive mode", m_drive_mode);
 				return;
 			}
 

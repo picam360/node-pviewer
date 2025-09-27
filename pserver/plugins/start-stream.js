@@ -17,12 +17,19 @@ var self = {
             name: PLUGIN_NAME,
             init_options: function (options) {
             },
-            command_handler: function (cmd, args, conn) {
+            command_handler: function (cmd, _args, conn) {
                 switch(cmd){
                 case "start_stream":
-                    plugin.start_stream(args, () => {
-                        console.log("done");
-                    });
+                    const args_ary = (Array.isArray(_args) ? _args : [_args]);
+                    for (const args of args_ary) {
+                        const pstdef = (typeof args === "string") ? args : args.pstdef;
+                        const delay_ms = (typeof args === "string") ? 0 : args.delay_ms;
+                        setTimeout(() => {
+                            plugin.start_stream(pstdef, () => {
+                                console.log("done");
+                            });
+                        }, delay_ms || 0);
+                    }
                     break;
                 default:
                     break;
