@@ -680,49 +680,64 @@ function main() {
 			}
 		});
 
-		let tmp_img = [];
-		let last_ts = Date.now();
-		subscriber.subscribe('pserver-vslam-pst', (data, key) => {
-			const now = Date.now();
-			last_ts = now;
-			if (data.length == 0 && tmp_img.length != 0) {
-				if (m_options["vord_enabled"] && tmp_img.length == 3) {
-					const jpeg_data = tmp_img[2];
-
-					if (m_object_tracking_state == 1) {
-						m_object_tracking_state = 2;
-
-						m_client.publish('picam360-vord', JSON.stringify({
-							"cmd": "detect",
-							"test": false,
-							"show": m_options["vord_debug"],
-							"jpeg_data": jpeg_data.toString("base64"),
-						}));
-					}
-				}
-				switch (m_drive_mode) {
-					case "RECORD":
-						record_waypoints_handler(tmp_img);
-
-						if (m_drive_submode == "TRACKING") {
-							if(now - m_object_tracking_objects_ts > 3000){
-								tracking_handler([]);//stop_robot
-							}else{
-								tracking_handler(m_object_tracking_objects);
+		let last_vslam_pst_ts = Date.now();
+		{
+			let tmp_img = [];
+			subscriber.subscribe('pserver-vslam-pst', (data, key) => {
+				const now = Date.now();
+				last_vslam_pst_ts = now;
+				if (data.length == 0 && tmp_img.length != 0) {
+					switch (m_drive_mode) {
+						case "RECORD":
+							record_waypoints_handler(tmp_img);
+	
+							if (m_drive_submode == "TRACKING") {
+								if(now - m_object_tracking_objects_ts > 3000){
+									tracking_handler([]);//stop_robot
+								}else{
+									tracking_handler(m_object_tracking_objects);
+								}
 							}
-						}
-						break;
-					case "AUTO":
-						if (m_auto_drive_ready) {
-							auto_drive_handler(tmp_img);
-						}
-						break;
+							break;
+						case "AUTO":
+							if (m_auto_drive_ready) {
+								auto_drive_handler(tmp_img);
+							}
+							break;
+					}
+					tmp_img = [];
+				} else {
+					tmp_img.push(Buffer.from(data, 'base64'));
 				}
-				tmp_img = [];
-			} else {
-				tmp_img.push(Buffer.from(data, 'base64'));
-			}
-		});
+			});
+		}
+		let last_vord_pst_ts = Date.now();
+		if(m_options["vord_enabled"]){
+			let tmp_img = [];
+			subscriber.subscribe('pserver-vord-pst', (data, key) => {
+				const now = Date.now();
+				last_vord_pst_ts = now;
+				if (data.length == 0 && tmp_img.length != 0) {
+					if (tmp_img.length == 3) {
+						const jpeg_data = tmp_img[2];
+
+						if (m_object_tracking_state == 1) {
+							m_object_tracking_state = 2;
+
+							m_client.publish('picam360-vord', JSON.stringify({
+								"cmd": "detect",
+								"test": false,
+								"show": m_options["vord_debug"],
+								"jpeg_data": jpeg_data.toString("base64"),
+							}));
+						}
+					}
+					tmp_img = [];
+				} else {
+					tmp_img.push(Buffer.from(data, 'base64'));
+				}
+			});
+		}
 
 
 		subscriber.subscribe('picam360-vord-output', (data, key) => {
@@ -763,7 +778,7 @@ function main() {
 			sysinfo.latest_confidence = VslamOdometry.status.latest_confidence;
 
 
-			const elapsed = Date.now() - last_ts;
+			const elapsed = Date.now() - last_vslam_pst_ts;
 			if (elapsed > 1000) {
 				m_client.publish('pserver-auto-drive-info', JSON.stringify({
 					"mode": m_drive_mode,
