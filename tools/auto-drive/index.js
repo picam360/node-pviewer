@@ -278,6 +278,9 @@ function record_waypoints_handler(tmp_img) {
 }
 
 //START OF TRACKING CODE
+function countNonZero(arr) {
+  return arr.filter(x => x !== 0).length;
+}
 function medianIndex(arr) {
 	const filtered = arr
 		.map((v, i) => ({ v, i }))
@@ -293,6 +296,22 @@ function medianIndex(arr) {
 	} else {
 		return filtered[mid].i;
 	}
+}
+
+function getBest(objects, minCount) {
+  // scoreだけの配列を作ってカウント
+  const scores = objects.map(o => o.score);
+  const nonZeroCount = countNonZero(scores);
+
+  if (nonZeroCount <= minCount) {
+    // 規定数以下なら無視（nullなどを返す）
+    return null;
+  }
+
+  // reduceで最大値を返す
+  return objects.reduce((max, obj) =>
+    obj.score > max.score ? obj : max
+  );
 }
 
 function pixelToAngle(dx, width = 512, fovDeg = 120) {
@@ -315,16 +334,18 @@ function tracking_handler(objects) {
 	const best = objects.reduce((max, obj) =>
 		obj.score > max.score ? obj : max
 	);
+	const yLength = countNonZero(best.widths);
 	const yMedian = medianIndex(best.widths);
-	if (yMedian < 0) {
+	if (yMedian < 0 || yLength < 50) {
+		console.log("tracking : skip", yMedian, yLength);
 		stop_robot();
 		return;
 	}
 	const obj_width = best.widths[yMedian];
 	const obj_center = best.centers[yMedian];
-	const obj_width_target = 20;
+	const obj_width_target = 30;
 	if (obj_width > obj_width_target) {
-		console.log("tracking : done");
+		console.log("tracking : done", obj_width_target, obj_width, yLength);
 		stop_robot();
 		setTimeout(() => {
 			stop_robot();
@@ -336,10 +357,10 @@ function tracking_handler(objects) {
 	const x = obj_center - img_width / 2;
 	const forward_range = 45;
 	const angle = pixelToAngle(x, img_width, fov);
-	console.log(`DEBUG : x=${x}, angle=${angle}, width=${obj_width}`);
+	console.log(`DEBUG : x=${x}, angle=${angle}, width=${obj_width}, yLength=${yLength}`);
 	if (Math.abs(angle) < forward_range) {
 		const minus = obj_width / obj_width_target * 5;
-		move_pwm_robot(1.0, angle);
+		move_pwm_robot(1.0, angle, minus);
 	} else {
 		rotate_robot(angle);
 	}
