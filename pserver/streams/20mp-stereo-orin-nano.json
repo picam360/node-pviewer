@@ -1,0 +1,38 @@
+{
+#    "def" : "dealer name=@DEALER.NAME@",
+    "def" : "dealer name=@DEALER.NAME@ ! pipe name=encoder t=H265",
+    "params" : {
+#        "@DEALER.NAME@.def" : "dup name=dup_20mp_stereo ! pcuda_remapper name=remapper debalgo=malvar debayer=I420 sh=0 rgb_gain=@APP.RGB_GAIN@ gamma=2.4 ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
+        "@DEALER.NAME@.def" : "dup name=dup_20mp_stereo ! pcuda_remapper name=remapper ho=1 edge_r=\"0.2\" s=@APP.SIZE@ n_vstreams=@APP.N_STREAMS@",
+        "dup_20mp_stereo.def" : "mux name=mux",
+        "mux.vin0" : "argus_capture name=capture devid=0 s=@APP.CAM0@ fmt=BA10 ae_target=@V4L2.AE_TARGET@ ae_cycle=@APP.FPS@ cudamem=@V4L2.CUDAMEM@",
+        "mux.vin0.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET0.X@,@CALIB.DEG_OFFSET0.Y@,@CALIB.DEG_OFFSET0.Z@\" lens_params=\"@CALIB.LENS0@\" />",
+        "mux.vin1" : "argus_capture name=capture devid=1 s=@APP.CAM1@ fmt=BA10 ae_target=@V4L2.AE_TARGET@ ae_cycle=@APP.FPS@ cudamem=@V4L2.CUDAMEM@",
+        "mux.vin1.capture.meta" : "<meta maptype=\"FISH\" deg_offset=\"@CALIB.DEG_OFFSET1.X@,@CALIB.DEG_OFFSET1.Y@,@CALIB.DEG_OFFSET1.Z@\" lens_params=\"@CALIB.LENS1@\" />",
+        "renderer.realtime" : "1",
+        "encoder.def" : "gst-launch-1.0 -q fdsrc ! rawvideoparse width=@IWIDTH@ height=@IHEIGHT@ framerate=@APP.FPS@/1 format=i420 ! x265enc key-int-max=300 bitrate=@APP.BITRATE_KBPS@ speed-preset=ultrafast tune=zerolatency qp=30 ! h265parse ! video/x-h265,stream-format=byte-stream,alignment=nal ! fdsink"
+#        "encoder.def" : "gst-launch-1.0 -q fdsrc ! rawvideoparse width=@IWIDTH@ height=@IHEIGHT@ framerate=@APP.FPS@/1 format=i420 ! x264enc key-int-max=300 bitrate=@APP.BITRATE_KBPS@ speed-preset=ultrafast tune=zerolatency sliced-threads=false qp-max=30 ! h264parse ! video/x-h264,stream-format=byte-stream,alignment=nal ! fdsink"
+    },
+    "replacements" : {
+        "@DEALER.NAME@" : "dealer",
+        "@APP.N_STREAMS@" : "1",
+        "@APP.BITRATE_KBPS@" : "2500",
+        "@APP.SIZE@" : "2048x1024",
+        "@APP.CAM0@" : "5120x3840@@APP.FPS@:/dev/video0",
+        "@APP.CAM1@" : "5120x3840@@APP.FPS@:/dev/video1",
+        "@APP.FPS@" : "15",
+#        "@APP.RGB_GAIN@" : "1.2,1.0,2.4",
+        "@APP.RGB_GAIN@" : "1.4,1.0,2.0",
+        "@CALIB.DEG_OFFSET0.X@" : "-90",
+        "@CALIB.DEG_OFFSET0.Y@" : "180",
+        "@CALIB.DEG_OFFSET0.Z@" : "0",
+        "@CALIB.DEG_OFFSET1.X@" : "-90",
+        "@CALIB.DEG_OFFSET1.Y@" : "180",
+        "@CALIB.DEG_OFFSET1.Z@" : "0",
+        "@CALIB.LENS0@" : "file:///etc/pserver/lens-params0.json",
+        "@CALIB.LENS1@" : "file:///etc/pserver/lens-params1.json",
+        "@V4L2.CUDAMEM@" : "0",
+        "@V4L2.SHARPNESS@" : "7",
+        "@V4L2.AE_TARGET@" : "20000"
+    }
+}
