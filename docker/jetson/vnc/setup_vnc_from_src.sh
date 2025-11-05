@@ -1,5 +1,6 @@
 
 if ! command -v x0vncserver >/dev/null 2>&1; then
+    sudo apt-get update
     sudo apt-get -y install libjpeg-dev libfltk1.3-dev libxtst-dev libxdamage-dev libgmp-dev gettext libpam0g-dev libpixman-1-dev libxrender-dev
 
     git clone --depth=1 https://github.com/TigerVNC/tigervnc.git
