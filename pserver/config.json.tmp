@@ -29,6 +29,7 @@
             "streams/20mp-recorder.json",
             "streams/20mp-player.json",
             "streams/20mp-converter.json",
+            "streams/20mp-stereo-argus.json",
             "streams/pantilt.json",
             "streams/pantilt-calib.json",
             "streams/vslam.json",
