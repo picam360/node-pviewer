@@ -61,7 +61,8 @@ let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
 let m_object_tracking_state = 0;
 let m_object_tracking_objects = [];
-let m_object_tracking_objects_ts = 0;
+let m_object_tracking_objects_st = 0;
+let m_object_tracking_objects_et = 0;
 const ODOMETRY_TYPE = {
 	GPS: "GPS",
 	ENCODER: "ENCODER",
@@ -84,10 +85,16 @@ let m_odometry_conf = {
 function launchVord() {
 	const vord_path = "/home/picam360/github/picam360-vord";
 	const vord_options = "";
-	const command = `
+	//perceptree
+    // const command = `
+    //     source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
+    //     conda activate perceptree && \
+    //     python ${vord_path}/vord.py ${vord_options}
+    // `;
+    const command = `
         source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
-        conda activate perceptree && \
-        python ${vord_path}/vord.py ${vord_options}
+        conda activate yolo_v8_py310 && \
+        PYTHONPATH=/usr/lib/python3.10/dist-packages:$PYTHONPATH python ${vord_path}/vord-person.py ${vord_options}
     `;
 	const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vord_path) });
 	vslam_process.stdout.on('data', (data) => {
@@ -299,16 +306,15 @@ function medianIndex(arr) {
 }
 
 function getBest(objects, minCount) {
-  // scoreだけの配列を作ってカウント
+  // score
   const scores = objects.map(o => o.score);
   const nonZeroCount = countNonZero(scores);
 
   if (nonZeroCount <= minCount) {
-    // 規定数以下なら無視（nullなどを返す）
     return null;
   }
 
-  // reduceで最大値を返す
+  // return maximum
   return objects.reduce((max, obj) =>
     obj.score > max.score ? obj : max
   );
@@ -715,7 +721,7 @@ function main() {
 							record_waypoints_handler(tmp_img);
 	
 							if (m_drive_submode == "TRACKING") {
-								if(now - m_object_tracking_objects_ts > 3000){
+								if(now - m_object_tracking_objects_et > 3000){
 									tracking_handler([]);//stop_robot
 								}else{
 									tracking_handler(m_object_tracking_objects);
@@ -737,7 +743,8 @@ function main() {
 		let last_vord_pst_ts = Date.now();
 		if(m_options["vord_enabled"]){
 			let tmp_img = [];
-			subscriber.subscribe('pserver-vord-pst', (data, key) => {
+			//subscriber.subscribe('pserver-vord-pst', (data, key) => {
+			subscriber.subscribe('pserver-vslam-pst', (data, key) => {
 				const now = Date.now();
 				last_vord_pst_ts = now;
 				if (data.length == 0 && tmp_img.length != 0) {
@@ -746,6 +753,7 @@ function main() {
 
 						if (m_object_tracking_state == 1) {
 							m_object_tracking_state = 2;
+							m_object_tracking_objects_st = now;
 
 							m_client.publish('picam360-vord', JSON.stringify({
 								"cmd": "detect",
@@ -774,11 +782,11 @@ function main() {
 			} else if (params['type'] == 'detect') {
 				const now = Date.now();
 				m_object_tracking_state = 1;
+				m_object_tracking_objects_et = now;
 				m_object_tracking_objects = params['objects'];
-				console.log(`m_object_tracking_objects updated in ${now - m_object_tracking_objects_ts}ms`);
-				m_object_tracking_objects_ts = now;
+				console.log(`m_object_tracking_objects updated in ${m_object_tracking_objects_et - m_object_tracking_objects_st}ms`);
 
-				//console.log(params['objects']);
+				console.log(params['objects']);
 			}
 		});
 
