@@ -374,16 +374,15 @@ function medianIndex(arr) {
 }
 
 function getBest(objects, minCount) {
-  // score?????????????
+  // score
   const scores = objects.map(o => o.score);
   const nonZeroCount = countNonZero(scores);
 
   if (nonZeroCount <= minCount) {
-    // ??????????null??????
     return null;
   }
 
-  // reduce???????
+  // return maximum
   return objects.reduce((max, obj) =>
     obj.score > max.score ? obj : max
   );
