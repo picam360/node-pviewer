@@ -28,6 +28,7 @@ let m_options = {
 
 	//juki
 	"tolerance_distance": 2.0,
+	"tolerance_shift": 0.5,
 	"forward_pwm_base": 50,
 	"backward_pwm_base": 46,
 	"lr_ratio_forward": 1.0,
@@ -37,6 +38,7 @@ let m_options = {
 
 	// //for jetchariot
 	// "tolerance_distance" : 0.1,
+	// "tolerance_shift": 0.1,
 	// "forward_pwm_base" : 75,
 	// "backward_pwm_base" : 75,
 	// "lr_ratio_forward" : 0.999,
@@ -70,7 +72,7 @@ const ODOMETRY_TYPE = {
 };
 let m_odometry_conf = {
 	odom_type: ODOMETRY_TYPE.VSLAM,
-	//	odom_type : ODOMETRY_TYPE.ENCODER,
+	//odom_type : ODOMETRY_TYPE.ENCODER,
 	GPS: {
 		enabled: true
 	},
@@ -330,6 +332,15 @@ function pixelToAngle(dx, width = 512, fovDeg = 120) {
 	return angleRad * 180 / Math.PI;
 }
 
+function check_person_detected() {
+	for(const obj of m_object_tracking_objects){
+		if(obj.label == "person"){
+			return true;
+		}
+	}
+	return false;
+}
+
 function tracking_handler(objects) {
 	if (!objects || objects.length == 0) {
 		stop_robot();
@@ -545,7 +556,7 @@ function auto_drive_handler(tmp_img) {
 				rotate_robot(headingError);
 				m_auto_drive_heading_tuning = true;
 			} else {
-				let tune = (distanceToTarget > 0 ? -1 : 1) * shiftToTarget * 100;
+				let tune = (distanceToTarget > 0 ? -1 : 1) * shiftToTarget / m_options.tolerance_shift * 60;
 				move_pwm_robot(distanceToTarget, headingError + tune);
 				//move_robot(distanceToTarget);
 				m_auto_drive_heading_tuning = false;
@@ -729,7 +740,12 @@ function main() {
 							}
 							break;
 						case "AUTO":
-							if (m_auto_drive_ready) {
+							if(now - m_object_tracking_objects_et > 3000){
+								console.log("Valid object tracking is required for safety.");
+							}else if(check_person_detected()){
+								console.log("Person detected. System stop vehicle for safety");
+								stop_robot();
+							}else if (m_auto_drive_ready) {
 								auto_drive_handler(tmp_img);
 							}
 							break;
