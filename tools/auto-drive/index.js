@@ -35,6 +35,34 @@ let m_options = {
 	"lr_ratio_backward": 1.0,
 	"pwm_range": 10,
 	"pwm_control_gain": 0.06,
+	"move_forward_camera": "backward",
+	"move_backward_camera": "backward",
+	"cameras": {
+		"forward": {
+			"cam_offset" : {
+				"x" : 0.0,
+				"y" : 2.2,
+				//"y" : 2.228590172834311,
+				"heading" : 0,
+				//"heading" : -8.5,
+			},
+			"cam_heading" : 0,//physical
+			"pst_channel": "pserver-forward-pst",
+			"check_person_detected": true,
+		},
+		"backward": {
+			"cam_offset" : {
+				"x" : 0.0,
+				"y" : 2.2,
+				//"y" : 2.228590172834311,
+				"heading" : 0,
+				//"heading" : -8.5,
+			},
+			"cam_heading" : 0,//physical
+			"pst_channel": "pserver-backward-pst",
+			"check_person_detected": true,
+		}
+	},
 
 	// //for jetchariot
 	// "tolerance_distance" : 0.1,
@@ -45,6 +73,34 @@ let m_options = {
 	// "lr_ratio_backward" : 1.050,
 	// "pwm_range" : 75,
 	// "pwm_control_gain" : 0.06,
+	// "move_forward_camera": "forward",
+	// "move_backward_camera": "forward",
+	// "cameras": {
+	// 	"forward": {
+	// 		"cam_offset" : {
+	// 			"x" : 0.0,
+	// 			"y" : 2.2,
+	// 			//"y" : 2.228590172834311,
+	// 			"heading" : 0,
+	// 			//"heading" : -8.5,
+	// 		},
+	// 		"cam_heading" : 0,//physical
+	// 		"pst_channel": "pserver-forward-pst",
+	//		"check_person_detected": true,
+	// 	},
+	// 	"backward": {
+	// 		"cam_offset" : {
+	// 			"x" : 0.0,
+	// 			"y" : 2.2,
+	// 			//"y" : 2.228590172834311,
+	// 			"heading" : 0,
+	// 			//"heading" : -8.5,
+	// 		},
+	// 		"cam_heading" : 0,//physical
+	// 		"pst_channel": "pserver-backward-pst",
+	//		"check_person_detected": false,
+	// 	}
+	// },
 };
 let m_argv = null;
 let m_socket = null;
@@ -58,13 +114,23 @@ let m_auto_drive_ready_first_launch = true;
 let m_auto_drive_ready = false;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = 0;
+let m_auto_drive_direction = "";//forward or backward
 let m_auto_drive_heading_tuning = false;
 let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
-let m_object_tracking_state = 0;
-let m_object_tracking_objects = [];
-let m_object_tracking_objects_st = 0;
-let m_object_tracking_objects_et = 0;
+let m_object_tracking = {
+	"state": 0,
+	"forward": {
+		"objects": [],
+		"st": 0,
+		"et": 0,
+	},
+	"backward": {
+		"objects": [],
+		"st": 0,
+		"et": 0,
+	},
+}
 const ODOMETRY_TYPE = {
 	GPS: "GPS",
 	ENCODER: "ENCODER",
@@ -308,15 +374,16 @@ function medianIndex(arr) {
 }
 
 function getBest(objects, minCount) {
-  // score
+  // score?????????????
   const scores = objects.map(o => o.score);
   const nonZeroCount = countNonZero(scores);
 
   if (nonZeroCount <= minCount) {
+    // ??????????null??????
     return null;
   }
 
-  // return maximum
+  // reduce???????
   return objects.reduce((max, obj) =>
     obj.score > max.score ? obj : max
   );
@@ -332,8 +399,8 @@ function pixelToAngle(dx, width = 512, fovDeg = 120) {
 	return angleRad * 180 / Math.PI;
 }
 
-function check_person_detected() {
-	for(const obj of m_object_tracking_objects){
+function check_person_detected(direction) {
+	for(const obj of m_object_tracking[direction].objects){
 		if(obj.label == "person"){
 			return true;
 		}
@@ -395,21 +462,40 @@ function move_robot(distance) {
 
 function move_pwm_robot(distance, angle, minus=0) {
 
-	let ts = Date.now();
 	if (distance > 0) {
+		m_auto_drive_direction = "forward";
+	}else{
+		m_auto_drive_direction = "backward";
+	}
+
+	let now = Date.now();
+	
+	if(m_options.cameras[m_auto_drive_direction].check_person_detected !== false){
+		if(now - m_object_tracking[m_auto_drive_direction].et > 3000){
+			console.log("Valid object tracking is required for safety.");
+			stop_robot();
+			return;
+		}else if(check_person_detected(m_auto_drive_direction)){
+			console.log("Person detected. System stop vehicle for safety");
+			stop_robot();
+			return;
+		}
+	}
+
+	if (m_auto_drive_direction == "forward") {
 		const left_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const right_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const left_pwd = m_options.forward_pwm_base - Math.round(left_minus) - minus;
 		const right_pwd = m_options.forward_pwm_base - Math.round(right_minus) - minus;
 		console.log("move_forward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
-		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd * m_options.lr_ratio_forward} ${right_pwd} ${ts}`);
-	} else {
+		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd * m_options.lr_ratio_forward} ${right_pwd} ${now}`);
+	} else if (m_auto_drive_direction == "backward") {
 		const left_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const right_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
 		const left_pwd = m_options.backward_pwm_base - Math.round(left_minus) - minus;
 		const right_pwd = m_options.backward_pwm_base - Math.round(right_minus) - minus;
 		console.log("move_backward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
-		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd * m_options.lr_ratio_backward} ${right_pwd} ${ts}`);
+		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd * m_options.lr_ratio_backward} ${right_pwd} ${now}`);
 	}
 }
 
@@ -723,29 +809,44 @@ function main() {
 		let last_vslam_pst_ts = Date.now();
 		{
 			let tmp_img = [];
-			subscriber.subscribe('pserver-vslam-pst', (data, key) => {
+			subscriber.subscribe(m_options.cameras.forward.pst_channel, (data, key) => {
+				const direction = "forward";
 				const now = Date.now();
 				last_vslam_pst_ts = now;
 				if (data.length == 0 && tmp_img.length != 0) {
+					if (tmp_img.length == 3) {
+						const jpeg_data = tmp_img[2];
+
+						if(m_options["vord_enabled"] && m_auto_drive_direction == direction){
+							if (m_object_tracking.state == 1) {
+								m_object_tracking.state = 2;
+								m_object_tracking[direction].st = now;
+
+								m_client.publish('picam360-vord', JSON.stringify({
+									"cmd": "detect",
+									"test": false,
+									"show": m_options["vord_debug"],
+									"jpeg_data": jpeg_data.toString("base64"),
+									"user_data": { direction },
+								}));
+							}
+						}
+					}
+
 					switch (m_drive_mode) {
 						case "RECORD":
 							record_waypoints_handler(tmp_img);
 	
 							if (m_drive_submode == "TRACKING") {
-								if(now - m_object_tracking_objects_et > 3000){
+								if(now - m_object_tracking[direction].et > 3000){
 									tracking_handler([]);//stop_robot
 								}else{
-									tracking_handler(m_object_tracking_objects);
+									tracking_handler(m_object_tracking[direction].objects);
 								}
 							}
 							break;
 						case "AUTO":
-							if(now - m_object_tracking_objects_et > 3000){
-								console.log("Valid object tracking is required for safety.");
-							}else if(check_person_detected()){
-								console.log("Person detected. System stop vehicle for safety");
-								stop_robot();
-							}else if (m_auto_drive_ready) {
+							if (m_auto_drive_ready) {
 								auto_drive_handler(tmp_img);
 							}
 							break;
@@ -756,27 +857,30 @@ function main() {
 				}
 			});
 		}
-		let last_vord_pst_ts = Date.now();
-		if(m_options["vord_enabled"]){
+		m_options.cameras.backward.last_pst_ts = Date.now();
+		{
 			let tmp_img = [];
-			//subscriber.subscribe('pserver-vord-pst', (data, key) => {
-			subscriber.subscribe('pserver-vslam-pst', (data, key) => {
+			subscriber.subscribe(m_options.cameras.backward.pst_channel, (data, key) => {
+				const direction = "backward";
 				const now = Date.now();
-				last_vord_pst_ts = now;
+				m_options.cameras.backward.last_pst_ts = now;
 				if (data.length == 0 && tmp_img.length != 0) {
 					if (tmp_img.length == 3) {
 						const jpeg_data = tmp_img[2];
 
-						if (m_object_tracking_state == 1) {
-							m_object_tracking_state = 2;
-							m_object_tracking_objects_st = now;
-
-							m_client.publish('picam360-vord', JSON.stringify({
-								"cmd": "detect",
-								"test": false,
-								"show": m_options["vord_debug"],
-								"jpeg_data": jpeg_data.toString("base64"),
-							}));
+						if(m_options["vord_enabled"] && m_auto_drive_direction == direction){
+							if (m_object_tracking.state == 1) {
+								m_object_tracking.state = 2;
+								m_object_tracking[direction].st = now;
+	
+								m_client.publish('picam360-vord', JSON.stringify({
+									"cmd": "detect",
+									"test": false,
+									"show": m_options["vord_debug"],
+									"jpeg_data": jpeg_data.toString("base64"),
+									"user_data": { direction },
+								}));
+							}
 						}
 					}
 					tmp_img = [];
@@ -793,14 +897,15 @@ function main() {
 
 			if (params['type'] == 'info') {
 				if (params['msg'] == 'startup') {
-					m_object_tracking_state = 1;
+					m_object_tracking.state = 1;
 				}
 			} else if (params['type'] == 'detect') {
 				const now = Date.now();
-				m_object_tracking_state = 1;
-				m_object_tracking_objects_et = now;
-				m_object_tracking_objects = params['objects'];
-				console.log(`m_object_tracking_objects updated in ${m_object_tracking_objects_et - m_object_tracking_objects_st}ms`);
+				m_object_tracking.state = 1;
+				m_object_tracking[params['user_data'].direction].et = now;
+				m_object_tracking[params['user_data'].direction].objects = params['objects'];
+				const elapsed = m_object_tracking[params['user_data'].direction].et - m_object_tracking[params['user_data'].direction].st;
+				console.log(`object_tracking (${params['user_data'].direction}) updated in ${elapsed}ms`);
 
 				console.log(params['objects']);
 			}
