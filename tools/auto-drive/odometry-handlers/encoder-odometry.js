@@ -31,18 +31,18 @@ class EncoderOdometry {
 
         "lock_gps_heading" : true,
     };
-    static settings = {//jetchariot
-        "lr_ratio_forward": 1.04,
-        "lr_ratio_backward": 0.96,
-        "right_gain" : 1.0,
-        "meter_per_pulse" : 0.00004,
-        "wheel_separation" : 0.208,
-        "imu_heading_error" : 0.0,
-        "left_direction" : -1,
-        "right_direction" : 1,
+    // static settings = {//jetchariot
+    //     "lr_ratio_forward": 1.04,
+    //     "lr_ratio_backward": 0.96,
+    //     "right_gain" : 1.0,
+    //     "meter_per_pulse" : 0.00004,
+    //     "wheel_separation" : 0.208,
+    //     "imu_heading_error" : 0.0,
+    //     "left_direction" : -1,
+    //     "right_direction" : 1,
 
-        "lock_gps_heading" : true,
-    };
+    //     "lock_gps_heading" : true,
+    // };
     constructor() {
         this.waypoints = null;
         this.waypoints_reverse = false;
@@ -313,7 +313,7 @@ class EncoderOdometry {
     }
 
     is_ready() {
-        return true;
+        return (typeof this.encoder_params.x === "number" && typeof this.encoder_params.y === "number" && typeof this.encoder_params.heading === "number");
     }
   
     push(header, meta, jpeg_data) {
@@ -332,12 +332,14 @@ class EncoderOdometry {
             const encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
             if(!this.current_encoder){
                 this.current_encoder = encoder;
+                console.log("DEBUG : ENCODER : init", encoder.left, encoder.right);
                 return false;
             }else if(Math.abs(encoder.left - this.current_encoder.left) < 5 && Math.abs(encoder.right - this.current_encoder.right) < 5){
                 //console.log("ENCODER not changed : skip");
                 return false;
             }
             this.current_encoder = encoder;
+            //console.log("DEBUG : ENCODER", encoder.left, encoder.right);
         }else{
             return false;
         }

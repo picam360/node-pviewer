@@ -695,6 +695,8 @@ function auto_drive_handler(tmp_img) {
 				m_auto_drive_heading_tuning = true;
 			} else {
 				let tune = (distanceToTarget > 0 ? -1 : 1) * shiftToTarget / m_options.tolerance_shift * 60;
+				tune = Math.max(-90, Math.min(tune, 90));
+				//console.log("DEBUG pwm", headingError, tune);
 				move_pwm_robot(distanceToTarget, headingError + tune);
 				//move_robot(distanceToTarget);
 				m_auto_drive_heading_tuning = false;
