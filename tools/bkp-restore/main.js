@@ -97,6 +97,9 @@ ipcMain.on("start-backup", async (event, { ip, folders }) => {
     const [username, password] = userpass.split(":");
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "backup-"));
+    if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+    }
 
     try {
         await ssh.connect({
@@ -105,17 +108,50 @@ ipcMain.on("start-backup", async (event, { ip, folders }) => {
             password,
             tryKeyboard: true
         });
+        const sftp = await ssh.requestSFTP();
 
-        for (const remotePath of folders) {
+        for (let remotePath of folders) {
+            let is_dir = null;
+            if(remotePath.startsWith("F ")){
+                remotePath = remotePath.substr(2);
+                is_dir = false;
+            }else if(remotePath.startsWith("D ")){
+                remotePath = remotePath.substr(2);
+                is_dir = true;
+            }
             const base = path.basename(remotePath);
             const localPath = path.join(tmpDir, base);
-            if (!fs.existsSync(localPath)) {
-                fs.mkdirSync(localPath, { recursive: true });
+            if(is_dir === null){
+                const stat = await new Promise((resolve, reject) => {
+                    sftp.stat(remotePath, (err, stats) => {
+                        if (err) return reject(err);
+                        resolve(stats);
+                    });
+                });
+                is_dir = stat.isDirectory();
             }
-            await ssh.getDirectory(localPath, remotePath, {
-                recursive: true,
-                concurrency: 5
-            });
+            if(is_dir){
+                console.log(`Backup Directory Started: ${remotePath} -> ${localPath}`);
+                await ssh.getDirectory(localPath, remotePath, {
+                    recursive: true,
+                    concurrency: 5
+                });
+                console.log(`Backup Directory Finished: ${remotePath} -> ${localPath}`);
+            }else{
+                console.log(`Backup File Started: ${remotePath} -> ${localPath}`);
+                await new Promise((resolve, reject) => {
+
+                    const read = sftp.createReadStream(remotePath);
+                    const write = fs.createWriteStream(localPath);
+
+                    write.on('close', resolve); 
+                    write.on('error', reject);
+                    read.on('error', reject);
+
+                    read.pipe(write);
+                });
+                console.log(`Backup File Finished: ${remotePath} -> ${localPath}`);
+            }
         }
 
         // sync_list.txt も保存
@@ -201,23 +237,61 @@ ipcMain.on("start-restore", async (event, { ip, zipPath }) => {
             .filter(line => line.length > 0);
 
         await ssh.connect({ host, username, password });
+        const sftp = await ssh.requestSFTP();
 
         const timestamp = getTimestampSuffix();
-        for (const folder of folders) {
-            const backupPath = `${folder}_${timestamp}`;
-            await ssh.execCommand(`if [ -d "${folder}" ]; then mv "${folder}" "${backupPath}"; fi`);
+        for (let remotePath of folders) {
+            if(remotePath.startsWith("F ")){
+                remotePath = remotePath.substr(2);
+            }else if(remotePath.startsWith("D ")){
+                remotePath = remotePath.substr(2);
+            }
+            const backupPath = `${remotePath}_${timestamp}`;
+            await ssh.execCommand(`if [ -e "${remotePath}" ]; then mv "${remotePath}" "${backupPath}"; fi`);
         }
 
-        for (const folder of folders) {
-            const base = path.basename(folder);
-            const localFolder = path.join(tmpDir, base);
-            if (fs.existsSync(localFolder)) {
-                await ssh.putDirectory(localFolder, folder, { recursive: true });
+        for (let remotePath of folders) {
+            let is_dir = null;
+            if(remotePath.startsWith("F ")){
+                remotePath = remotePath.substr(2);
+                is_dir = false;
+            }else if(remotePath.startsWith("D ")){
+                remotePath = remotePath.substr(2);
+                is_dir = true;
+            }
+            const base = path.basename(remotePath);
+            const localPath = path.join(tmpDir, base);
+            if(is_dir === null){
+                const stat = fs.statSync(localPath);
+                is_dir  = stat.isDirectory();
+            }
+            if (fs.existsSync(localPath)) {
+                if(is_dir){
+                    console.log(`Restore Directory Started: ${localPath} -> ${remotePath}`);
+                    await ssh.putDirectory(localPath, remotePath, { recursive: true });
+                    console.log(`Restore Directory Finished: ${localPath} -> ${remotePath}`);
+                }else{
+                    console.log(`Restore File Started: ${localPath} -> ${remotePath}`);
+                    const remoteDir = path.posix.dirname(remotePath);
+                    await ssh.execCommand(`mkdir -p "${remoteDir}"`);
+                    await new Promise((resolve, reject) => {
+                        const read = fs.createReadStream(localPath);
+                        const write = sftp.createWriteStream(remotePath);
+
+                        write.on('close', resolve);
+                        write.on('error', reject);
+                        read.on('error', reject);
+
+                        read.pipe(write);
+                    });
+                    console.log(`Restore File Finished: ${localPath} -> ${remotePath}`);
+                }
             } else {
                 console.warn(`ZIPに ${base} が見つかりません`);
             }
         }
 
+        console.log("リストア 完了:", folders.length);
         event.sender.send("restore-complete", folders.length);
     } catch (err) {
         event.sender.send("restore-failed", err.message);
