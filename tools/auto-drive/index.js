@@ -14,6 +14,7 @@ const xml_parser = new fxp.XMLParser({
 });
 const pif_utils = require('./pif-utils');
 const jsonc = require('jsonc-parser');
+const cv = require('opencv4nodejs');
 
 const { GpsOdometry } = require('./odometry-handlers/gps-odometry');
 const { EncoderOdometry } = require('./odometry-handlers/encoder-odometry');
@@ -48,6 +49,7 @@ let m_options = {
 			"cam_heading" : 0,//physical
 			"pst_channel": "pserver-forward-pst",
 			"check_person_detected": true,
+			"stereo_distance": 0.06,
 		},
 		"backward": {
 			"cam_offset" : {
@@ -60,6 +62,7 @@ let m_options = {
 			"cam_heading" : 180,//physical
 			"pst_channel": "pserver-backward-pst",
 			"check_person_detected": true,
+			"stereo_distance": 0.06,
 		}
 	},
 
@@ -85,6 +88,7 @@ let m_options = {
 	// 		"cam_heading" : 0,//physical
 	// 		"pst_channel": "pserver-forward-pst",
 	//		"check_person_detected": true,
+	//		"stereo_distance": 0.03,
 	// 	},
 	// 	"backward": {
 	// 		"cam_offset" : {
@@ -97,6 +101,7 @@ let m_options = {
 	// 		"cam_heading" : 180,//physical
 	// 		"pst_channel": "pserver-backward-pst",
 	//		"check_person_detected": false,
+	//		"stereo_distance": 0.03,
 	// 	}
 	// },
 };
@@ -133,6 +138,19 @@ let m_vord_tree = {
 	"state": 0,
 	"tree": {
 		"objects": [],
+		"st": 0,
+		"et": 0,
+	},
+};
+let m_depth = {
+	"state": 0,
+	"forward": {
+		"disparity": null,
+		"st": 0,
+		"et": 0,
+	},
+	"backward": {
+		"disparity": null,
 		"st": 0,
 		"et": 0,
 	},
@@ -230,6 +248,57 @@ function launchVordPerson() {
 }
 function killVordPerson() {
 	const processName = "picam360-vord-person";
+
+	try {
+		const output = execSync(`ps -eo pid,comm,args`, { encoding: "utf-8" });
+
+		const lines = output.trim().split("\n").slice(1);
+
+		const matchingPids = lines
+			.map(line => line.trim().split(/\s+/, 3)) // [pid, comm, args]
+			.filter(([pid, comm, args]) =>
+				comm === processName || args.split(" ")[0] === processName
+			)
+			.map(([pid]) => parseInt(pid));
+
+		// kill
+		for (const pid of matchingPids) {
+			console.log(`Killing PID ${pid} (${processName})`);
+			process.kill(pid);
+		}
+
+		if (matchingPids.length === 0) {
+			console.log(`No matching process found for "${processName}"`);
+		}
+
+	} catch (err) {
+		console.error("Error while killing process:", err.message);
+	}
+}
+
+function launchDepth() {
+	const vord_path = "/home/picam360/github/picam360-depth";
+	const vord_options = "";
+	const command = `
+		source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
+		conda activate raft_stereo_py310 && \
+		python ${vord_path}/raft-stereo.py ${vord_options}
+	`;
+	const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vord_path) });
+	vslam_process.stdout.on('data', (data) => {
+		console.log(`PICAM360_DEPTH STDOUT: ${data}`);
+	});
+
+	vslam_process.stderr.on('data', (data) => {
+		console.error(`PICAM360_DEPTH STDERR: ${data}`);
+	});
+
+	vslam_process.on('close', (code) => {
+		console.log(`PICAM360_DEPTH STDOUT CLOSED(: ${code})`);
+	});
+}
+function killDepth() {
+	const processName = "picam360-depth";
 
 	try {
 		const output = execSync(`ps -eo pid,comm,args`, { encoding: "utf-8" });
@@ -872,7 +941,7 @@ function main() {
 						const jpeg_data = tmp_img[2];
 
 						if(m_options["vord_enabled"] 
-							&& (m_drive_mode == "STANBY" || m_drive_mode == "RECORD" || m_drive_submode == "TRACKING")
+							&& m_drive_submode == "WAIT_TREE_SELECTED"
 							&& now - m_vord_tree["tree"].st > 1000){//1fps
 
 							if (m_vord_tree.state == 1) {
@@ -889,9 +958,8 @@ function main() {
 							}
 						}
 
-						if(m_options["vord_enabled"] && m_auto_drive_direction == direction
-							&& now - m_vord_person[direction].st > 100){//10fps
-							if (m_vord_person.state == 1) {
+						if(m_options["vord_enabled"] && (m_auto_drive_direction == direction || m_auto_drive_direction == "")){
+							if (m_vord_person.state == 1 && now - m_vord_person[direction].st > 100) {//10fps
 								m_vord_person.state = 2;
 								m_vord_person[direction].st = now;
 
@@ -900,6 +968,19 @@ function main() {
 									"test": false,
 									"show": m_options["vord_debug"],
 									"jpeg_data": jpeg_data.toString("base64"),
+									"user_data": { direction },
+								}));
+							}
+							if (m_depth.state == 1 && now - m_depth[direction].st > 500) {//2fps
+								m_depth.state = 2;
+								m_depth[direction].st = now;
+
+								m_client.publish('picam360-depth', JSON.stringify({
+									"cmd": "disparity",
+									"test": false,
+									"show": m_options["vord_debug"],
+									"jpeg_data": jpeg_data.toString("base64"),
+									"disparity": 2,
 									"user_data": { direction },
 								}));
 							}
@@ -944,9 +1025,8 @@ function main() {
 					if (tmp_img.length == 3) {
 						const jpeg_data = tmp_img[2];
 
-						if(m_options["vord_enabled"] && m_auto_drive_direction == direction
-							&& now - m_vord_person[direction].st > 100){//10fps
-							if (m_vord_person.state == 1) {
+						if(m_options["vord_enabled"] && m_auto_drive_direction == direction){
+							if (m_vord_person.state == 1 && now - m_vord_person[direction].st > 100) {//10fps
 								m_vord_person.state = 2;
 								m_vord_person[direction].st = now;
 	
@@ -955,6 +1035,19 @@ function main() {
 									"test": false,
 									"show": m_options["vord_debug"],
 									"jpeg_data": jpeg_data.toString("base64"),
+									"user_data": { direction },
+								}));
+							}
+							if (m_depth.state == 1 && now - m_depth[direction].st > 500) {//2fps
+								m_depth.state = 2;
+								m_depth[direction].st = now;
+
+								m_client.publish('picam360-depth', JSON.stringify({
+									"cmd": "disparity",
+									"test": false,
+									"show": m_options["vord_debug"],
+									"jpeg_data": jpeg_data.toString("base64"),
+									"disparity": 2,
 									"user_data": { direction },
 								}));
 							}
@@ -1020,7 +1113,76 @@ function main() {
 				const elapsed = m_vord_person[direction].et - m_vord_person[direction].st;
 				console.log(`object_tracking (${direction}) updated in ${elapsed}ms`);
 
+				if(m_depth[direction].disparity != null){
+					for(const obj of params['objects']){
+						try{
+							const sd = m_options.cameras[direction].stereo_distance;
+							const binning = 2;
+							const f = 512 / binning;
+							const disparity_map = m_depth[direction].disparity;
+							
+                            const b = Array.isArray(obj.bbox) ? obj.bbox : [0, 0, 0, 0];
+
+                            let x = b[0] ?? 0;
+                            let y = b[1] ?? 0;
+                            let w = 0;
+                            let h = 0;
+
+                            if (b.length >= 4) {
+                                // If b looks like [xmin, ymin, xmax, ymax]
+                                const looksLikeXYXY = b[2] > x && b[3] > y;
+                                if (looksLikeXYXY) {
+                                    w = b[2] - x;
+                                    h = b[3] - y;
+                                } else {
+                                    // Otherwise assume [x, y, w, h]
+                                    w = b[2];
+                                    h = b[3];
+                                }
+                            }
+							if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+								x + w > disparity_map.cols || y + h > disparity_map.rows) {
+								throw new Error("invalid param: ROI out of image bounds");
+							}
+							const roi = disparity_map.getRegion(new cv.Rect(x, y, w, h));
+							const data = roi.getDataAsArray().flat();
+							data.sort((a, b) => a - b);
+							const median = data[Math.floor(data.length / 2)];
+							const min_val = m_depth[direction].min_val;
+							const max_val = m_depth[direction].max_val;
+							const uint16_max = ((1 << 16) - 1);
+							const disparity = median / uint16_max * (max_val - min_val) + min_val;
+							const depth = sd * f / disparity;
+							obj.depth = depth;
+						}catch(err){
+							console.log(err);
+						}
+					}
+					m_client.publish('picam360-vord-person-output-ext', JSON.stringify(params));
+				}
 				console.log(params['objects']);
+			}
+		});
+
+		subscriber.subscribe('picam360-depth-output', (data, key) => {
+			//console.log(data);
+			const params = JSON.parse(data);
+
+			if (params['type'] == 'info') {
+				if (params['msg'] == 'startup') {
+					m_depth.state = 1;
+				}
+			} else if (params['type'] == 'disparity') {
+				const direction = params['user_data'].direction;
+				const now = Date.now();
+				m_depth.state = 1;
+				m_depth[direction].et = now;
+				const buffer = Buffer.from(params['disparity'], 'base64');
+				m_depth[direction].disparity = cv.imdecode(buffer, cv.IMREAD_UNCHANGED);//16bit png
+				m_depth[direction].min_val = params['min_val'];
+				m_depth[direction].max_val = params['max_val'];
+				const elapsed = m_depth[direction].et - m_depth[direction].st;
+				console.log(`depth (${direction}) updated in ${elapsed}ms`);
 			}
 		});
 
@@ -1029,6 +1191,8 @@ function main() {
 			launchVordPerson();
 			killVordTree();
 			launchVordTree();
+			killDepth();
+			launchDepth();
 		}
 
 		setInterval(() => {
