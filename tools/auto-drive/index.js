@@ -286,6 +286,11 @@ function launchDepth() {
 		conda activate raft_stereo_py310 && \
 		python ${vord_path}/raft-stereo.py ${vord_options}
 	`;
+	// const command = `
+	// 	source /home/picam360/miniconda3/etc/profile.d/conda.sh && \
+	// 	conda activate raft_stereo_py310 && \
+	// 	python ${vord_path}/stereo-sgbm.py ${vord_options}
+	// `;
 	const vslam_process = spawn(command, { shell: '/bin/bash', cwd: path.resolve(vord_path) });
 	vslam_process.stdout.on('data', (data) => {
 		console.log(`PICAM360_DEPTH STDOUT: ${data}`);
@@ -1162,8 +1167,12 @@ function main() {
 							const max_val = m_depth[direction].max_val;
 							const uint16_max = ((1 << 16) - 1);
 							const disparity = median / uint16_max * (max_val - min_val) + min_val;
-							const depth = sd * f / disparity;
-							obj.depth = depth;
+							if(disparity > 0){
+								const depth = sd * f / disparity;
+								obj.depth = depth;
+							}else{
+								console.log("disparity is invalid");
+							}
 						}catch(err){
 							console.log(err);
 						}
