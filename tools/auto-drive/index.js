@@ -26,6 +26,8 @@ let m_options = {
 	"reverse": false,
 	"vord_enabled": true,
 	"vord_debug": false,
+	"depth_debug": true,
+	"depth_binning": 2,
 
 	//juki
 	"tolerance_distance": 2.0,
@@ -978,9 +980,9 @@ function main() {
 								m_client.publish('picam360-depth', JSON.stringify({
 									"cmd": "disparity",
 									"test": false,
-									"show": m_options["vord_debug"],
+									"show": m_options["depth_debug"],
+									"binning": m_options["depth_binning"],
 									"jpeg_data": jpeg_data.toString("base64"),
-									"disparity": 2,
 									"user_data": { direction },
 								}));
 							}
@@ -1045,9 +1047,9 @@ function main() {
 								m_client.publish('picam360-depth', JSON.stringify({
 									"cmd": "disparity",
 									"test": false,
-									"show": m_options["vord_debug"],
+									"show": m_options["depth_debug"],
+									"binning": m_options["depth_binning"],
 									"jpeg_data": jpeg_data.toString("base64"),
-									"disparity": 2,
 									"user_data": { direction },
 								}));
 							}
@@ -1117,9 +1119,11 @@ function main() {
 					for(const obj of params['objects']){
 						try{
 							const sd = m_options.cameras[direction].stereo_distance;
-							const binning = 2;
-							const f = 512 / binning;
+							const binning = m_options["depth_binning"];
 							const disparity_map = m_depth[direction].disparity;
+							const fov_deg = 90;
+							const fov_rad = fov_deg * Math.PI / 180;
+							const f  = (disparity_map.cols / 2) / Math.tan(fov_rad / 2)
 							
                             const b = Array.isArray(obj.bbox) ? obj.bbox : [0, 0, 0, 0];
 
@@ -1140,6 +1144,12 @@ function main() {
                                     h = b[3];
                                 }
                             }
+
+							x = x / binning;
+							y = y / binning;
+							w = w / binning;
+							h = h / binning;
+
 							if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
 								x + w > disparity_map.cols || y + h > disparity_map.rows) {
 								throw new Error("invalid param: ROI out of image bounds");
