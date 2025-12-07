@@ -332,11 +332,19 @@ class EncoderOdometry {
             const encoder = JSON.parse(frame_dom['picam360:frame']['passthrough:encoder']);
             if(!this.current_encoder){
                 this.current_encoder = encoder;
+                this.current_encoder.skip = 0;
+                this.current_encoder.wait_for_init = true;
                 console.log("DEBUG : ENCODER : init", encoder.left, encoder.right);
                 return false;
             }else if(Math.abs(encoder.left - this.current_encoder.left) < 5 && Math.abs(encoder.right - this.current_encoder.right) < 5){
                 //console.log("ENCODER not changed : skip");
-                return false;
+                if(this.current_encoder.wait_for_init && this.current_encoder.skip > 10){
+                    //force init
+                    console.log("force init");
+                }else{
+                    this.current_encoder.skip++;
+                    return false;
+                }
             }
             this.current_encoder = encoder;
             //console.log("DEBUG : ENCODER", encoder.left, encoder.right);
@@ -359,7 +367,7 @@ class EncoderOdometry {
             if(typeof this.encoder_params.heading === "number"){
                 settings.heading_initial = this.encoder_params.heading;
             }else{
-                if(this.waypoints.length){
+                if(Object.keys(this.waypoints).length){
                     settings.heading_initial = EncoderOdometry.cal_heading(this.waypoints, this.waypoints_reverse);
                 }else{
                     settings.heading_initial = this.current_imu.heading;//jissaitonozure ha kouryosubeki

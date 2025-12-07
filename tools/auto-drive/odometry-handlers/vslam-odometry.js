@@ -787,7 +787,7 @@ class VslamOdometry {
 
             return true;
 
-        }else{
+        }else if(this.vslam_waypoints){//estimation
 
             this.enc_odom.push(header, meta, jpeg_data);
             this.enc_positions[this.push_cur] = this.enc_odom.getPosition();

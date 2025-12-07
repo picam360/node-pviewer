@@ -38,7 +38,8 @@ let m_options = {
 	"lr_ratio_backward": 1.0,
 	"pwm_range": 10,
 	"pwm_control_gain": 0.06,
-	"auto_drive_camera": "backward",
+	"move_forward_camera": "backward",
+	"move_backward_camera": "backward",
 	"cameras": {
 		"forward": {
 			"cam_offset" : {
@@ -77,7 +78,8 @@ let m_options = {
 	// "lr_ratio_backward" : 1.050,
 	// "pwm_range" : 75,
 	// "pwm_control_gain" : 0.06,
-	// "auto_drive_camera": "backward",
+	// "move_forward_camera": "forward",
+	// "move_backward_camera": "forward",
 	// "cameras": {
 	// 	"forward": {
 	// 		"cam_offset" : {
@@ -118,8 +120,8 @@ let m_record_pif_dirpath = "";
 let m_auto_drive_ready_first_launch = true;
 let m_auto_drive_ready = false;
 let m_auto_drive_waypoints = null;
-let m_auto_drive_cur = 0;
-let m_auto_drive_direction = "";//forward or backward
+let m_auto_drive_cur = -1;//negative value means init state
+let m_auto_drive_direction = "forward";//forward or backward
 let m_auto_drive_heading_tuning = false;
 let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
@@ -457,16 +459,6 @@ function record_waypoints_handler(tmp_img) {
 		"pif_filepath": pif_filepath,
 	}));
 
-	if (m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM && m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler) {
-		const succeeded = m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.push(header, meta, jpeg_data);
-		if (succeeded === false) {
-			if (m_options.debug) {
-				console.log(`VSLAM.hander.push skip`);
-			}
-			return;
-		}
-	}
-
 	try {
 		fs.writeFileSync(jpeg_filepath, jpeg_data);
 	} catch (err) {
@@ -534,46 +526,65 @@ function check_person_detected(direction) {
 	return false;
 }
 
-function tracking_handler(objects) {
-	if (!objects || objects.length == 0) {
+function tracking_handler(direction) {
+	if (!direction) {
 		stop_robot();
 		return;
 	}
-	const img_width = 512;
-	const fov = 120;
-	const best = objects.reduce((max, obj) =>
-		obj.score > max.score ? obj : max
-	);
-	const yLength = countNonZero(best.widths);
-	const yMedian = medianIndex(best.widths);
-	if (yMedian < 0 || yLength < 50) {
-		console.log("tracking : skip", yMedian, yLength);
-		stop_robot();
-		return;
-	}
-	const obj_width = best.widths[yMedian];
-	const obj_center = best.centers[yMedian];
-	const obj_width_target = 30;
-	if (obj_width > obj_width_target) {
-		console.log("tracking : done", obj_width_target, obj_width, yLength);
+
+	const finalize_fnc = () => {
+		console.log("tracking : done");
 		stop_robot();
 		setTimeout(() => {
 			stop_robot();
 		}, 200);
 		m_drive_submode = "";
 		return;
+	};
+
+	if (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler == null) {
+		return;//fail safe : not ready or finished or something wrong
 	}
 
-	const x = obj_center - img_width / 2;
-	const forward_range = 45;
-	const angle = pixelToAngle(x, img_width, fov);
-	console.log(`DEBUG : x=${x}, angle=${angle}, width=${obj_width}, yLength=${yLength}`);
-	if (Math.abs(angle) < forward_range) {
-		const minus = obj_width / obj_width_target * 5;
-		move_pwm_robot(1.0, angle, minus);
-	} else {
-		rotate_robot(angle);
+	const tolerance_depth = 0.5;
+	const wheel_separation = m_options["encoder_odom"]["wheel_separation"];
+
+	const sd = m_options.cameras[direction].stereo_distance;
+	const disparity_map = m_depth[direction].disparity;
+	const fov_deg = 90;
+	const fov_rad = fov_deg * Math.PI / 180;
+	const f  = (disparity_map.cols / 2) / Math.tan(fov_rad / 2);
+
+	const fw = 2 * tolerance_depth * Math.tan(fov_rad / 2);
+	const tpw = disparity_map.cols * wheel_separation / fw;
+
+	let x = (disparity_map.cols - tpw) / 2;
+	let w = tpw;
+	//above the horizon
+	let y = 0;
+	let h = disparity_map.rows / 2;
+	
+	const roi = disparity_map.getRegion(new cv.Rect(x, y, w, h));
+	const { maxVal, maxLoc, minVal, minLoc } = roi.minMaxLoc();
+
+	const min_val = m_depth[direction].min_val;
+	const max_val = m_depth[direction].max_val;
+	const uint16_max = ((1 << 16) - 1);
+	const disparity = maxVal / uint16_max * (max_val - min_val) + min_val;
+
+	if(disparity < 0){
+		stop_robot();
+		console.log("disparity is invalid");
+		return;
 	}
+	const depth = sd * f / disparity;
+	console.log(`nearest object is ${depth}m : ${tpw}pix`);
+	if(depth < tolerance_depth){
+		finalize_fnc();
+		return;
+	}
+
+	auto_drive_handler(ODOMETRY_TYPE.ENCODER, finalize_fnc);
 }
 //END OF TRACKING CODE
 
@@ -643,7 +654,7 @@ function stop_robot() {
 
 function update_auto_drive_cur(cur) {
 	m_auto_drive_cur = cur;
-	if (cur == 0) {
+	if (cur < 0) {
 		m_auto_drive_last_state = 0;
 		m_auto_drive_last_lastdistance = 0;
 	}
@@ -663,12 +674,10 @@ function update_auto_drive_waypoints(waypoints) {
 	}));
 }
 
-function auto_drive_handler(tmp_img) {
+function push_handler(tmp_img) {
+	const rets = {};
 	if (tmp_img.length != 3) {
-		return;
-	}
-	if (m_odometry_conf[m_odometry_conf.odom_type].handler == null) {
-		return;//fail safe : not ready or finished or something wrong
+		throw new Error('Invalid pif format');
 	}
 
 	const data = Buffer.concat([tmp_img[0], tmp_img[1]]);
@@ -686,26 +695,43 @@ function auto_drive_handler(tmp_img) {
 
 	const conf_keys = Object.keys(m_odometry_conf)
 	for (const key of conf_keys) {
+		let ret = false;
 		const conf = m_odometry_conf[key];
 		if (conf.handler) {
-			conf.handler.push(header, meta, tmp_img[2]);
+			ret = conf.handler.push(header, meta, tmp_img[2]);
 		}
+		rets[key] = ret;
+	}
+	return rets;
+}
+
+function auto_drive_handler(odom_type, arrived_fnc) {
+
+	if (m_odometry_conf[odom_type].handler == null) {
+		return;//fail safe : not ready or finished or something wrong
 	}
 
-	if (m_odometry_conf[m_odometry_conf.odom_type].handler.is_ready() == false) {
-		return;
-	}
+	const conf_keys = Object.keys(m_odometry_conf);
 
 	const keys = Object.keys(m_auto_drive_waypoints.src);
 	if (m_auto_drive_cur >= keys.length) {
 		return;//fail safe : finished
 	}
 
+	if (keys.length > 0){//need to check ready
+		if(m_odometry_conf[odom_type].handler.is_ready() == false) {
+			return;
+		}
+	}
+
 	let cur = m_auto_drive_cur;
+	if(cur < 0){//init state
+		cur = 0;
+	}
 	while (cur < keys.length) {
 		for (const key of conf_keys) {
 			const conf = m_odometry_conf[key];
-			if (conf.handler && conf.handler.is_ready() && conf == m_odometry_conf[m_odometry_conf.odom_type]) {
+			if (conf.handler && conf.handler.is_ready() && conf == m_odometry_conf[odom_type]) {
 				const { x, y, heading, confidence } = conf.handler.getPosition();
 				conf.x = x;
 				conf.y = y;
@@ -732,9 +758,9 @@ function auto_drive_handler(tmp_img) {
 			}
 		}
 
-		let distanceToTarget = m_odometry_conf[m_odometry_conf.odom_type].distanceToTarget;
-		let shiftToTarget = m_odometry_conf[m_odometry_conf.odom_type].shiftToTarget;
-		let headingError = m_odometry_conf[m_odometry_conf.odom_type].headingError;
+		let distanceToTarget = m_odometry_conf[odom_type].distanceToTarget;
+		let shiftToTarget = m_odometry_conf[odom_type].shiftToTarget;
+		let headingError = m_odometry_conf[odom_type].headingError;
 
 		let tolerance_distance = m_options.tolerance_distance;
 		let tolerance_heading = (m_auto_drive_heading_tuning ? 999 : 999);
@@ -817,7 +843,7 @@ function auto_drive_handler(tmp_img) {
 			"heading_error": "-",
 		}));
 
-		command_handler("STOP_AUTO");
+		arrived_fnc();
 	}
 }
 
@@ -897,7 +923,7 @@ function main() {
 			update_auto_drive_waypoints({
 				src: waypoints
 			});
-			update_auto_drive_cur(0);
+			update_auto_drive_cur(-1);
 		});
 	});
 
@@ -948,13 +974,12 @@ function main() {
 						const jpeg_data = tmp_img[2];
 
 						if(m_options["vord_enabled"] 
-							&& m_drive_submode == "WAIT_TREE_SELECTED"
+							&& m_drive_mode == "STANBY"
 							&& now - m_vord_tree["tree"].st > 1000){//1fps
 
 							if (m_vord_tree.state == 1) {
 								m_vord_tree.state = 2;
 								m_vord_tree["tree"].st = now;
-								
 
 								m_client.publish('picam360-vord-tree', JSON.stringify({
 									"cmd": "detect",
@@ -965,7 +990,7 @@ function main() {
 							}
 						}
 
-						if(m_options["vord_enabled"] && (m_auto_drive_direction == direction || m_auto_drive_direction == "")){
+						if(m_options["vord_enabled"] && m_auto_drive_direction == direction){
 							if (m_vord_person.state == 1 && now - m_vord_person[direction].st > 100) {//10fps
 								m_vord_person.state = 2;
 								m_vord_person[direction].st = now;
@@ -995,22 +1020,36 @@ function main() {
 					}
 
 					if (m_drive_mode == "RECORD" && m_drive_submode == "TRACKING") {
-						if(now - m_vord_tree["tree"].et > 3000){
-							tracking_handler([]);//stop_robot
+						if(now - m_depth["forward"].et > 1000){
+							tracking_handler(null);//stop_robot
 						}else{
-							tracking_handler(m_vord_tree["tree"].objects);
+							tracking_handler("forward");
 						}
 					}
 
-					if(m_options["auto_drive_camera"] == direction){
+					if((m_auto_drive_direction == "forward" && m_options["move_forward_camera"] == direction)
+						|| (m_auto_drive_direction == "backward" && m_options["move_backward_camera"] == direction)){
+					
 						last_vslam_pst_ts = now;
 						switch (m_drive_mode) {
 							case "RECORD":
-								record_waypoints_handler(tmp_img);
+								const ret = push_handler(tmp_img);
+								if(ret[ODOMETRY_TYPE.ENCODER]){
+									record_waypoints_handler(tmp_img);
+								}else{
+									m_client.publish('pserver-auto-drive-info', JSON.stringify({
+										"mode": "RECORD",
+										"state": "RECORDING",
+										"pif_filepath": "",
+									}));
+								}
 								break;
 							case "AUTO":
 								if (m_auto_drive_ready) {
-									auto_drive_handler(tmp_img);
+									push_handler(tmp_img);
+									auto_drive_handler(m_odometry_conf.odom_type, () => {
+										command_handler("STOP_AUTO");
+									});
 								}
 								break;
 						}
@@ -1061,15 +1100,29 @@ function main() {
 						}
 					}
 
-					if(m_options["auto_drive_camera"] == direction){
+					if((m_auto_drive_direction == "forward" && m_options["move_forward_camera"] == direction)
+						|| (m_auto_drive_direction == "backward" && m_options["move_backward_camera"] == direction)){
+
 						last_vslam_pst_ts = now;
 						switch (m_drive_mode) {
 							case "RECORD":
-								record_waypoints_handler(tmp_img);
+								const ret = push_handler(tmp_img);
+								if(ret[ODOMETRY_TYPE.ENCODER]){
+									record_waypoints_handler(tmp_img);
+								}else{
+									m_client.publish('pserver-auto-drive-info', JSON.stringify({
+										"mode": "RECORD",
+										"state": "RECORDING",
+										"pif_filepath": "",
+									}));
+								}
 								break;
 							case "AUTO":
 								if (m_auto_drive_ready) {
-									auto_drive_handler(tmp_img);
+									push_handler(tmp_img);
+									auto_drive_handler(m_odometry_conf.odom_type, () => {
+										command_handler("STOP_AUTO");
+									});
 								}
 								break;
 						}
@@ -1097,7 +1150,7 @@ function main() {
 				m_vord_tree[direction].et = now;
 				m_vord_tree[direction].objects = params['objects'];
 				const elapsed = m_vord_tree[direction].et - m_vord_tree[direction].st;
-				console.log(`object_tracking (${direction}) updated in ${elapsed}ms`);
+				console.log(`object_tracking@tree (${direction}) updated in ${elapsed}ms`);
 
 				console.log(params['objects']);
 			}
@@ -1118,7 +1171,7 @@ function main() {
 				m_vord_person[direction].et = now;
 				m_vord_person[direction].objects = params['objects'];
 				const elapsed = m_vord_person[direction].et - m_vord_person[direction].st;
-				console.log(`object_tracking (${direction}) updated in ${elapsed}ms`);
+				//console.log(`object_tracking@person (${direction}) updated in ${elapsed}ms`);
 
 				if(m_depth[direction].disparity != null){
 					for(const obj of params['objects']){
@@ -1179,7 +1232,7 @@ function main() {
 					}
 					m_client.publish('picam360-vord-person-output-ext', JSON.stringify(params));
 				}
-				console.log(params['objects']);
+				//console.log(params['objects']);
 			}
 		});
 
@@ -1201,7 +1254,7 @@ function main() {
 				m_depth[direction].min_val = params['min_val'];
 				m_depth[direction].max_val = params['max_val'];
 				const elapsed = m_depth[direction].et - m_depth[direction].st;
-				console.log(`depth (${direction}) updated in ${elapsed}ms`);
+				//console.log(`depth (${direction}) updated in ${elapsed}ms`);
 			}
 		});
 
@@ -1295,11 +1348,50 @@ function command_handler(cmd) {
 				}
 				m_record_pif_dirpath = pif_dirpath;
 				m_drive_mode = "RECORD";
-				m_drive_submode = split[1] || "";
 				m_client.publish('pserver-auto-drive-info', JSON.stringify({
 					"mode": "RECORD",
 					"state": "START_RECORD",
 				}));
+
+				if(split[1] == "TRACKING"){
+					const settings = EncoderOdometry.settings;
+					const distance = 10;
+					const dtheta = 0;
+					const waypoints = {};
+					const step = 100;
+					waypoints[0] = {
+						encoder : JSON.stringify({
+							left : 0,
+							right : 0,
+						})
+					};
+					for(let i=0;i<=step;i++){
+						const d = i * distance / step;
+						const distance_left = d - dtheta * settings.wheel_separation / 2;
+						const distance_right = d + dtheta * settings.wheel_separation / 2;
+						waypoints[i+1] = {
+							encoder : JSON.stringify({
+								left : distance_left / settings.meter_per_pulse * settings.left_direction / settings.lr_ratio_forward,
+								right : distance_right / settings.meter_per_pulse * settings.right_direction,
+							})
+						};
+					}
+
+					update_auto_drive_waypoints({
+						src: waypoints
+					});
+					update_auto_drive_cur(-1);
+
+					m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler = new EncoderOdometry();
+					m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.init(waypoints, () => {
+						m_drive_submode = "TRACKING";
+						m_auto_drive_direction = "forward";
+					}, false);
+				}else{
+					m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler = new EncoderOdometry();
+					m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.init({}, () => {
+					}, false);
+				}
 
 				if (m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM) {
 					const pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
@@ -1336,12 +1428,18 @@ function command_handler(cmd) {
 				update_auto_drive_waypoints({
 					src: waypoints
 				});
-				update_auto_drive_cur(0);
+				update_auto_drive_cur(-1);
 			});
 
 			if (m_odometry_conf.odom_type == ODOMETRY_TYPE.VSLAM && m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler) {
 				m_odometry_conf[ODOMETRY_TYPE.VSLAM].handler.reconstruction_finalize();
+				//pending deinit()
 			}
+			if (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler) {
+				m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.deinit();
+				m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler = null;
+			}
+
 			m_client.publish('pserver-auto-drive-info', JSON.stringify({
 				"mode": "RECORD",
 				"state": "STOP_RECORD",
@@ -1378,7 +1476,7 @@ function command_handler(cmd) {
 							if (cur == keys.length - 1) {
 								m_auto_drive_ready = true;
 								update_auto_drive_waypoints(msg);
-								update_auto_drive_cur(0);
+								update_auto_drive_cur(-1);
 								console.log("drive mode", m_drive_mode);
 
 								m_client.publish('pserver-auto-drive-info', JSON.stringify({
