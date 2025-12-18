@@ -17,6 +17,7 @@ const pif_utils = require('./pif-utils');
 const jsonc = require('jsonc-parser');
 
 const rclnodejs = require('rclnodejs');
+const cv = require('opencv4nodejs');
 
 let m_options = {
 	"data_filepath" : "data",
@@ -84,13 +85,23 @@ async function main() {
 		  'sensor_msgs/msg/Imu',
 		  '/imu0'
 		);
+		const cam0_publisher = ros_node.createPublisher(
+		  'sensor_msgs/msg/Image',
+		  '/cam0/image_raw'
+		);
+		const cam1_publisher = ros_node.createPublisher(
+		  'sensor_msgs/msg/Image',
+		  '/cam1/image_raw'
+		);
 
 		subscriber.subscribe('pserver-imu', (json_str, key) => {
 			try{
 				const data = JSON.parse(json_str);
-				if(!data || !data.byro || !data.accel){
+				if(!data || !data.gyro || !data.accel){
 					return;
 				}
+
+				const now = ros_node.getClock().now();
 				const msg = {
 				  header: {
 					stamp: now,
@@ -104,13 +115,13 @@ async function main() {
 					 0, 0, 0,
 					 0, 0, 0
 				  ],
-				  angular_velocity: imu_data.gyro,
+				  angular_velocity: data.gyro,
 				  angular_velocity_covariance: [
 					0.01, 0,    0,
 					0,    0.01, 0,
 					0,    0,    0.01
 				  ],
-				  linear_acceleration: imu_data.accel,
+				  linear_acceleration: data.accel,
 				  linear_acceleration_covariance: [
 					0.1, 0,   0,
 					0,   0.1, 0,
@@ -131,7 +142,46 @@ async function main() {
 		subscriber.subscribe('pserver-forward-pst', (data, key) => {
 			last_ts = Date.now();
 			if(data.length == 0 && tmp_img.length != 0){
+				const img_buffs = tmp_img;
 				tmp_img = [];
+				
+				if(img_buffs.length != 3){
+					return;
+				}
+
+				function matToRosImage(mat, frame_id, stamp) {
+					return {
+						header: {
+							stamp,
+							frame_id
+						},
+						height: mat.rows,
+						width: mat.cols,
+						encoding: 'bgr8',
+						is_bigendian: 0,
+						step: mat.cols * mat.channels,
+						data: Buffer.from(mat.getData())
+					};
+				}
+
+				const now = ros_node.getClock().now();
+				const img = cv.imdecode(img_buffs[2]); // BGR
+				const height = img.rows;
+				const width = img.cols;
+				const singleWidth = Math.floor(width / 2);
+
+				const leftMatROI  = img.getRegion(new cv.Rect(0, 0, singleWidth, height));
+				const rightMatROI = img.getRegion(new cv.Rect(singleWidth, 0, singleWidth, height));
+				const leftMat  = leftMatROI.copy();
+				const rightMat = rightMatROI.copy();
+				
+				// ---- publish ----
+				cam0_publisher.publish(
+					matToRosImage(leftMat, 'cam0', now)
+				);
+				cam1_publisher.publish(
+					matToRosImage(rightMat, 'cam1', now)
+				);
 			}else{
 				tmp_img.push(Buffer.from(data, 'base64'));
 			}
