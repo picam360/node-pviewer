@@ -2,9 +2,9 @@
 const fs = require('fs');
 const i2c = require('i2c-bus');
 let m_options = {
-    bus_num : 1,
+    bus_num : 7,
     calib_path : "/etc/pserver/imu-bno055.calib",
-    fps : 60,
+    fps : 100,
 };
 let m_mode = "CONFIG";
 
@@ -18,6 +18,11 @@ const BNO055_PWR_MODE = 0x3E;
 const BNO055_SYS_TRIGGER = 0x3F;
 const BNO055_UNIT_SEL = 0x3B;
 const BNO055_EULER_H_LSB = 0x1A;
+// Accelerometer (LSB start)
+const BNO055_ACCEL_DATA_X_LSB = 0x08;
+// Gyroscope (LSB start)
+const BNO055_GYRO_DATA_X_LSB  = 0x14;
+// Quaternion (already defined)
 const BNO055_QUATERNION_DATA_W_LSB = 0x20; // Starting register for quaternion data
 
 // BNO055 operating mode (NDOF: 9DOF fusion)
@@ -125,6 +130,104 @@ function readQuaternion(i2cBus) {
     };
 }
 
+function readVec3Int16(i2cBus, startReg) {
+    const buffer = Buffer.alloc(6);
+    i2cBus.readI2cBlockSync(
+        BNO055_I2C_ADDR,
+        startReg,
+        6,
+        buffer
+    );
+
+    let x = (buffer[1] << 8) | buffer[0];
+    let y = (buffer[3] << 8) | buffer[2];
+    let z = (buffer[5] << 8) | buffer[4];
+
+    if (x & 0x8000) x -= 65536;
+    if (y & 0x8000) y -= 65536;
+    if (z & 0x8000) z -= 65536;
+
+    return { x, y, z };
+}
+
+function readAccel(i2cBus) {
+    const raw = readVec3Int16(
+        i2cBus,
+        BNO055_ACCEL_DATA_X_LSB
+    );
+
+    // 1 LSB = 1 mg = 0.00981 m/s²
+    const scale = 0.00981;
+
+    return {
+        x: raw.x * scale,
+        y: raw.y * scale,
+        z: raw.z * scale,
+    };
+}
+
+function readGyro(i2cBus) {
+    const raw = readVec3Int16(
+        i2cBus,
+        BNO055_GYRO_DATA_X_LSB
+    );
+
+    // 1 LSB = 1/16 deg/s
+    const scale = (1.0 / 16.0) * (Math.PI / 180.0); // rad/s
+
+    return {
+        x: raw.x * scale,
+        y: raw.y * scale,
+        z: raw.z * scale,
+    };
+}
+
+function readImuBurst(i2cBus) {
+    const BNO055_BURST_START = 0x08;
+    const BNO055_BURST_LEN   = 0x20; // 32 bytes
+    const buffer = Buffer.alloc(BNO055_BURST_LEN);
+
+    i2cBus.readI2cBlockSync(
+        BNO055_I2C_ADDR,
+        BNO055_BURST_START,
+        BNO055_BURST_LEN,
+        buffer
+    );
+
+    const readInt16 = (offset) => {
+        let v = (buffer[offset + 1] << 8) | buffer[offset];
+        if (v & 0x8000) v -= 65536;
+        return v;
+    };
+
+    // ---- Accel (m/s²) ----
+    const accel = {
+        x: readInt16(0)  * 0.00981,
+        y: readInt16(2)  * 0.00981,
+        z: readInt16(4)  * 0.00981,
+    };
+
+    // ---- Gyro (rad/s) ----
+    const DEG2RAD = Math.PI / 180.0;
+    const gyro = {
+        x: readInt16(12) * (1 / 16) * DEG2RAD,
+        y: readInt16(14) * (1 / 16) * DEG2RAD,
+        z: readInt16(16) * (1 / 16) * DEG2RAD,
+    };
+
+    // ---- Quaternion ----
+    const scaleQuat = 1.0 / (1 << 14);
+    const quaternion = {
+        w: readInt16(24) * scaleQuat,
+        x: readInt16(26) * scaleQuat,
+        y: readInt16(28) * scaleQuat,
+        z: readInt16(30) * scaleQuat,
+    };
+
+    return { accel, gyro, quaternion };
+}
+
+
 // Function to calculate heading (Yaw) from quaternion
 function quaternionToHeading(quaternion) {
     const w = quaternion.w;
@@ -172,11 +275,10 @@ function main(){
         return new Promise((resolve, reject) => {
             setInterval(() => {
                 try {
-                    const quaternion = readQuaternion(i2cBus);
-                    
-                    const heading = quaternionToHeading(quaternion);
 
                     const timestamp = Date.now() / 1e3;
+                    const { accel, gyro, quaternion } = readImuBurst(i2cBus);
+                    const heading = quaternionToHeading(quaternion);
 
                     const status = getCalibrationStatus(i2cBus);
                     if(m_options.calib_path){
@@ -198,8 +300,10 @@ function main(){
 
                     const imu_value = {
                         timestamp,
-                        heading,
+                        gyro,
+                        accel,
                         quaternion,
+                        heading,
                         status,
                     };
                     if (m_options.debug) {

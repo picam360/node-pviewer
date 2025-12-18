@@ -1,0 +1,16 @@
+{
+    "name": "vio",
+    "version": "1.0.0",
+    "author": "Takuma Hirayama <hirayama.takuma@picam360.com>",
+    "license": "MIT",
+    "dependencies": {
+        "fast-xml-parser": "^4.5.0",
+        "jsonc-parser": "^3.3.1",
+        "opencv4nodejs": "^5.6.0",
+        "quaternion": "^2.0.1",
+        "rclnodejs": "^1.7.0",
+        "redis": "^4.7.0",
+        "xmlhttprequest": "^1.8.0",
+        "yargs": "^17.7.2"
+    }
+}
