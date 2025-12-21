@@ -98,19 +98,15 @@ async function main() {
 		subscriber.subscribe('pserver-imu', (json_str, key) => {
 			try {
 				const data = JSON.parse(json_str);
-				if (!data || !data.gyro || !data.accel) {
+				if (!data || !data.timestamp || !data.gyro || !data.accel) {
 					return;
 				}
 
 				imu_count++;
 
-				const now = ros_node.getClock().now();
 				const msg = {
 					header: {
-						stamp: {
-							sec: Number(now.secondsAndNanoseconds.seconds),
-							nanosec: Number(now.secondsAndNanoseconds.nanoseconds),
-						},
+						stamp: data.timestamp,
 						frame_id: 'imu'
 					},
 					orientation: {
@@ -158,13 +154,23 @@ async function main() {
 
 				frame_count++;
 
-				function matToRosImage(mat, frame_id, now) {
+				// XMLデータを取得してパース
+				const xmlData = img_buffs[0].slice(4).toString('utf-8');
+				const parser = new fxp.XMLParser({
+					ignoreAttributes: false,
+					attributeNamePrefix: "",
+				});
+				const img_dom = parser.parse(xmlData);
+				const ts_nodes = img_dom["picam360:image"].timestamp.split(',');
+				const timestamp = {
+					sec: parseInt(ts_nodes[0]),
+					nanosec: parseInt(ts_nodes[1])*1000
+				};
+
+				function matToRosImage(mat, frame_id, stamp) {
 					return {
 						header: {
-							stamp: {
-								sec: Number(now.secondsAndNanoseconds.seconds),
-								nanosec: Number(now.secondsAndNanoseconds.nanoseconds),
-							},
+							stamp,
 							frame_id
 						},
 						height: mat.rows,
@@ -176,7 +182,6 @@ async function main() {
 					};
 				}
 
-				const now = ros_node.getClock().now();
 				const img = cv.imdecode(img_buffs[2]); // BGR
 				const height = img.rows;
 				const width = img.cols;
@@ -186,8 +191,8 @@ async function main() {
 				const rightMatROI = img.getRegion(new cv.Rect(singleWidth, 0, singleWidth, height));
 				const leftMat = leftMatROI.copy();
 				const rightMat = rightMatROI.copy();
-				const cam0_msg = matToRosImage(leftMat, 'cam0', now);
-				const cam1_msg = matToRosImage(rightMat, 'cam1', now);
+				const cam0_msg = matToRosImage(leftMat, 'cam0', timestamp);
+				const cam1_msg = matToRosImage(rightMat, 'cam1', timestamp);
 
 				// ---- publish ----
 				cam0_publisher.publish(cam0_msg);

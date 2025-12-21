@@ -8,6 +8,16 @@ let m_options = {
 };
 let m_mode = "CONFIG";
 
+const t0_hr = process.hrtime.bigint();
+const t0_epoch_ns = BigInt(Date.now()) * 1_000_000n;
+function now_ns() {
+    const now_ns = t0_epoch_ns + (process.hrtime.bigint() - t0_hr);
+    return {
+        sec: Number(now_ns / 1_000_000_000n),
+        nanosec: Number(now_ns % 1_000_000_000n)
+    };
+}
+
 // BNO055 I2C address
 const BNO055_I2C_ADDR = 0x28; // (Primary address: 0x28, Secondary: 0x29)
 
@@ -276,7 +286,7 @@ function main(){
             setInterval(() => {
                 try {
 
-                    const timestamp = Date.now() / 1e3;
+                    const timestamp = now_ns();
                     const { accel, gyro, quaternion } = readImuBurst(i2cBus);
                     const heading = quaternionToHeading(quaternion);
 

@@ -2,10 +2,10 @@
 
 cam0:
   T_imu_cam: #rotation from camera to IMU R_CtoI, position of camera in IMU p_CinI
-    - [1.000, 0.000, 0.000, 0.000]
-    - [0.000, 1.000, 0.000, 0.000]
-    - [0.000, 0.000, 1.000, 0.000]
-    - [0.000, 0.000, 0.000, 1.000]
+    - [1.000,  0.000,  0.000,  0.000]
+    - [0.000,  0.000,  1.000,  0.000]
+    - [0.000, -1.000,  0.000,  0.000]
+    - [0.000,  0.000,  0.000,  1.000]
   cam_overlaps: [1]
   camera_model: pinhole
   intrinsics: [256.0, 256.0, 256.0, 256.0]   # fu, fv, cu, cv
@@ -15,10 +15,10 @@ cam0:
   rostopic: /cam0/image_raw
 cam1:
   T_imu_cam: #rotation from camera to IMU R_CtoI, position of camera in IMU p_CinI
-    - [1.000, 0.000, 0.000, 0.060]
-    - [0.000, 1.000, 0.000, 0.000]
-    - [0.000, 0.000, 1.000, 0.000]
-    - [0.000, 0.000, 0.000, 1.000]
+    - [1.000,  0.000,  0.000,  0.000]
+    - [0.000,  0.000,  1.000,  0.000]
+    - [0.000, -1.000,  0.000,  0.000]
+    - [0.000,  0.000,  0.000,  1.000]
   cam_overlaps: [0]
   camera_model: pinhole
   intrinsics: [256.0, 256.0, 256.0, 256.0]   # fu, fv, cu, cv
