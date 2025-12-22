@@ -20,11 +20,11 @@ import time
 import base64
 import threading
 import xml.etree.ElementTree as ET
+import re
 
 import redis
 import cv2
 import numpy as np
-import re
 
 
 # ============================================================
@@ -60,12 +60,10 @@ class ROS1Bridge:
     def __init__(self):
         import rospy
         from sensor_msgs.msg import Imu, Image
-        from std_msgs.msg import Header
 
         self.rospy = rospy
         self.Imu = Imu
         self.Image = Image
-        self.Header = Header
 
         rospy.init_node("openvins_bridge", anonymous=False)
 
@@ -102,7 +100,10 @@ class ROS1Bridge:
         msg.encoding = "bgr8"
         msg.step = msg.width * 3
         msg.data = mat.tobytes()
-        self.cam0_pub.publish(msg) if frame_id == "cam0" else self.cam1_pub.publish(msg)
+        if frame_id == "cam0":
+            self.cam0_pub.publish(msg)
+        else:
+            self.cam1_pub.publish(msg)
 
 
 # ============================================================
@@ -156,7 +157,10 @@ class ROS2Bridge:
         msg.encoding = "bgr8"
         msg.step = msg.width * 3
         msg.data = mat.tobytes()
-        self.cam0_pub.publish(msg) if frame_id == "cam0" else self.cam1_pub.publish(msg)
+        if frame_id == "cam0":
+            self.cam0_pub.publish(msg)
+        else:
+            self.cam1_pub.publish(msg)
 
 
 # ============================================================
@@ -165,29 +169,37 @@ class ROS2Bridge:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ros", type=int, choices=[1, 2], default=2,
-                        help="ROS version: 1 or 2")
+    parser.add_argument("--ros", type=int, choices=[1, 2], default=2)
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=6379)
     args = parser.parse_args()
 
-    # Select ROS implementation
     ros = ROS1Bridge() if args.ros == 1 else ROS2Bridge()
 
-    # Redis
     r = redis.Redis(host=args.host, port=args.port)
     pubsub = r.pubsub()
 
     tmp_img = []
 
+    # ===== FPS counters =====
+    imu_count = 0
+    img_count = 0
+    lock = threading.Lock()
+
     def on_imu(msg):
+        nonlocal imu_count
         data = json.loads(msg["data"].decode())
-        stamp = ros.make_stamp(data["timestamp"]["sec"],
-                                data["timestamp"]["nanosec"])
+        stamp = ros.make_stamp(
+            data["timestamp"]["sec"],
+            data["timestamp"]["nanosec"]
+        )
         ros.publish_imu(stamp, data["gyro"], data["accel"])
 
+        with lock:
+            imu_count += 1
+
     def on_image(msg):
-        nonlocal tmp_img
+        nonlocal tmp_img, img_count
         data = msg["data"]
 
         if len(data) == 0 and tmp_img:
@@ -196,9 +208,29 @@ def main():
             left, right = split_stereo_image(tmp_img[2])
             ros.publish_image(left, "cam0", stamp)
             ros.publish_image(right, "cam1", stamp)
+
+            with lock:
+                img_count += 1
+
             tmp_img = []
         else:
             tmp_img.append(base64.b64decode(data))
+
+    def fps_monitor():
+        nonlocal imu_count, img_count
+        interval = 5.0
+        while True:
+            time.sleep(interval)
+            with lock:
+                imu = imu_count
+                img = img_count
+                imu_count = 0
+                img_count = 0
+
+            print(
+                f"[FPS] IMU: {imu / interval:.2f} | "
+                f"IMG(stereo): {img / interval:.2f}"
+            )
 
     pubsub.subscribe(**{
         "pserver-imu": on_imu,
@@ -206,6 +238,7 @@ def main():
     })
 
     threading.Thread(target=pubsub.run_in_thread, daemon=True).start()
+    threading.Thread(target=fps_monitor, daemon=True).start()
 
     print("OpenVINS bridge started")
     while True:
