@@ -21,6 +21,8 @@ import base64
 import threading
 import xml.etree.ElementTree as ET
 import re
+import signal
+import sys
 
 import redis
 import cv2
@@ -100,14 +102,11 @@ class ROS1Bridge:
         msg.encoding = "bgr8"
         msg.step = msg.width * 3
         msg.data = mat.tobytes()
-        if frame_id == "cam0":
-            self.cam0_pub.publish(msg)
-        else:
-            self.cam1_pub.publish(msg)
+        (self.cam0_pub if frame_id == "cam0" else self.cam1_pub).publish(msg)
 
 
 # ============================================================
-# ROS2 implementation
+# ROS2
 # ============================================================
 
 class ROS2Bridge:
@@ -134,18 +133,14 @@ class ROS2Bridge:
         msg.header.stamp.sec = stamp["sec"]
         msg.header.stamp.nanosec = stamp["nanosec"]
         msg.header.frame_id = "imu"
-
         msg.orientation.w = 1.0
         msg.orientation_covariance[0] = -1.0
-
         msg.angular_velocity.x = float(gyro["x"])
         msg.angular_velocity.y = float(gyro["y"])
         msg.angular_velocity.z = float(gyro["z"])
-
         msg.linear_acceleration.x = float(accel["x"])
         msg.linear_acceleration.y = float(accel["y"])
         msg.linear_acceleration.z = float(accel["z"])
-
         self.imu_pub.publish(msg)
 
     def publish_image(self, mat, frame_id, stamp):
@@ -186,6 +181,8 @@ def main():
     img_count = 0
     lock = threading.Lock()
 
+    stop_event = threading.Event()
+
     def on_imu(msg):
         nonlocal imu_count
         data = json.loads(msg["data"].decode())
@@ -219,8 +216,7 @@ def main():
     def fps_monitor():
         nonlocal imu_count, img_count
         interval = 5.0
-        while True:
-            time.sleep(interval)
+        while not stop_event.wait(interval):
             with lock:
                 imu = imu_count
                 img = img_count
@@ -237,12 +233,23 @@ def main():
         "pserver-forward-pst": on_image
     })
 
-    threading.Thread(target=pubsub.run_in_thread, daemon=True).start()
+    pubsub_thread = pubsub.run_in_thread(sleep_time=0.01)
     threading.Thread(target=fps_monitor, daemon=True).start()
 
-    print("OpenVINS bridge started")
-    while True:
-        time.sleep(1)
+    def handle_sigint(sig, frame):
+        stop_event.set()
+
+        pubsub_thread.stop()
+        pubsub_thread.join(timeout=1.0)
+
+        pubsub.close()
+        r.close()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, handle_sigint)
+
+    print("OpenVINS bridge started (Ctrl+C to stop)")
+    signal.pause()
 
 
 if __name__ == "__main__":
