@@ -8,10 +8,25 @@ let m_options = {
 };
 let m_mode = "CONFIG";
 
-const t0_hr = process.hrtime.bigint();
-const t0_epoch_ns = BigInt(Date.now()) * 1_000_000n;
+let t0_hr = 0n;
+let t0_epoch_ns = 0n;
 function now_ns() {
-    const now_ns = t0_epoch_ns + (process.hrtime.bigint() - t0_hr);
+    const hr = process.hrtime.bigint();
+    let now_ns = t0_epoch_ns + (hr - t0_hr);
+
+    const date_now_ns = BigInt(Date.now()) * 1_000_000n;
+
+    const diff_ns = now_ns > date_now_ns
+        ? now_ns - date_now_ns
+        : date_now_ns - now_ns;
+
+    if (diff_ns > 1_000_000_000n) {
+        t0_hr = hr;
+        t0_epoch_ns = date_now_ns;
+        now_ns = date_now_ns;
+        console.log("now_ns base updated");
+    }
+
     return {
         sec: Number(now_ns / 1_000_000_000n),
         nanosec: Number(now_ns % 1_000_000_000n)
