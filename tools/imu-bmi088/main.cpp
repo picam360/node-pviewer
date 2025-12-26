@@ -2,6 +2,13 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cmath>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
+#include <string>
+#include <atomic>
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -11,7 +18,7 @@
 #include <hiredis/hiredis.h>
 #include <nlohmann/json.hpp>
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 // ===============================
 // I2C addresses
@@ -40,7 +47,25 @@ using json = nlohmann::json;
 #define GYRO_LPM1         0x11
 #define GYRO_X_LSB        0x02
 
-#define SAMPLING_RATE 800
+// ===============================
+// Sampling rates
+// ===============================
+#define SAMPLING_RATE     100
+#define SAMPLING_RATE_ACT 400
+
+// ===============================
+// Configuration
+// ===============================
+constexpr size_t QUEUE_MAX = 2;                 // Maximum number of queued messages
+
+// ===============================
+// Thread-safe bounded queue
+// ===============================
+std::mutex queue_mutex;
+std::condition_variable queue_cv;
+std::deque<std::string> message_queue;
+
+std::atomic<bool> running{true};
 
 // ===============================
 // scales
@@ -84,68 +109,111 @@ static inline int16_t i16(const uint8_t *b, int o) {
 // ===============================
 // BMI088 init
 // ===============================
-static void init_bmi088(int fd) {
+static void init_bmi088(int fd_acc, int fd_gyro) {
     // ---- accel ----
-    i2c_set_slave(fd, BMI088_ACC_ADDR);
-    if (i2c_read8(fd, ACC_CHIP_ID) != ACC_CHIP_ID_VAL) {
+    i2c_set_slave(fd_acc, BMI088_ACC_ADDR);
+    if (i2c_read8(fd_acc, ACC_CHIP_ID) != ACC_CHIP_ID_VAL) {
         fprintf(stderr, "BMI088 accel WHO_AM_I mismatch\n");
         exit(1);
     }
 
-    i2c_write8(fd, ACC_PWR_CTRL, 0x04); // active
-    i2c_write8(fd, ACC_PWR_CONF, 0x00); // normal
-    switch(SAMPLING_RATE){
+    i2c_write8(fd_acc, ACC_PWR_CTRL, 0x04); // active
+    i2c_write8(fd_acc, ACC_PWR_CONF, 0x00); // normal
+    switch(SAMPLING_RATE_ACT){
     case 100:
-        i2c_write8(fd, ACC_CONF, 0xA8);
+        i2c_write8(fd_acc, ACC_CONF, 0xA8);
         break;
     case 200:
-        i2c_write8(fd, ACC_CONF, 0xA9);
+        i2c_write8(fd_acc, ACC_CONF, 0xA9);
         break;
     case 400:
-        i2c_write8(fd, ACC_CONF, 0xAA);
+        i2c_write8(fd_acc, ACC_CONF, 0xAA);
         break;
     case 800:
-        i2c_write8(fd, ACC_CONF, 0xAB);
+        i2c_write8(fd_acc, ACC_CONF, 0xAB);
         break;
     case 1600:
-        i2c_write8(fd, ACC_CONF, 0xAC);
+        i2c_write8(fd_acc, ACC_CONF, 0xAC);
         break;
     }
-    i2c_write8(fd, ACC_RANGE,    0x00); // ±3g
+    i2c_write8(fd_acc, ACC_RANGE,    0x00); // ±3g
 
     // ---- gyro ----
-    i2c_set_slave(fd, BMI088_GYRO_ADDR);
-    if (i2c_read8(fd, GYRO_CHIP_ID) != GYRO_CHIP_ID_VAL) {
+    i2c_set_slave(fd_gyro, BMI088_GYRO_ADDR);
+    if (i2c_read8(fd_gyro, GYRO_CHIP_ID) != GYRO_CHIP_ID_VAL) {
         fprintf(stderr, "BMI088 gyro WHO_AM_I mismatch\n");
         exit(1);
     }
 
-    i2c_write8(fd, GYRO_RANGE, 0x00); // ±2000 dps
-    i2c_write8(fd, GYRO_BW,    0x02); // 400Hz
-    i2c_write8(fd, GYRO_LPM1,  0x00); // normal
+    i2c_write8(fd_gyro, GYRO_RANGE, 0x00); // ±2000 dps
+    i2c_write8(fd_gyro, GYRO_BW,    0x02); // 400Hz
+    i2c_write8(fd_gyro, GYRO_LPM1,  0x00); // normal
 
     printf("BMI088 initialized\n");
+}
+
+// ===============================
+// Redis publishing thread
+// ===============================
+void redis_thread_func() {
+    // Create Redis connection (blocking context)
+    redisContext* redis = redisConnect("127.0.0.1", 6379);
+    if (!redis || redis->err) {
+        fprintf(stderr, "Failed to connect to Redis\n");
+        return;
+    }
+
+    while (running) {
+        std::string payload;
+
+        // Wait until a message is available or shutdown is requested
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            queue_cv.wait(lock, [] {
+                return !message_queue.empty() || !running;
+            });
+
+            if (!running) {
+                break;
+            }
+
+            payload = std::move(message_queue.front());
+            message_queue.pop_front();
+        }
+
+        // Blocking publish (safe because this thread is dedicated to Redis)
+        redisCommand(
+            redis,
+            "PUBLISH pserver-imu %b",
+            payload.data(),
+            payload.size()
+        );
+    }
+
+    redisFree(redis);
 }
 
 // ===============================
 // main
 // ===============================
 int main() {
-    int fd = open("/dev/i2c-7", O_RDWR);
-    if (fd < 0) {
+    int fd_acc  = open("/dev/i2c-7", O_RDWR);
+    if (fd_acc < 0) {
+        perror("open /dev/i2c-7");
+        return 1;
+    }
+    int fd_gyro = open("/dev/i2c-7", O_RDWR);
+    if (fd_gyro < 0) {
         perror("open /dev/i2c-7");
         return 1;
     }
 
-    init_bmi088(fd);
+    init_bmi088(fd_acc, fd_gyro);
 
-    redisContext *redis = redisConnect("127.0.0.1", 6379);
-    if (!redis || redis->err) {
-        fprintf(stderr, "Redis connection failed\n");
-        return 1;
-    }
+    // Start Redis publishing thread
+    std::thread redis_thread(redis_thread_func);
 
-    const int n_block = 8;
+    const int n_block = SAMPLING_RATE_ACT/SAMPLING_RATE;
     int count = 0;
 
     double ax=0, ay=0, az=0;
@@ -154,14 +222,29 @@ int main() {
     uint64_t time_sum_us = 0;
 
     while (1) {
+        struct timeval t0, t1;
+        gettimeofday(&t0, nullptr);
+
         uint8_t acc_buf[6];
         uint8_t gyro_buf[6];
 
-        i2c_set_slave(fd, BMI088_ACC_ADDR);
-        i2c_read_block(fd, ACC_X_LSB, acc_buf, 6);
+        i2c_read_block(fd_acc, ACC_X_LSB, acc_buf, 6);
+        i2c_read_block(fd_gyro, GYRO_X_LSB, gyro_buf, 6);
 
-        i2c_set_slave(fd, BMI088_GYRO_ADDR);
-        i2c_read_block(fd, GYRO_X_LSB, gyro_buf, 6);
+        // {
+        //     gettimeofday(&t1, nullptr);
+
+        //     const int PERIOD_US = 1000*1000/SAMPLING_RATE_ACT;
+        //     int elapsed_us =
+        //         (t1.tv_sec - t0.tv_sec) * 1000000 +
+        //         (t1.tv_usec - t0.tv_usec);
+    
+        //     int sleep_us = PERIOD_US - elapsed_us;
+        //     if (sleep_us > 0) {
+        //     }else{
+        //         printf("!!!!!!!!!!!!!!!!!!loop process(%dus) exceed %dus\n", elapsed_us, PERIOD_US);
+        //     }
+        // }
 
         double lax = i16(acc_buf,0) * ACCEL_SCALE;
         double lay = i16(acc_buf,2) * ACCEL_SCALE;
@@ -198,9 +281,6 @@ int main() {
             uint32_t sec  = avg_us / 1000000ull;
             uint32_t nsec = (avg_us % 1000000ull) * 1000;
 
-            double norm = std::sqrt(ax*ax + ay*ay + az*az);
-            printf("%u %u %f\n", sec, nsec, norm);
-
             json j;
             j["timestamp"]["sec"]     = sec;
             j["timestamp"]["nanosec"] = nsec;
@@ -214,9 +294,45 @@ int main() {
             j["gyro"]["z"] = gz;
 
             std::string payload = j.dump(2); // compact JSON
-            redisCommand(redis, "PUBLISH pserver-imu %s", payload.c_str());
+
+            // Push payload into the bounded queue (non-blocking for IMU loop)
+            {
+                std::lock_guard<std::mutex> lock(queue_mutex);
+
+                // Drop the oldest message if the queue is full
+                if (message_queue.size() >= QUEUE_MAX) {
+                    message_queue.pop_front();
+                }
+
+                message_queue.emplace_back(std::move(payload));
+            }
+            queue_cv.notify_one();
+
+            if((count%SAMPLING_RATE_ACT) == 0){
+                double norm = std::sqrt(ax*ax + ay*ay + az*az);
+                printf("%u %u %f\n", sec, nsec, norm);
+                printf("%s\n", payload.c_str());
+                fflush(stdout);
+            }
         }
 
-        usleep(1000*1000/SAMPLING_RATE);
+        gettimeofday(&t1, nullptr);
+
+        const int PERIOD_US = 1000*1000/SAMPLING_RATE_ACT;
+        int elapsed_us =
+            (t1.tv_sec - t0.tv_sec) * 1000000 +
+            (t1.tv_usec - t0.tv_usec);
+
+        int sleep_us = PERIOD_US - elapsed_us;
+        if (sleep_us > 0) {
+            usleep(sleep_us);
+        }else{
+            printf("loop process(%dus) exceed %dus\n", elapsed_us, PERIOD_US);
+        }
     }
+    
+    // Shutdown
+    queue_cv.notify_all();
+    redis_thread.join();
+    return 0;
 }

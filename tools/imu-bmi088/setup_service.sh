@@ -5,12 +5,13 @@ CONFIG_PATH=$1
 NODE_PATH=$(which node)
 SERVICE_NAME=imu-bmi088
 
-sed -e "s%@CONFIG_PATH@%${CONFIG_PATH}%" \
-    -e "s%@NODE_PATH@%${NODE_PATH}%" \
-    -e "s%@SCRIPT_DIR@%${SCRIPT_DIR}%" \
-    -e "s%@SERVICE_NAME@%${SERVICE_NAME}%" \
-    ${SERVICE_NAME}.in | sudo tee /usr/bin/${SERVICE_NAME}
-sudo chmod +x /usr/bin/${SERVICE_NAME}
+#sed -e "s%@CONFIG_PATH@%${CONFIG_PATH}%" \
+#    -e "s%@NODE_PATH@%${NODE_PATH}%" \
+#    -e "s%@SCRIPT_DIR@%${SCRIPT_DIR}%" \
+#    -e "s%@SERVICE_NAME@%${SERVICE_NAME}%" \
+#    ${SERVICE_NAME}.in | sudo tee /usr/bin/${SERVICE_NAME}
+#sudo chmod +x /usr/bin/${SERVICE_NAME}
+sudo cp build/${SERVICE_NAME} /usr/bin/${SERVICE_NAME}
 
 sed -e "s%@SCRIPT_DIR@%${SCRIPT_DIR}%" \
     -e "s%@SERVICE_NAME@%${SERVICE_NAME}%" \
