@@ -51,7 +51,7 @@ using json = nlohmann::ordered_json;
 // Sampling rates
 // ===============================
 #define SAMPLING_RATE     100
-#define SAMPLING_RATE_ACT 400
+#define SAMPLING_RATE_ACT 100
 
 // ===============================
 // Configuration
@@ -295,6 +295,13 @@ int main() {
 
             std::string payload = j.dump(2); // compact JSON
 
+            if((count%SAMPLING_RATE_ACT) == 0){
+                double norm = std::sqrt(ax*ax + ay*ay + az*az);
+                printf("%u %u %f\n", sec, nsec, norm);
+                printf("%s\n", payload.c_str());
+                fflush(stdout);
+            }
+
             // Push payload into the bounded queue (non-blocking for IMU loop)
             {
                 std::lock_guard<std::mutex> lock(queue_mutex);
@@ -307,13 +314,6 @@ int main() {
                 message_queue.emplace_back(std::move(payload));
             }
             queue_cv.notify_one();
-
-            if((count%SAMPLING_RATE_ACT) == 0){
-                double norm = std::sqrt(ax*ax + ay*ay + az*az);
-                printf("%u %u %f\n", sec, nsec, norm);
-                printf("%s\n", payload.c_str());
-                fflush(stdout);
-            }
         }
 
         gettimeofday(&t1, nullptr);
