@@ -253,12 +253,18 @@ static void init_icm20948(int fd) {
 // ===============================
 // Redis publishing thread
 // ===============================
+[[noreturn]] static void redis_fatal(const char* msg, redisContext* c = nullptr) {
+    fprintf(stderr, "Redis fatal: %s\n", msg);
+    if (c && c->err) {
+        fprintf(stderr, "Redis error: %s\n", c->errstr);
+    }
+    std::abort(); // 即プロセス終了
+}
+
 void redis_thread_func() {
-    // Create Redis connection (blocking context)
     redisContext* redis = redisConnect("127.0.0.1", 6379);
     if (!redis || redis->err) {
-        fprintf(stderr, "Failed to connect to Redis\n");
-        return;
+        redis_fatal("connect failed", redis);
     }
 
     while (running) {
@@ -279,13 +285,22 @@ void redis_thread_func() {
             message_queue.pop_front();
         }
 
-        // Blocking publish (safe because this thread is dedicated to Redis)
-        redisCommand(
+        redisReply* reply = (redisReply*)redisCommand(
             redis,
             "PUBLISH pserver-imu %b",
             payload.data(),
             payload.size()
         );
+
+        if (!reply) {
+            redis_fatal("redisCommand returned NULL", redis);
+        }
+
+        freeReplyObject(reply);
+
+        if (redis->err) {
+            redis_fatal("redis runtime error", redis);
+        }
     }
 
     redisFree(redis);
@@ -317,9 +332,7 @@ int main() {
         struct timeval t0, t1;
         gettimeofday(&t0, nullptr);
 
-        // ---- 1回の読み出しで accel(6) + gyro(6) + temp(2) = 14 bytes ----
         uint8_t buf[14];
-        // Bank0のままでOK（initで戻してる）
         i2c_read_block(fd, ACCEL_XOUT_H, buf, sizeof(buf));
 
         // layout:
