@@ -155,12 +155,19 @@ static void init_bmi088(int fd_acc, int fd_gyro) {
 // ===============================
 // Redis publishing thread
 // ===============================
+[[noreturn]] static void redis_fatal(const char* msg, redisContext* c = nullptr) {
+    fprintf(stderr, "Redis fatal: %s\n", msg);
+    if (c && c->err) {
+        fprintf(stderr, "Redis error: %s\n", c->errstr);
+    }
+    std::abort(); // 即プロセス終了
+}
+
 void redis_thread_func() {
     // Create Redis connection (blocking context)
     redisContext* redis = redisConnect("127.0.0.1", 6379);
     if (!redis || redis->err) {
-        fprintf(stderr, "Failed to connect to Redis\n");
-        return;
+        redis_fatal("connect failed", redis);
     }
 
     while (running) {
@@ -181,13 +188,22 @@ void redis_thread_func() {
             message_queue.pop_front();
         }
 
-        // Blocking publish (safe because this thread is dedicated to Redis)
-        redisCommand(
+        redisReply* reply = (redisReply*)redisCommand(
             redis,
             "PUBLISH pserver-imu %b",
             payload.data(),
             payload.size()
         );
+
+        if (!reply) {
+            redis_fatal("redisCommand returned NULL", redis);
+        }
+
+        freeReplyObject(reply);
+
+        if (redis->err) {
+            redis_fatal("redis runtime error", redis);
+        }
     }
 
     redisFree(redis);
