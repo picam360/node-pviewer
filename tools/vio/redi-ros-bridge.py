@@ -59,7 +59,7 @@ def parse_xml_timestamp(xml_bytes):
 # ============================================================
 
 class ROS1Bridge:
-    def __init__(self):
+    def __init__(self, image_encoding, jpeg_quality):
         import rospy
         from sensor_msgs.msg import Imu, Image
         from nav_msgs.msg import Odometry
@@ -68,6 +68,9 @@ class ROS1Bridge:
         self.Imu = Imu
         self.Image = Image
         self.Odometry = Odometry
+
+        self.image_encoding = image_encoding
+        self.jpeg_quality = jpeg_quality
 
         rospy.init_node("openvins_bridge", anonymous=False)
 
@@ -101,9 +104,27 @@ class ROS1Bridge:
         msg.header.stamp = stamp
         msg.header.frame_id = frame_id
         msg.height, msg.width = mat.shape[:2]
-        msg.encoding = "bgr8"
-        msg.step = msg.width * 3
-        msg.data = mat.tobytes()
+
+        if self.image_encoding == "raw":
+            msg.encoding = "bgr8"
+            msg.step = msg.width * 3
+            msg.data = mat.tobytes()
+        else:
+            if self.image_encoding == "png":
+                ok, buf = cv2.imencode(".png", mat)
+                msg.encoding = "png"
+            else:
+                ok, buf = cv2.imencode(
+                    ".jpg", mat,
+                    [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
+                )
+                msg.encoding = "jpeg"
+
+            if not ok:
+                return
+            msg.step = 0
+            msg.data = buf.tobytes()
+
         (self.cam0_pub if frame_id == "cam0" else self.cam1_pub).publish(msg)
 
     def subscribe_vio_odom(self, topic: str, cb):
@@ -116,7 +137,7 @@ class ROS1Bridge:
 # ============================================================
 
 class ROS2Bridge:
-    def __init__(self):
+    def __init__(self, image_encoding, jpeg_quality):
         import rclpy
         from rclpy.node import Node
         from sensor_msgs.msg import Imu, Image
@@ -129,6 +150,9 @@ class ROS2Bridge:
         self.Imu = Imu
         self.Image = Image
         self.Odometry = Odometry
+
+        self.image_encoding = image_encoding
+        self.jpeg_quality = jpeg_quality
 
         self.imu_pub = self.node.create_publisher(Imu, "/imu0", 200)
         self.cam0_pub = self.node.create_publisher(Image, "/cam0/image_raw", 2)
@@ -184,13 +208,28 @@ class ROS2Bridge:
         msg.header.stamp.nanosec = int(stamp["nanosec"])
         msg.header.frame_id = frame_id
         msg.height, msg.width = mat.shape[:2]
-        msg.encoding = "bgr8"
-        msg.step = msg.width * 3
-        msg.data = mat.tobytes()
-        if frame_id == "cam0":
-            self.cam0_pub.publish(msg)
+
+        if self.image_encoding == "raw":
+            msg.encoding = "bgr8"
+            msg.step = msg.width * 3
+            msg.data = mat.tobytes()
         else:
-            self.cam1_pub.publish(msg)
+            if self.image_encoding == "png":
+                ok, buf = cv2.imencode(".png", mat)
+                msg.encoding = "png"
+            else:
+                ok, buf = cv2.imencode(
+                    ".jpg", mat,
+                    [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
+                )
+                msg.encoding = "jpeg"
+
+            if not ok:
+                return
+            msg.step = 0
+            msg.data = buf.tobytes()
+
+        (self.cam0_pub if frame_id == "cam0" else self.cam1_pub).publish(msg)
 
     def subscribe_vio_odom(self, topic: str, cb):
         # cb(msg) will be called by rclpy when spun
@@ -213,9 +252,16 @@ def main():
     parser.add_argument("--vio-redis-channel", default="pserver-vio",
                         help="Redis pub channel for VIO pose/position JSON")
 
+    parser.add_argument("--image-encoding",
+                        choices=["raw", "png", "jpeg"],
+                        default="raw")
+    parser.add_argument("--jpeg-quality", type=int, default=95)
+
     args = parser.parse_args()
 
-    ros = ROS1Bridge() if args.ros == 1 else ROS2Bridge()
+    ros = (ROS1Bridge if args.ros == 1 else ROS2Bridge)(
+        args.image_encoding, args.jpeg_quality
+    )
 
     r = redis.Redis(host=args.host, port=args.port)
     pubsub = r.pubsub()
