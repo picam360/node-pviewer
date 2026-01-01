@@ -59,7 +59,7 @@ def parse_xml_timestamp(xml_bytes):
 # ============================================================
 
 class ROS1Bridge:
-    def __init__(self, image_encoding, jpeg_quality):
+    def __init__(self, image_color):
         import rospy
         from sensor_msgs.msg import Imu, Image
         from nav_msgs.msg import Odometry
@@ -69,8 +69,7 @@ class ROS1Bridge:
         self.Image = Image
         self.Odometry = Odometry
 
-        self.image_encoding = image_encoding
-        self.jpeg_quality = jpeg_quality
+        self.image_color = image_color
 
         rospy.init_node("openvins_bridge", anonymous=False)
 
@@ -105,25 +104,24 @@ class ROS1Bridge:
         msg.header.frame_id = frame_id
         msg.height, msg.width = mat.shape[:2]
 
-        if self.image_encoding == "raw":
+        if self.image_color == "mono":
+            # BGR → GRAY
+            if mat.ndim == 3:
+                gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = mat
+
+            msg.encoding = "mono8"
+            msg.step = msg.width
+            msg.data = gray.tobytes()
+
+        else:  # bgr
+            if mat.ndim == 2:
+                mat = cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
+
             msg.encoding = "bgr8"
             msg.step = msg.width * 3
             msg.data = mat.tobytes()
-        else:
-            if self.image_encoding == "png":
-                ok, buf = cv2.imencode(".png", mat)
-                msg.encoding = "png"
-            else:
-                ok, buf = cv2.imencode(
-                    ".jpg", mat,
-                    [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
-                )
-                msg.encoding = "jpeg"
-
-            if not ok:
-                return
-            msg.step = 0
-            msg.data = buf.tobytes()
 
         (self.cam0_pub if frame_id == "cam0" else self.cam1_pub).publish(msg)
 
@@ -137,7 +135,7 @@ class ROS1Bridge:
 # ============================================================
 
 class ROS2Bridge:
-    def __init__(self, image_encoding, jpeg_quality):
+    def __init__(self, image_color):
         import rclpy
         from rclpy.node import Node
         from sensor_msgs.msg import Imu, Image
@@ -151,8 +149,7 @@ class ROS2Bridge:
         self.Image = Image
         self.Odometry = Odometry
 
-        self.image_encoding = image_encoding
-        self.jpeg_quality = jpeg_quality
+        self.image_color = image_color
 
         self.imu_pub = self.node.create_publisher(Imu, "/imu0", 200)
         self.cam0_pub = self.node.create_publisher(Image, "/cam0/image_raw", 2)
@@ -209,26 +206,23 @@ class ROS2Bridge:
         msg.header.frame_id = frame_id
         msg.height, msg.width = mat.shape[:2]
 
-        if self.image_encoding == "raw":
+        if self.image_color == "mono":
+            if mat.ndim == 3:
+                gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = mat
+
+            msg.encoding = "mono8"
+            msg.step = msg.width
+            msg.data = gray.tobytes()
+
+        else:  # bgr
+            if mat.ndim == 2:
+                mat = cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
+
             msg.encoding = "bgr8"
             msg.step = msg.width * 3
             msg.data = mat.tobytes()
-        else:
-            if self.image_encoding == "png":
-                ok, buf = cv2.imencode(".png", mat)
-                msg.encoding = "png"
-            else:
-                ok, buf = cv2.imencode(
-                    ".jpg", mat,
-                    [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
-                )
-                msg.encoding = "jpeg"
-
-            if not ok:
-                return
-            msg.step = 0
-            msg.data = buf.tobytes()
-
         (self.cam0_pub if frame_id == "cam0" else self.cam1_pub).publish(msg)
 
     def subscribe_vio_odom(self, topic: str, cb):
@@ -252,15 +246,17 @@ def main():
     parser.add_argument("--vio-redis-channel", default="pserver-vio",
                         help="Redis pub channel for VIO pose/position JSON")
 
-    parser.add_argument("--image-encoding",
-                        choices=["raw", "png", "jpeg"],
-                        default="raw")
-    parser.add_argument("--jpeg-quality", type=int, default=95)
+    parser.add_argument(
+        "--image-color",
+        choices=["mono", "bgr"],
+        default="bgr",
+        help="sensor_msgs/Image encoding: mono8 or bgr8"
+    )
 
     args = parser.parse_args()
 
     ros = (ROS1Bridge if args.ros == 1 else ROS2Bridge)(
-        args.image_encoding, args.jpeg_quality
+        image_color=args.image_color
     )
 
     r = redis.Redis(host=args.host, port=args.port)
