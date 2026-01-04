@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(OpenCV REQUIRED)
-find_package(nlohmann_json REQUIRED)
 
 find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
 find_library(HIREDIS_LIBRARY hiredis)
@@ -19,12 +18,12 @@ add_executable(basalt_redis_vio basalt_redis_vio.cpp)
 target_include_directories(basalt_redis_vio PRIVATE
   ${OpenCV_INCLUDE_DIRS}
   ${HIREDIS_INCLUDE_DIR}
+  ./include
 )
 
 target_link_libraries(basalt_redis_vio PRIVATE
   ${OpenCV_LIBS}
   ${HIREDIS_LIBRARY}
-  nlohmann_json::nlohmann_json
 )
 
 # Basalt をリンクする場合（あなたの環境に合わせて設定）
