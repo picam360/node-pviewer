@@ -282,6 +282,10 @@ void stereo_thread()
             cv::cvtColor(left, left_gray8, cv::COLOR_BGR2GRAY);
             cv::cvtColor(right, right_gray8, cv::COLOR_BGR2GRAY);
 
+            // cv::imshow("stereo_left", left_gray8);
+            // cv::imshow("stereo_right", right_gray8);
+            // cv::waitKey(1);
+
             cv::Mat left_gray16, right_gray16;
             left_gray8.convertTo(left_gray16, CV_16U, 256.0);
             right_gray8.convertTo(right_gray16, CV_16U, 256.0);
