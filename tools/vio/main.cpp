@@ -265,6 +265,21 @@ void stereo_thread()
                 continue;
             }
 
+            if(false){
+                struct timeval tv;
+                gettimeofday(&tv, nullptr);
+    
+                int64_t now_ns =
+                    static_cast<int64_t>(tv.tv_sec) * 1000000000LL +
+                    static_cast<int64_t>(tv.tv_usec) * 1000LL;
+
+                int64_t t_ns = sec * 1000000000LL + nsec;
+    
+                double diff_ms = (now_ns - t_ns) * 1e-6;
+    
+                std::cout << "[VIO] latency = " << diff_ms << " ms" << std::endl;
+            }
+
             cv::Mat left, right;
             if (!split_stereo_image(tmp_img[2], left, right))
             {
@@ -306,6 +321,20 @@ void stereo_thread()
             tmp_img.clear();
 
             freeReplyObject(r);
+
+            if(false){
+                struct timeval tv;
+                gettimeofday(&tv, nullptr);
+    
+                int64_t now_ns =
+                    static_cast<int64_t>(tv.tv_sec) * 1000000000LL +
+                    static_cast<int64_t>(tv.tv_usec) * 1000LL;
+    
+                double diff_ms = (now_ns - in->t_ns) * 1e-6;
+    
+                std::cout << "[VIO] latency = " << diff_ms << " ms" << std::endl;
+            }
+
             continue;
         }
 
@@ -361,6 +390,19 @@ int main(int argc, char **argv)
                 break;
 
             redis_publish_pose(st->T_w_i, st->t_ns);
+
+            if(false){
+                struct timeval tv;
+                gettimeofday(&tv, nullptr);
+    
+                int64_t now_ns =
+                    static_cast<int64_t>(tv.tv_sec) * 1000000000LL +
+                    static_cast<int64_t>(tv.tv_usec) * 1000LL;
+    
+                double diff_ms = (now_ns - st->t_ns) * 1e-6;
+    
+                std::cout << "[VIO] latency = " << diff_ms << " ms" << std::endl;
+            }
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
