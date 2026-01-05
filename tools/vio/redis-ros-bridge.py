@@ -28,6 +28,8 @@ import redis
 import cv2
 import numpy as np
 
+from visualization_msgs.msg import Marker, MarkerArray
+from geometry_msgs.msg import Point
 
 # ============================================================
 # Common utilities (ROS-independent)
@@ -53,6 +55,22 @@ def parse_xml_timestamp(xml_bytes):
     sec, usec = root.attrib["timestamp"].split(",")
     return int(sec), int(usec) * 1000  # nsec
 
+def make_camera_frustum(scale=0.2):
+    o = np.array([0, 0, 0])
+    f = np.array([0, 0, scale])
+
+    s = scale * 0.5
+    p1 = np.array([ s,  s, f[2]])
+    p2 = np.array([-s,  s, f[2]])
+    p3 = np.array([-s, -s, f[2]])
+    p4 = np.array([ s, -s, f[2]])
+
+    # LINE_LIST ??2??1??
+    lines = [
+        o, p1, o, p2, o, p3, o, p4,
+        p1, p2, p2, p3, p3, p4, p4, p1
+    ]
+    return lines
 
 # ============================================================
 # ROS1 implementation
@@ -61,10 +79,12 @@ def parse_xml_timestamp(xml_bytes):
 class ROS1Bridge:
     def __init__(self, image_color):
         import rospy
+        import tf.transformations as tf_transformations
         from sensor_msgs.msg import Imu, Image
         from nav_msgs.msg import Odometry
 
         self.rospy = rospy
+        self.tf_transformations = tf_transformations
         self.Imu = Imu
         self.Image = Image
         self.Odometry = Odometry
@@ -77,6 +97,7 @@ class ROS1Bridge:
         self.cam0_pub = rospy.Publisher("/cam0/image_raw", Image, queue_size=2)
         self.cam1_pub = rospy.Publisher("/cam1/image_raw", Image, queue_size=2)
         self.vio_odom_pub = rospy.Publisher("/vio/odom", Odometry, queue_size=50)
+        self.cam_vis_pub = rospy.Publisher("/vio/camera_pose_visual", MarkerArray, queue_size=10)
 
     def make_stamp(self, sec, nsec):
         return self.rospy.Time(secs=sec, nsecs=nsec)
@@ -106,7 +127,7 @@ class ROS1Bridge:
         msg.height, msg.width = mat.shape[:2]
 
         if self.image_color == "mono":
-            # BGR → GRAY
+            # BGR -> GRAY
             if mat.ndim == 3:
                 gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY)
             else:
@@ -139,12 +160,14 @@ class ROS2Bridge:
     def __init__(self, image_color):
         import rclpy
         from rclpy.node import Node
+        import tf_transformations
         from sensor_msgs.msg import Imu, Image
         from nav_msgs.msg import Odometry
 
         self.rclpy = rclpy
         rclpy.init()
         self.node = Node("openvins_bridge")
+        self.tf_transformations = tf_transformations
 
         self.Imu = Imu
         self.Image = Image
@@ -156,6 +179,7 @@ class ROS2Bridge:
         self.cam0_pub = self.node.create_publisher(Image, "/cam0/image_raw", 2)
         self.cam1_pub = self.node.create_publisher(Image, "/cam1/image_raw", 2)
         self.vio_odom_pub = self.node.create_publisher(Odometry, "/vio/odom", 50)
+        self.cam_vis_pub = self.node.create_publisher(MarkerArray, "/vio/camera_pose_visual", 10)
 
         # ROS2 subscriber callbacks require spinning
         self._spin_stop = threading.Event()
@@ -277,6 +301,71 @@ def main():
     # ----------------------------
     # Redis -> ROS (IMU + Image)
     # ----------------------------
+    def publish_odom(px, py, pz, qx, qy, qz, qw, sec, nsec):
+        stamp = ros.make_stamp(sec, nsec)
+        odom = ros.Odometry()
+        if args.ros == 1:
+            odom.header.frame_id = "world"
+            odom.child_frame_id = ""
+            odom.header.stamp = stamp
+        else:
+            odom.header.frame_id = "map"
+            odom.child_frame_id = ""
+            odom.header.stamp.sec = sec
+            odom.header.stamp.nanosec = nsec
+
+
+        odom.pose.pose.position.x = float(px)
+        odom.pose.pose.position.y = float(py)
+        odom.pose.pose.position.z = float(pz)
+
+        odom.pose.pose.orientation.x = float(qx)
+        odom.pose.pose.orientation.y = float(qy)
+        odom.pose.pose.orientation.z = float(qz)
+        odom.pose.pose.orientation.w = float(qw)
+
+        ros.vio_odom_pub.publish(odom)
+
+    def publish_camera_marker(px, py, pz, qx, qy, qz, qw, sec, nsec):
+        marker = Marker()
+        if args.ros == 1:
+            marker.header.frame_id = "world"
+            marker.header.stamp = ros.make_stamp(sec, nsec)
+        else:
+            marker.header.frame_id = "map"
+            marker.header.stamp.sec = sec
+            marker.header.stamp.nanosec = nsec
+
+        marker.ns = "CameraPoseVisualization"
+        marker.id = 0
+        marker.type = Marker.LINE_LIST
+        marker.action = Marker.ADD
+
+        marker.scale.x = 0.01
+        marker.color.r = 1.0
+        marker.color.a = 1.0
+
+        R = ros.tf_transformations.quaternion_matrix([qx, qy, qz, qw])[:3, :3]
+        t = np.array([px, py, pz])
+
+        R_cam = np.array([
+            [0, 0, 1],
+            [0, 1, 0],
+            [-1, 0, 0],
+        ])
+
+        for p in make_camera_frustum():
+            pw = R @ (R_cam @ p) + t
+            pt = Point()
+            pt.x = float(pw[0])
+            pt.y = float(pw[1])
+            pt.z = float(pw[2])
+            marker.points.append(pt)
+
+        arr = MarkerArray()
+        arr.markers.append(marker)
+        ros.cam_vis_pub.publish(arr)
+
     def on_imu(msg):
         nonlocal imu_count
         data = json.loads(msg["data"].decode())
@@ -308,6 +397,8 @@ def main():
             tmp_img.append(base64.b64decode(data))
 
     def on_vio_pose(msg):
+        nonlocal vio_count
+
         data = json.loads(msg["data"].decode())
 
         # timestamp
@@ -315,34 +406,17 @@ def main():
         sec = t_ns // 1_000_000_000
         nsec = t_ns % 1_000_000_000
 
-        stamp = ros.make_stamp(sec, nsec)
-
         # position
         px, py, pz = data["p"]
 
         # quaternion (w,x,y,z -> x,y,z,w)
         qw, qx, qy, qz = data["q"]
 
-        odom = ros.Odometry()
-        if args.ros == 1:
-            odom.header.stamp = stamp
-        else:
-            odom.header.stamp.sec = sec
-            odom.header.stamp.nanosec = nsec
+        publish_odom(px, py, pz, qx, qy, qz, qw, sec, nsec)
+        publish_camera_marker(px, py, pz, qx, qy, qz, qw, sec, nsec)
 
-        odom.header.frame_id = "map"
-        odom.child_frame_id = "base_link"
-
-        odom.pose.pose.position.x = float(px)
-        odom.pose.pose.position.y = float(py)
-        odom.pose.pose.position.z = float(pz)
-
-        odom.pose.pose.orientation.x = float(qx)
-        odom.pose.pose.orientation.y = float(qy)
-        odom.pose.pose.orientation.z = float(qz)
-        odom.pose.pose.orientation.w = float(qw)
-
-        ros.vio_odom_pub.publish(odom)
+        with lock:
+            vio_count += 1
 
     # ----------------------------
     # ROS (VIO Odom) -> Redis
@@ -406,8 +480,8 @@ def main():
             )
 
     pubsub.subscribe(**{
-        "pserver-imu": on_imu,
-        "pserver-forward-pst": on_image,
+        #"pserver-imu": on_imu,
+        #"pserver-forward-pst": on_image,
         "vio_pose": on_vio_pose,
     })
 
