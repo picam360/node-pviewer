@@ -35,59 +35,6 @@ static const char *CH_IMU = "pserver-imu";
 static const char *CH_POSE = "vio_pose";
 
 // ============================================================
-// Thread-safe queue
-// ============================================================
-template <typename T>
-class TSQueue
-{
-public:
-    void push(T &&v)
-    {
-        std::lock_guard<std::mutex> lk(m_);
-        q_.push_back(std::move(v));
-        cv_.notify_one();
-    }
-
-    bool pop(T &out)
-    {
-        std::lock_guard<std::mutex> lk(m_);
-        if (q_.empty())
-            return false;
-        out = std::move(q_.front());
-        q_.pop_front();
-        return true;
-    }
-
-    size_t size() const
-    {
-        std::lock_guard<std::mutex> lk(m_);
-        return q_.size();
-    }
-
-private:
-    mutable std::mutex m_;
-    std::condition_variable cv_;
-    std::deque<T> q_;
-};
-
-// ============================================================
-// Data types
-// ============================================================
-struct StereoMsg
-{
-    int64_t t_ns;
-    cv::Mat left;
-    cv::Mat right;
-};
-
-struct ImuMsg
-{
-    int64_t t_ns;
-    Eigen::Vector3d acc;
-    Eigen::Vector3d gyro;
-};
-
-// ============================================================
 // Redis helpers
 // ============================================================
 redisContext *redis_sub(const char *ch)
@@ -126,9 +73,6 @@ void redis_publish_pose(const Sophus::SE3d &T_w_i, int64_t t_ns)
 // ============================================================
 // Globals
 // ============================================================
-TSQueue<StereoMsg> stereo_q;
-TSQueue<ImuMsg> imu_q;
-
 basalt::Calibration<double> calib;
 basalt::VioConfig vio_config;
 basalt::OpticalFlowBase::Ptr opt_flow;
@@ -150,27 +94,27 @@ void imu_thread()
 
         json j = json::parse(r->element[2]->str);
 
-        ImuMsg m;
+        basalt::ImuData<double>::Ptr d(new basalt::ImuData<double>);
+
         const auto &ts = j["timestamp"];
-        m.t_ns =
+        d->t_ns =
             static_cast<int64_t>(ts["sec"].get<int64_t>()) * 1000000000LL +
             static_cast<int64_t>(ts["nanosec"].get<int64_t>());
 
-        // accel [m/s^2]
         const auto &acc = j["accel"];
-        m.acc = Eigen::Vector3d(
+        d->accel = Eigen::Vector3d(
             acc["x"].get<double>(),
             acc["y"].get<double>(),
             acc["z"].get<double>());
 
-        // gyro [rad/s]
         const auto &gyro = j["gyro"];
-        m.gyro = Eigen::Vector3d(
+        d->gyro = Eigen::Vector3d(
             gyro["x"].get<double>(),
             gyro["y"].get<double>(),
             gyro["z"].get<double>());
 
-        imu_q.push(std::move(m));
+        vio->imu_data_queue.push(d);
+
         freeReplyObject(r);
     }
 }
@@ -330,12 +274,31 @@ void stereo_thread()
                 continue;
             }
 
-            StereoMsg s;
-            s.t_ns = sec * 1000000000LL + nsec;
-            s.left = left;
-            s.right = right;
+            // cv::imshow("stereo_left", left);
+            // cv::imshow("stereo_right", right);
+            // cv::waitKey(1);
 
-            stereo_q.push(std::move(s));
+            cv::Mat left_gray8, right_gray8;
+            cv::cvtColor(left, left_gray8, cv::COLOR_BGR2GRAY);
+            cv::cvtColor(right, right_gray8, cv::COLOR_BGR2GRAY);
+
+            cv::Mat left_gray16, right_gray16;
+            left_gray8.convertTo(left_gray16, CV_16U, 256.0);
+            right_gray8.convertTo(right_gray16, CV_16U, 256.0);
+
+            basalt::ImageData img_l, img_r;
+
+            img_l.img.reset(new basalt::ManagedImage<uint16_t>(512, 512));
+            img_r.img.reset(new basalt::ManagedImage<uint16_t>(512, 512));
+
+            std::memcpy(img_l.img->ptr, left_gray16.data, 512 * 512 * sizeof(uint16_t));
+            std::memcpy(img_r.img->ptr, right_gray16.data, 512 * 512 * sizeof(uint16_t));
+
+            basalt::OpticalFlowInput::Ptr in(new basalt::OpticalFlowInput);
+            in->t_ns = sec * 1000000000LL + nsec;
+            in->img_data = {img_l, img_r};
+            opt_flow->input_queue.push(in);
+
             tmp_img.clear();
 
             freeReplyObject(r);
@@ -383,72 +346,20 @@ int main(int argc, char **argv)
 
     // ---- Main processing loop ----
     while (true)
-    {
+    { // Get pose
+        const size_t n = vio->out_state_queue->size();
+        for (size_t i = 0; i < n; ++i)
+        {
+            basalt::PoseVelBiasState<double>::Ptr st;
+            vio->out_state_queue->pop(st);
 
-        { // IMU feed
-            const size_t n = imu_q.size();
-            for (size_t i = 0; i < n; ++i)
-            {
-                ImuMsg im;
-                if (!imu_q.pop(im))
-                    break;
-                basalt::ImuData<double>::Ptr d(new basalt::ImuData<double>);
-                d->t_ns = im.t_ns;
-                d->accel = im.acc;
-                d->gyro = im.gyro;
-                vio->imu_data_queue.push(d);
-            }
+            if (!st.get())
+                break;
+
+            redis_publish_pose(st->T_w_i, st->t_ns);
         }
 
-        { // Stereo feed
-            StereoMsg sm;
-            if (!stereo_q.pop(sm))
-                continue;
-
-            basalt::OpticalFlowInput::Ptr in(new basalt::OpticalFlowInput);
-            in->t_ns = sm.t_ns;
-            basalt::ImageData l, r;
-
-            l.img.reset(new basalt::ManagedImage<uint16_t>(512, 512));
-            r.img.reset(new basalt::ManagedImage<uint16_t>(512, 512));
-
-            for (int y = 0; y < 512; y++)
-            {
-                const uint8_t *sl = sm.left.ptr<uint8_t>(y);
-                const uint8_t *sr = sm.right.ptr<uint8_t>(y);
-
-                uint16_t *dl = l.img->ptr + y * 512;
-                uint16_t *dr = r.img->ptr + y * 512;
-
-                for (int x = 0; x < 512; x++)
-                {
-                    dl[x] = uint16_t(sl[x]) << 8;
-                    dr[x] = uint16_t(sr[x]) << 8;
-                }
-            }
-
-            in->img_data = {l, r};
-
-            std::memcpy(l.img->ptr, sm.left.data, 512 * 512);
-            std::memcpy(r.img->ptr, sm.right.data, 512 * 512);
-
-            in->img_data = {l, r};
-            opt_flow->input_queue.push(in);
-        }
-
-        { // Get pose
-            const size_t n = vio->out_state_queue->size();
-            for (size_t i = 0; i < n; ++i)
-            {
-                basalt::PoseVelBiasState<double>::Ptr st;
-                vio->out_state_queue->pop(st);
-
-                if (!st.get())
-                    break;
-
-                redis_publish_pose(st->T_w_i, st->t_ns);
-            }
-        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     t_imu.join();
