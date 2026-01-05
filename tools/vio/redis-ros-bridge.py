@@ -76,6 +76,7 @@ class ROS1Bridge:
         self.imu_pub = rospy.Publisher("/imu0", Imu, queue_size=200)
         self.cam0_pub = rospy.Publisher("/cam0/image_raw", Image, queue_size=2)
         self.cam1_pub = rospy.Publisher("/cam1/image_raw", Image, queue_size=2)
+        self.vio_odom_pub = rospy.Publisher("/vio/odom", Odometry, queue_size=50)
 
     def make_stamp(self, sec, nsec):
         return self.rospy.Time(secs=sec, nsecs=nsec)
@@ -154,6 +155,7 @@ class ROS2Bridge:
         self.imu_pub = self.node.create_publisher(Imu, "/imu0", 200)
         self.cam0_pub = self.node.create_publisher(Image, "/cam0/image_raw", 2)
         self.cam1_pub = self.node.create_publisher(Image, "/cam1/image_raw", 2)
+        self.vio_odom_pub = self.node.create_publisher(Odometry, "/vio/odom", 50)
 
         # ROS2 subscriber callbacks require spinning
         self._spin_stop = threading.Event()
@@ -305,6 +307,43 @@ def main():
         else:
             tmp_img.append(base64.b64decode(data))
 
+    def on_vio_pose(msg):
+        data = json.loads(msg["data"].decode())
+
+        # timestamp
+        t_ns = int(data["t_ns"])
+        sec = t_ns // 1_000_000_000
+        nsec = t_ns % 1_000_000_000
+
+        stamp = ros.make_stamp(sec, nsec)
+
+        # position
+        px, py, pz = data["p"]
+
+        # quaternion (w,x,y,z -> x,y,z,w)
+        qw, qx, qy, qz = data["q"]
+
+        odom = ros.Odometry()
+        if args.ros == 1:
+            odom.header.stamp = stamp
+        else:
+            odom.header.stamp.sec = sec
+            odom.header.stamp.nanosec = nsec
+
+        odom.header.frame_id = "map"
+        odom.child_frame_id = "base_link"
+
+        odom.pose.pose.position.x = float(px)
+        odom.pose.pose.position.y = float(py)
+        odom.pose.pose.position.z = float(pz)
+
+        odom.pose.pose.orientation.x = float(qx)
+        odom.pose.pose.orientation.y = float(qy)
+        odom.pose.pose.orientation.z = float(qz)
+        odom.pose.pose.orientation.w = float(qw)
+
+        ros.vio_odom_pub.publish(odom)
+
     # ----------------------------
     # ROS (VIO Odom) -> Redis
     # ----------------------------
@@ -368,7 +407,8 @@ def main():
 
     pubsub.subscribe(**{
         "pserver-imu": on_imu,
-        "pserver-forward-pst": on_image
+        "pserver-forward-pst": on_image,
+        "vio_pose": on_vio_pose,
     })
 
     pubsub_thread = pubsub.run_in_thread(sleep_time=0.01)
