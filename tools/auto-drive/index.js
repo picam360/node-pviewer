@@ -550,10 +550,10 @@ function tracking_handler(direction) {
 		return;//fail safe : not ready or finished or something wrong
 	}
 
-	const tolerance_depth = 0.5;
+	const tolerance_depth = 1.0;
 	const wheel_separation = m_options["encoder_odom"]["wheel_separation"];
 	const cam_height = m_options.cameras[direction].cam_height;
-	const min_object_height = 0.03;
+	const min_object_height = 1.0;
 
 	const sd = m_options.cameras[direction].stereo_distance;
 	const disparity_map = m_depth[direction].disparity;
@@ -569,6 +569,11 @@ function tracking_handler(direction) {
 	//above the horizon
 	let y = 0;
 	let h = disparity_map.rows / 2 + ch_pix;
+
+	x = Math.max(x, 0);
+	w = Math.min(w, disparity_map.cols);
+	y = Math.max(y, 0);
+	h = Math.min(h, disparity_map.rows);
 	
 	const roi = disparity_map.getRegion(new cv.Rect(x, y, w, h));
 	const { maxVal, maxLoc, minVal, minLoc } = roi.minMaxLoc();
