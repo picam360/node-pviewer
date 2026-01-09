@@ -70,6 +70,10 @@ let m_options = {
 			"stereo_distance": 0.06,
 		}
 	},
+	"tracking": {
+		"tolerance_depth": 1.0,
+		"min_object_height": 1.0,
+	},
 
 	// //for jetchariot
 	// "tolerance_distance" : 0.1,
@@ -530,6 +534,31 @@ function check_person_detected(direction) {
 	return false;
 }
 
+function gen_tracking_waypoints(obj_distance, obj_heading){
+
+	const settings = EncoderOdometry.settings;
+	const dtheta = obj_heading * Math.PI / 180.0;
+	const waypoints = {};
+	const step = 100;
+	waypoints[0] = {
+		encoder : JSON.stringify({
+			left : 0,
+			right : 0,
+		})
+	};
+	for(let i=0;i<=step;i++){
+		const d = i * obj_distance / step;
+		const distance_left = d - dtheta * settings.wheel_separation / 2;
+		const distance_right = d + dtheta * settings.wheel_separation / 2;
+		waypoints[i+1] = {
+			encoder : JSON.stringify({
+				left : distance_left / settings.meter_per_pulse * settings.left_direction / settings.lr_ratio_forward,
+				right : distance_right / settings.meter_per_pulse * settings.right_direction,
+			})
+		};
+	}
+}
+
 function tracking_handler(direction) {
 	if (!direction) {
 		stop_robot();
@@ -550,16 +579,16 @@ function tracking_handler(direction) {
 		return;//fail safe : not ready or finished or something wrong
 	}
 
-	const tolerance_depth = 1.0;
+	const tolerance_depth = m_options["tracking"]["tolerance_depth"];
 	const wheel_separation = m_options["encoder_odom"]["wheel_separation"];
 	const cam_height = m_options.cameras[direction].cam_height;
-	const min_object_height = 1.0;
+	const min_object_height = m_options["tracking"]["min_object_height"];
 
 	const sd = m_options.cameras[direction].stereo_distance;
 	const disparity_map = m_depth[direction].disparity;
 	const fov_deg = 90;
 	const fov_rad = fov_deg * Math.PI / 180;
-	const f  = (disparity_map.cols / 2) / Math.tan(fov_rad / 2);
+	const f = (disparity_map.cols / 2) / Math.tan(fov_rad / 2);
 
 	const ws_pix = f * wheel_separation / tolerance_depth;
 	const ch_pix = f * (cam_height - min_object_height) / tolerance_depth;
@@ -593,6 +622,23 @@ function tracking_handler(direction) {
 	if(depth < tolerance_depth){
 		finalize_fnc();
 		return;
+	}
+
+	const elapsed_from_last_wapoints_updated = Date.now() - (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms || 0);
+	if(elapsed_from_last_wapoints_updated > 1000 && depth < tolerance_depth*5 && m_auto_drive_cur > 0){//tune
+		const enc = JSON.parse(m_auto_drive_waypoints[m_auto_drive_cur].encoder);
+		const shift_pix = maxLoc.x - w/2;
+		const shift = shift_pix * depth / f;
+		const gain = 0.1;
+		enc.left += Math.round(shift * gain);
+		enc.right += -Math.round(shift * gain);
+		m_auto_drive_waypoints[m_auto_drive_cur].encoder = JSON.stringify(enc);
+
+		update_auto_drive_waypoints({
+			src: m_auto_drive_waypoints
+		});
+
+		m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms = Date.now();
 	}
 
 	auto_drive_handler(ODOMETRY_TYPE.ENCODER, finalize_fnc);
@@ -1368,29 +1414,9 @@ function command_handler(cmd) {
 				}));
 
 				if(options.tracking){
-					const settings = EncoderOdometry.settings;
 					const obj_distance = options.distance || 10;
 					const obj_heading = options.heading || 0;
-					const dtheta = obj_heading * Math.PI / 180.0;
-					const waypoints = {};
-					const step = 100;
-					waypoints[0] = {
-						encoder : JSON.stringify({
-							left : 0,
-							right : 0,
-						})
-					};
-					for(let i=0;i<=step;i++){
-						const d = i * obj_distance / step;
-						const distance_left = d - dtheta * settings.wheel_separation / 2;
-						const distance_right = d + dtheta * settings.wheel_separation / 2;
-						waypoints[i+1] = {
-							encoder : JSON.stringify({
-								left : distance_left / settings.meter_per_pulse * settings.left_direction / settings.lr_ratio_forward,
-								right : distance_right / settings.meter_per_pulse * settings.right_direction,
-							})
-						};
-					}
+					const waypoints = gen_tracking_waypoints(obj_distance, obj_heading);
 
 					update_auto_drive_waypoints({
 						src: waypoints
