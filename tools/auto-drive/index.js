@@ -618,8 +618,9 @@ function tracking_handler(direction) {
 		return;
 	}
 	const depth = sd * f / disparity;
-	console.log(`nearest object is ${depth}m : ${ws_pix}pix,${ch_pix}pix`);
+	console.log(`nearest object is ${depth}m : ${ws_pix}pix,${ch_pix}pix, xy=${maxLoc.x},${maxLoc.y}`);
 	if(depth < tolerance_depth){
+		cv.imwrite('roi.png', roi);
 		finalize_fnc();
 		return;
 	}
