@@ -26,7 +26,7 @@ let m_options = {
 	"reverse": false,
 	"vord_enabled": true,
 	"vord_debug": false,
-	"depth_debug": true,
+	"depth_debug": false,
 	"depth_binning": 2,
 
 	//juki
@@ -580,7 +580,7 @@ function gen_tracking_roi(disparity_map, f, cam_height, wheel_separation, tolera
 	
 	const roi_orig = disparity_map.getRegion(new cv.Rect(x, y, w, h));
 	const roi = roi_orig.gaussianBlur(
-		new cv.Size(1, 15),
+		new cv.Size(9, 15),
 		0,
 		1.0   // sigmaY
 	  );
@@ -1259,7 +1259,7 @@ function main() {
 				const elapsed = m_vord_tree[direction].et - m_vord_tree[direction].st;
 				console.log(`object_tracking@tree (${direction}) updated in ${elapsed}ms`);
 
-				console.log(params['objects']);
+				//console.log(params['objects']);
 			}
 		});
 
@@ -1416,6 +1416,10 @@ function command_handler(cmd) {
 					tracking : split[1] == "TRACKING",
 				});
 
+				if(!options.extend){
+					m_auto_drive_last_reverse = false;
+				}
+
 				let pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
 				let succeeded = false;
 				if (fs.existsSync(pif_dirpath)) {
@@ -1570,6 +1574,8 @@ function command_handler(cmd) {
 					command_handler("STOP_AUTO");
 					return;
 				}
+
+				m_auto_drive_last_reverse = m_options.reverse;
 
 				m_auto_drive_ready = false;
 				m_drive_mode = "AUTO";
