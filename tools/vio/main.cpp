@@ -88,18 +88,58 @@ void redis_publish_pose(const Sophus::SE3d &T_w_i, int64_t t_ns)
     if (!c)
         return;
 
-    json j;
-    j["t_ns"] = t_ns;
-    j["p"] = {T_w_i.translation().x(),
-              T_w_i.translation().y(),
-              T_w_i.translation().z()};
-    j["q"] = {T_w_i.unit_quaternion().w(),
-              T_w_i.unit_quaternion().x(),
-              T_w_i.unit_quaternion().y(),
-              T_w_i.unit_quaternion().z()};
+    {
+        json j;
+        j["t_ns"] = t_ns;
+        j["p"] = {T_w_i.translation().x(),
+                  T_w_i.translation().y(),
+                  T_w_i.translation().z()};
+        j["q"] = {T_w_i.unit_quaternion().w(),
+                  T_w_i.unit_quaternion().x(),
+                  T_w_i.unit_quaternion().y(),
+                  T_w_i.unit_quaternion().z()};
+    
+        std::string s = j.dump(2);
+        redisCommand(c, "PUBLISH %s %b", CH_POSE, s.data(), s.size());
+    }
+    {
+        Eigen::Quaterniond q = T_w_i.unit_quaternion();
 
-    std::string s = j.dump();
-    redisCommand(c, "PUBLISH %s %b", CH_POSE, s.data(), s.size());
+        double yaw_ccw = std::atan2(
+            2.0 * (q.w() * q.z() + q.x() * q.y()),
+            1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z())
+        );
+        double heading = -yaw_ccw * 180.0 / M_PI;
+
+        json j;
+        j["mode"] = "odom";
+        j["state"] = "UPDATE_ODOMETRY";
+        j["odom"] = {
+            {"x", -T_w_i.translation().y()},
+            {"y", T_w_i.translation().x()},
+            {"z", T_w_i.translation().z()},
+            {"heading", heading}
+        };
+        j["timestamp"] = (double)t_ns / 1e9;
+    
+        std::string s = j.dump(2);
+        redisCommand(c, "PUBLISH %s %b", "pserver-odometry-info", s.data(), s.size());
+    }
+    // {
+    //     Eigen::Quaterniond q = T_w_i.unit_quaternion();
+
+    //     double yaw_ccw = std::atan2(
+    //         2.0 * (q.w() * q.z() + q.x() * q.y()),
+    //         1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z())
+    //     );
+    //     double yaw_cw = -yaw_ccw;
+    //     double yaw_deg = yaw_cw * 180.0 / M_PI;
+        
+    //     char buff[1024];
+    //     int size = snprintf(buff, 1024, "%lf,0.13,%lf,%lf,%lf", -T_w_i.translation().y(), T_w_i.translation().x(), yaw_deg, (double)t_ns / 1e9);
+    
+    //     redisCommand(c, "PUBLISH %s %b", "vehicle_pos", buff, size);
+    // }
     redisFree(c);
 }
 
@@ -858,6 +898,7 @@ int main(int argc, char **argv)
     std::thread t_enc(enc_thread);
 
     // ---- Main processing loop ----
+    int pose_count = 0;
     while (true)
     {
         // Drain out_state_queue (VIO output)
@@ -872,6 +913,7 @@ int main(int argc, char **argv)
 
             // 1) Publish raw VIO pose (as before)
             redis_publish_pose(st->T_w_i, st->t_ns);
+            pose_count++;
 
             // 2) EKF update with VIO measurement
             Eigen::Vector3d p = st->T_w_i.translation();
@@ -889,7 +931,7 @@ int main(int argc, char **argv)
             //     std::cout << "[EKF] toff_ns=" << g_ekf.get_timeoffset_ns()
             //               << " gain=" << g_ekf.get_yawoffsetgain() << "\n";
             // }
-            
+
             if(false){
                 struct timeval tv;
                 gettimeofday(&tv, nullptr);
@@ -902,6 +944,11 @@ int main(int argc, char **argv)
     
                 std::cout << "[VIO] latency = " << diff_ms << " ms" << std::endl;
             }
+            // if((pose_count%30) == 0){
+            //     std::cout << "[VIO] velocity  =" << st->vel_w_i.x() << "," << st->vel_w_i.y() << "," << st->vel_w_i.z() << std::endl;
+            //     std::cout << "[VIO] gyro_bias =" << st->bias_gyro.x() << "," << st->bias_gyro.y() << "," << st->bias_gyro.z() << std::endl;
+            //     std::cout << "[VIO] accel_bias=" << st->bias_accel.x() << "," << st->bias_accel.y() << "," << st->bias_accel.z() << std::endl;
+            // }
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
