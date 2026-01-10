@@ -71,7 +71,7 @@ let m_options = {
 		}
 	},
 	"tracking": {
-		"tolerance_depth": 1.0,
+		"tolerance_depth": 2.0,
 		"min_object_height": 1.0,
 	},
 
@@ -557,6 +557,7 @@ function gen_tracking_waypoints(obj_distance, obj_heading){
 			})
 		};
 	}
+	return waypoints;
 }
 
 function tracking_handler(direction) {
@@ -588,7 +589,7 @@ function tracking_handler(direction) {
 	const disparity_map = m_depth[direction].disparity;
 	const fov_deg = 90;
 	const fov_rad = fov_deg * Math.PI / 180;
-	const f = (disparity_map.cols / 2) / Math.tan(fov_rad / 2);
+	const f  = (disparity_map.cols / 2) / Math.tan(fov_rad / 2);
 
 	const ws_pix = f * wheel_separation / tolerance_depth;
 	const ch_pix = f * (cam_height - min_object_height) / tolerance_depth;
@@ -599,12 +600,18 @@ function tracking_handler(direction) {
 	let y = 0;
 	let h = disparity_map.rows / 2 + ch_pix;
 
-	x = Math.max(x, 0);
-	w = Math.min(w, disparity_map.cols);
+	const cutoff = 10;
+	x = Math.max(x, cutoff);
+	w = Math.min(w, disparity_map.cols - cutoff*2);
 	y = Math.max(y, 0);
 	h = Math.min(h, disparity_map.rows);
 	
-	const roi = disparity_map.getRegion(new cv.Rect(x, y, w, h));
+	const roi_orig = disparity_map.getRegion(new cv.Rect(x, y, w, h));
+	const roi = roi_orig.gaussianBlur(
+		new cv.Size(1, 5),
+		0,
+		1.0   // sigmaY
+	  );
 	const { maxVal, maxLoc, minVal, minLoc } = roi.minMaxLoc();
 
 	const min_val = m_depth[direction].min_val;
@@ -620,24 +627,36 @@ function tracking_handler(direction) {
 	const depth = sd * f / disparity;
 	console.log(`nearest object is ${depth}m : ${ws_pix}pix,${ch_pix}pix, xy=${maxLoc.x},${maxLoc.y}`);
 	if(depth < tolerance_depth){
-		cv.imwrite('roi.png', roi);
-		finalize_fnc();
-		return;
+		m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count++;
+
+		let norm = roi.normalize(0, 255,cv.NORM_MINMAX,cv.CV_8U);
+		const color = cv.applyColorMap(norm, cv.COLORMAP_JET);
+		color.drawCircle(new cv.Point(maxLoc.x, maxLoc.y), 3,   new cv.Vec(255, 255, 255), -1);
+		color.putText(
+			`${depth}m`,
+			new cv.Point(maxLoc.x, Math.max(0, maxLoc.y - 10)),
+			cv.FONT_HERSHEY_SIMPLEX,
+			0.4,
+			new cv.Vec(255, 255, 255),
+			1,
+			cv.LINE_AA);
+		cv.imwrite(`tracking_in_tolerance${m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count}.png`, color);
+
+		if(m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count >= 10){
+			finalize_fnc();
+			return;
+		}
+	}else{
+		m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count = 0;
 	}
 
 	const elapsed_from_last_wapoints_updated = Date.now() - (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms || 0);
-	if(elapsed_from_last_wapoints_updated > 1000 && depth < tolerance_depth*5 && m_auto_drive_cur > 0){//tune
-		const enc = JSON.parse(m_auto_drive_waypoints[m_auto_drive_cur].encoder);
+	if(elapsed_from_last_wapoints_updated > 250 && depth < 4 && m_auto_drive_cur > 0){//tune
 		const shift_pix = maxLoc.x - w/2;
-		const shift = shift_pix * depth / f;
-		const gain = 0.1;
-		enc.left += Math.round(shift * gain);
-		enc.right += -Math.round(shift * gain);
-		m_auto_drive_waypoints[m_auto_drive_cur].encoder = JSON.stringify(enc);
-
-		update_auto_drive_waypoints({
-			src: m_auto_drive_waypoints
-		});
+		const gain = 0.01;
+		const tune = shift_pix * gain;
+		m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading -= tune;
+		console.log("TRACKING_DEBUG", m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading, tune, shift_pix, depth);
 
 		m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms = Date.now();
 	}
@@ -854,7 +873,7 @@ function auto_drive_handler(odom_type, arrived_fnc) {
 			} else {
 				let tune = (distanceToTarget > 0 ? -1 : 1) * shiftToTarget / m_options.tolerance_shift * 60;
 				tune = Math.max(-90, Math.min(tune, 90));
-				//console.log("DEBUG pwm", headingError, tune);
+				console.log("DEBUG pwm", headingError, tune);
 				move_pwm_robot(distanceToTarget, headingError + tune);
 				//move_robot(distanceToTarget);
 				m_auto_drive_heading_tuning = false;
@@ -1415,7 +1434,7 @@ function command_handler(cmd) {
 				}));
 
 				if(options.tracking){
-					const obj_distance = options.distance || 10;
+					const obj_distance = options.distance || 10 + 10;
 					const obj_heading = options.heading || 0;
 					const waypoints = gen_tracking_waypoints(obj_distance, obj_heading);
 
@@ -1429,6 +1448,8 @@ function command_handler(cmd) {
 						m_drive_submode = "TRACKING";
 						m_auto_drive_direction = "forward";
 					}, false);
+					m_odometry_conf[ODOMETRY_TYPE.ENCODER].last_waypoints_updated_ms = Date.now();
+					m_odometry_conf[ODOMETRY_TYPE.ENCODER].in_tolerance_count = 0;
 				}else{
 					m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler = new EncoderOdometry();
 					m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.init({}, () => {
