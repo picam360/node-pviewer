@@ -561,36 +561,7 @@ function gen_tracking_waypoints(obj_distance, obj_heading){
 	return waypoints;
 }
 
-function tracking_handler(direction) {
-	if (!direction) {
-		stop_robot();
-		return;
-	}
-
-	const finalize_fnc = () => {
-		console.log("tracking : done");
-		stop_robot();
-		setTimeout(() => {
-			stop_robot();
-		}, 200);
-		m_drive_submode = "";
-		return;
-	};
-
-	if (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler == null) {
-		return;//fail safe : not ready or finished or something wrong
-	}
-
-	const tolerance_depth = m_options["tracking"]["tolerance_depth"];
-	const wheel_separation = m_options["encoder_odom"]["wheel_separation"];
-	const cam_height = m_options.cameras[direction].cam_height;
-	const min_object_height = m_options["tracking"]["min_object_height"];
-
-	const sd = m_options.cameras[direction].stereo_distance;
-	const disparity_map = m_depth[direction].disparity;
-	const fov_deg = 90;
-	const fov_rad = fov_deg * Math.PI / 180;
-	const f  = (disparity_map.cols / 2) / Math.tan(fov_rad / 2);
+function gen_tracking_roi(disparity_map, f, cam_height, wheel_separation, tolerance_depth, min_object_height){
 
 	const ws_pix = f * wheel_separation / tolerance_depth;
 	const ch_pix = f * (cam_height - min_object_height) / tolerance_depth;
@@ -613,53 +584,111 @@ function tracking_handler(direction) {
 		0,
 		1.0   // sigmaY
 	  );
-	const { maxVal, maxLoc, minVal, minLoc } = roi.minMaxLoc();
 
+	return roi;
+}
+
+function tracking_handler(direction) {
+	if (!direction) {
+		stop_robot();
+		return;
+	}
+
+	const finalize_fnc = () => {
+		console.log("tracking : done");
+		stop_robot();
+		setTimeout(() => {
+			stop_robot();
+		}, 200);
+		m_drive_submode = "";
+		return;
+	};
+
+	if (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler == null) {
+		return;//fail safe : not ready or finished or something wrong
+	}
+
+	const tolerance_depth = m_options["tracking"]["tolerance_depth"];
+	//const wheel_separation = m_options["encoder_odom"]["wheel_separation"];
+	const wheel_separation = 2.0;
+	const cam_height = m_options.cameras[direction].cam_height;
+	const min_object_height = m_options["tracking"]["min_object_height"];
+
+	const sd = m_options.cameras[direction].stereo_distance;
+	const disparity_map = m_depth[direction].disparity;
 	const min_val = m_depth[direction].min_val;
 	const max_val = m_depth[direction].max_val;
 	const uint16_max = ((1 << 16) - 1);
-	const disparity = maxVal / uint16_max * (max_val - min_val) + min_val;
+	const fov_deg = 90;
+	const fov_rad = fov_deg * Math.PI / 180;
+	const f  = (disparity_map.cols / 2) / Math.tan(fov_rad / 2);
 
-	if(disparity < 0){
-		stop_robot();
-		console.log("disparity is invalid");
-		return;
-	}
-	const depth = sd * f / disparity;
-	console.log(`nearest object is ${depth}m : ${ws_pix}pix,${ch_pix}pix, xy=${maxLoc.x},${maxLoc.y}`);
-	if(depth < tolerance_depth){
-		m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count++;
+	{
+		const roi = gen_tracking_roi(
+			disparity_map, f, 
+			cam_height, wheel_separation,
+			tolerance_depth, min_object_height);
+		const { maxVal, maxLoc, minVal, minLoc } = roi.minMaxLoc();
+		const disparity = maxVal / uint16_max * (max_val - min_val) + min_val;
 
-		let norm = roi.normalize(0, 255,cv.NORM_MINMAX,cv.CV_8U);
-		const color = cv.applyColorMap(norm, cv.COLORMAP_JET);
-		color.drawCircle(new cv.Point(maxLoc.x, maxLoc.y), 3,   new cv.Vec(255, 255, 255), -1);
-		color.putText(
-			`${depth}m`,
-			new cv.Point(maxLoc.x, Math.max(0, maxLoc.y - 10)),
-			cv.FONT_HERSHEY_SIMPLEX,
-			0.4,
-			new cv.Vec(255, 255, 255),
-			1,
-			cv.LINE_AA);
-		cv.imwrite(`tracking_in_tolerance${m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count}.png`, color);
-
-		if(m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count >= 10){
-			finalize_fnc();
+		if(disparity < 0){
+			stop_robot();
+			console.log("disparity is invalid");
 			return;
 		}
-	}else{
-		m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count = 0;
+		const depth = sd * f / disparity;
+		console.log(`nearest object is ${depth}m : ${roi.cols}pix,${roi.rows}pix, xy=${maxLoc.x},${maxLoc.y}`);
+		if(depth < tolerance_depth){
+			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count++;
+
+			let norm = roi.normalize(0, 255,cv.NORM_MINMAX,cv.CV_8U);
+			const color = cv.applyColorMap(norm, cv.COLORMAP_JET);
+			color.drawCircle(new cv.Point(maxLoc.x, maxLoc.y), 3,   new cv.Vec(255, 255, 255), -1);
+			color.putText(
+				`${depth}m`,
+				new cv.Point(maxLoc.x, Math.max(0, maxLoc.y - 10)),
+				cv.FONT_HERSHEY_SIMPLEX,
+				0.4,
+				new cv.Vec(255, 255, 255),
+				1,
+				cv.LINE_AA);
+			cv.imwrite(`tracking_in_tolerance${m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count}.png`, color);
+
+			if(m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count >= 10){
+				finalize_fnc();
+				return;
+			}
+		}else{
+			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.in_tolerance_count = 0;
+		}
 	}
 
-	const elapsed_from_last_wapoints_updated = Date.now() - (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms || 0);
-	if(elapsed_from_last_wapoints_updated > 250 && depth < 3 && m_auto_drive_cur > 0){//tune
-		const shift_pix = maxLoc.x - w/2;
-		const gain = 0.01;
-		const tune = shift_pix * gain;
-		m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading -= tune;
-		console.log("TRACKING_DEBUG", m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading, tune, shift_pix, depth);
+	{
+		const centering_depth = 3;
+		const roi = gen_tracking_roi(
+			disparity_map, f, 
+			cam_height, wheel_separation,
+			centering_depth, min_object_height);
+		const { maxVal, maxLoc, minVal, minLoc } = roi.minMaxLoc();
+		const disparity = maxVal / uint16_max * (max_val - min_val) + min_val;
 
-		m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms = Date.now();
+		if(disparity < 0){
+			stop_robot();
+			console.log("disparity is invalid");
+			return;
+		}
+		const depth = sd * f / disparity;
+
+		const elapsed_from_last_wapoints_updated = Date.now() - (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms || 0);
+		if(elapsed_from_last_wapoints_updated > 250 && depth < centering_depth && m_auto_drive_cur > 0){//tune
+			const shift_pix = maxLoc.x - w/2;
+			const gain = 0.01;
+			const tune = shift_pix * gain;
+			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading -= tune;
+			console.log("TRACKING_DEBUG", m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading, tune, shift_pix, depth);
+
+			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms = Date.now();
+		}
 	}
 
 	auto_drive_handler(ODOMETRY_TYPE.ENCODER, finalize_fnc);
@@ -1519,6 +1548,25 @@ function command_handler(cmd) {
 
 				if(m_auto_drive_last_reverse == m_options.reverse){
 					console.log("reverse value is invalid", m_options.reverse, m_auto_drive_last_reverse);
+
+					//clear waypoints
+					let pif_dirpath = `${m_options.data_filepath}/waypoint_images`;
+					if (fs.existsSync(pif_dirpath)) {
+						const now = new Date();
+						const formattedDate = now.getFullYear() +
+							String(now.getMonth() + 1).padStart(2, '0') +
+							String(now.getDate()).padStart(2, '0') + "_" +
+							String(now.getHours()).padStart(2, '0') +
+							String(now.getMinutes()).padStart(2, '0') + "_" +
+							String(now.getSeconds()).padStart(2, '0');
+						try {
+							fs.renameSync(m_options.data_filepath, `${m_options.data_filepath}.${formattedDate}`);
+							console.log(`folder moved to ${m_options.data_filepath}.${formattedDate}`);
+						} catch (err) {
+							console.error('folder move faild:', err);
+						}
+					}
+
 					command_handler("STOP_AUTO");
 					return;
 				}
