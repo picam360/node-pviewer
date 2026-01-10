@@ -681,7 +681,7 @@ function tracking_handler(direction) {
 
 		const elapsed_from_last_wapoints_updated = Date.now() - (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms || 0);
 		if(elapsed_from_last_wapoints_updated > 250 && depth < centering_depth && m_auto_drive_cur > 0){//tune
-			const shift_pix = maxLoc.x - w/2;
+			const shift_pix = maxLoc.x - roi.cols/2;
 			const gain = 0.01;
 			const tune = shift_pix * gain;
 			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading -= tune;
