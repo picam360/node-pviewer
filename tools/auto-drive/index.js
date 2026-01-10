@@ -127,6 +127,7 @@ let m_last_nmea = null;
 let m_record_pif_dirpath = "";
 let m_auto_drive_ready_first_launch = true;
 let m_auto_drive_ready = false;
+let m_auto_drive_last_reverse = false;
 let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = -1;//negative value means init state
 let m_auto_drive_direction = "forward";//forward or backward
@@ -608,7 +609,7 @@ function tracking_handler(direction) {
 	
 	const roi_orig = disparity_map.getRegion(new cv.Rect(x, y, w, h));
 	const roi = roi_orig.gaussianBlur(
-		new cv.Size(1, 5),
+		new cv.Size(1, 15),
 		0,
 		1.0   // sigmaY
 	  );
@@ -651,7 +652,7 @@ function tracking_handler(direction) {
 	}
 
 	const elapsed_from_last_wapoints_updated = Date.now() - (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms || 0);
-	if(elapsed_from_last_wapoints_updated > 250 && depth < 4 && m_auto_drive_cur > 0){//tune
+	if(elapsed_from_last_wapoints_updated > 250 && depth < 3 && m_auto_drive_cur > 0){//tune
 		const shift_pix = maxLoc.x - w/2;
 		const gain = 0.01;
 		const tune = shift_pix * gain;
@@ -1516,6 +1517,12 @@ function command_handler(cmd) {
 			if (m_drive_mode == "STANBY") {
 				m_options.reverse = (split[1] == "REVERSE");
 
+				if(m_auto_drive_last_reverse == m_options.reverse){
+					console.log("reverse value is invalid", m_options.reverse, m_auto_drive_last_reverse);
+					command_handler("STOP_AUTO");
+					return;
+				}
+
 				m_auto_drive_ready = false;
 				m_drive_mode = "AUTO";
 				m_client.publish('pserver-auto-drive-info', JSON.stringify({
@@ -1591,12 +1598,13 @@ function command_handler(cmd) {
 			}
 			break;
 		case "STOP_AUTO":
+			stop_robot();
+
 			if (m_drive_mode == "STANBY" || m_drive_mode == "RECORD") {
 				console.log("skip STOP_AUTO : drive mode", m_drive_mode);
 				return;
 			}
 
-			stop_robot();
 			setTimeout(() => {
 				stop_robot();
 			}, 1000)
