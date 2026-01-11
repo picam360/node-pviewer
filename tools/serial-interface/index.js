@@ -9,7 +9,33 @@ const { ReadlineParser } = require('@serialport/parser-readline');
 const net = require('net');
 const yargs = require('yargs');
 
-var m_options = {};
+var m_options = {
+};
+
+let t0_hr = 0n;
+let t0_epoch_ns = 0n;
+function now_ns() {
+    const hr = process.hrtime.bigint();
+    let now_ns = t0_epoch_ns + (hr - t0_hr);
+
+    const date_now_ns = BigInt(Date.now()) * 1_000_000n;
+
+    const diff_ns = now_ns > date_now_ns
+        ? now_ns - date_now_ns
+        : date_now_ns - now_ns;
+
+    if (diff_ns > 1_000_000_000n) {
+        t0_hr = hr;
+        t0_epoch_ns = date_now_ns;
+        now_ns = date_now_ns;
+        console.log("now_ns base updated");
+    }
+
+    return {
+        sec: Number(now_ns / 1_000_000_000n),
+        nanosec: Number(now_ns % 1_000_000_000n)
+    };
+}
 
 const getIPAddress = (callback, callback_arg) => {
     const networkInterfaces = os.networkInterfaces();
@@ -401,11 +427,14 @@ function main() {
                         //console.log(json_str);
                         const vstate = JSON.parse(json_str);
 
-                        if(vstate.encoder_left !== undefined && vstate.encoder_right){
+                        const filter_same_value = false;
+                        if(!filter_same_value || vstate.encoder_left !== undefined && vstate.encoder_right){
+                            const timestamp = now_ns();
                             const left_encoder = parseInt(vstate.encoder_left);
                             const right_encoder = parseInt(vstate.encoder_right);
 
                             client.publish(`pserver-encoder`, JSON.stringify({
+                                timestamp,
                                 "left" : left_encoder,
                                 "right" : right_encoder,
                             }), (err, reply) => {

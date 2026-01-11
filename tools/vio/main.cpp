@@ -47,18 +47,19 @@ static const int REDIS_PORT = 6379;
 
 static const char *CH_STEREO = "pserver-forward-pst";
 static const char *CH_IMU    = "pserver-imu";
-static const char *CH_ENC    = "pserver-enc";
+static const char *CH_ENC    = "pserver-encoder";
 static const char *CH_POSE   = "vio_pose";
 
 // ============================================================
 // Encoder / robot parameters (!!! SET THESE !!!)
 // ============================================================
-// Wheel radius [m]
-static constexpr double WHEEL_RADIUS_M = 0.050;      // TODO: set
-// Wheel baseline (distance between left/right wheel contact points) [m]
-static constexpr double WHEEL_BASE_M   = 0.300;      // TODO: set
 // Encoder ticks per revolution [ticks/rev]
-static constexpr double TICKS_PER_REV  = 2048.0;     // TODO: set
+static constexpr double TICKS_PER_REV  = 4096.0;     // 12bit
+// Wheel radius [m]
+static constexpr double WHEEL_RADIUS_M = 0.027163; //circumference = 1.0m / (TIKS_PER_1M / TICKS_PER_REV)
+// Wheel baseline (distance between left/right wheel contact points) [m]
+static constexpr double WHEEL_BASE_M   = 0.206600; // = WHEEL_RADIUS_M * TIKS_PER_1ROUND / TICKS_PER_REV
+static bool g_ZUPT = false;
 
 // If your encoder publishes already "wheel_rad_per_sec" or "wheel_mps", you can bypass ticks-based conversion.
 // This implementation assumes it publishes cumulative counts for left/right wheels.
@@ -285,12 +286,22 @@ public:
         // Process noise Q
         // Tune these based on your encoder quality & slip.
         Eigen::Matrix<double,8,8> Q = Eigen::Matrix<double,8,8>::Zero();
-        const double sigma_v = 0.20;          // m/s noise
-        const double sigma_w = 0.50;          // rad/s noise
-        const double sigma_z = 0.05;          // m/sqrt(s) for pz random walk (small)
-        const double sigma_pr = 0.02;         // rad/sqrt(s) for pitch/roll random walk (small)
-        const double sigma_gain = 0.02;       // gain random walk
-        const double sigma_toff = 5e5;        // ns/sqrt(s) random walk (slow)
+        double sigma_v = 0.2;          // m/s noise
+        double sigma_w = 0.5;          // rad/s noise
+        double sigma_z = 0.5;          // m/sqrt(s) for pz random walk (small)
+        double sigma_pr = 0.2;         // rad/sqrt(s) for pitch/roll random walk (small)
+        double sigma_gain = 0.02;       // gain random walk
+        double sigma_toff = 5e5;        // ns/sqrt(s) random walk (slow)
+
+        double vabs = std::abs(v_mps);
+        double wabs = std::abs(yawrate_rps);
+
+        if (g_ZUPT) {
+            sigma_v = 0.0;
+            sigma_w = 0.0;
+        }
+
+        //printf("sigma %lf,%lf : %lf,%lf\n", sigma_v, sigma_w, vabs, wabs);
 
         // Approximate: Q position from v noise
         double q_pos = (sigma_v*sigma_v) * dt*dt;
@@ -391,8 +402,8 @@ public:
         // Measurement noise R
         // Tune: VIO position/orientation noise
         Eigen::Matrix<double,6,6> R = Eigen::Matrix<double,6,6>::Zero();
-        const double sigma_p_xy = 0.05;   // m
-        const double sigma_p_z  = 0.10;   // m
+        const double sigma_p_xy = 0.005;   // m
+        const double sigma_p_z  = 0.010;   // m
         const double sigma_yaw  = 0.05;   // rad
         const double sigma_pr   = 0.08;   // rad
 
@@ -857,6 +868,17 @@ void enc_thread()
         int64_t dL = cur.left_cnt  - prev.left_cnt;
         int64_t dR = cur.right_cnt - prev.right_cnt;
 
+        if(abs(dL) <= 1){
+            dL = 0;
+        }
+        if(abs(dR) <= 1){
+            dR = 0;
+        }
+
+        if(dL == 0 && dR == 0){
+            g_ZUPT = true;
+        }
+
         double v_mps = 0.0, w_rps = 0.0;
         diffdrive_counts_to_vw(dL, dR, dt, v_mps, w_rps);
 
@@ -911,9 +933,10 @@ int main(int argc, char **argv)
             if (!st.get())
                 break;
 
-            // 1) Publish raw VIO pose (as before)
-            redis_publish_pose(st->T_w_i, st->t_ns);
             pose_count++;
+
+            // 1) Publish raw VIO pose (as before)
+            //redis_publish_pose(st->T_w_i, st->t_ns);
 
             // 2) EKF update with VIO measurement
             Eigen::Vector3d p = st->T_w_i.translation();
@@ -922,15 +945,14 @@ int main(int argc, char **argv)
 
             // 3) (Optional) publish fused pose too (re-using CH_POSE is confusing; use another channel)
             //    If you want, uncomment and change channel name:
-            // Sophus::SE3d T_fused = g_ekf.get_fused_T_w_i();
-            // redis_publish_pose(T_fused, st->t_ns);
+            Sophus::SE3d T_fused = g_ekf.get_fused_T_w_i();
+            redis_publish_pose(T_fused, st->t_ns);
 
             // Debug: show estimated timeoffset/gain occasionally
-            // static int ctr = 0;
-           s                // if ((++ctr % 200) == 0) {
-            //     std::cout << "[EKF] toff_ns=" << g_ekf.get_timeoffset_ns()
-            //               << " gain=" << g_ekf.get_yawoffsetgain() << "\n";
-            // }
+            if ((pose_count % 30) == 0) {
+                std::cout << "[EKF] toff_ns=" << g_ekf.get_timeoffset_ns()
+                          << " gain=" << g_ekf.get_yawoffsetgain() << "\n";
+            }
 
             if(false){
                 struct timeval tv;
