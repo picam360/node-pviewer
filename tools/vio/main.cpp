@@ -126,21 +126,23 @@ void redis_publish_pose(const Sophus::SE3d &T_w_i, int64_t t_ns)
         std::string s = j.dump(2);
         redisCommand(c, "PUBLISH %s %b", "pserver-odometry-info", s.data(), s.size());
     }
-    // {
-    //     Eigen::Quaterniond q = T_w_i.unit_quaternion();
+    {
+        Eigen::Quaterniond q = T_w_i.unit_quaternion();
 
-    //     double yaw_ccw = std::atan2(
-    //         2.0 * (q.w() * q.z() + q.x() * q.y()),
-    //         1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z())
-    //     );
-    //     double yaw_cw = -yaw_ccw;
-    //     double yaw_deg = yaw_cw * 180.0 / M_PI;
+        double yaw_ccw = std::atan2(
+            2.0 * (q.w() * q.z() + q.x() * q.y()),
+            1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z())
+        );
+        double yaw_cw = -yaw_ccw;
+        double yaw_deg = yaw_cw * 180.0 / M_PI;
         
-    //     char buff[1024];
-    //     int size = snprintf(buff, 1024, "%lf,0.13,%lf,%lf,%lf", -T_w_i.translation().y(), T_w_i.translation().x(), yaw_deg, (double)t_ns / 1e9);
+        char buff[1024];
+        int size = snprintf(buff, 1024, "%lf,%lf,%lf,%lf,%lf", 
+        //   -T_w_i.translation().y(), T_w_i.translation().z(), T_w_i.translation().x(), yaw_deg, (double)t_ns / 1e9);
+            -T_w_i.translation().y(), 0.13, T_w_i.translation().x(), yaw_deg, (double)t_ns / 1e9);
     
-    //     redisCommand(c, "PUBLISH %s %b", "vehicle_pos", buff, size);
-    // }
+        redisCommand(c, "PUBLISH %s %b", "vehicle_pos", buff, size);
+    }
     redisFree(c);
 }
 
@@ -877,6 +879,8 @@ void enc_thread()
 
         if(dL == 0 && dR == 0){
             g_ZUPT = true;
+        }else{
+            g_ZUPT = false;
         }
 
         double v_mps = 0.0, w_rps = 0.0;
@@ -948,11 +952,11 @@ int main(int argc, char **argv)
             Sophus::SE3d T_fused = g_ekf.get_fused_T_w_i();
             redis_publish_pose(T_fused, st->t_ns);
 
-            // Debug: show estimated timeoffset/gain occasionally
-            if ((pose_count % 30) == 0) {
-                std::cout << "[EKF] toff_ns=" << g_ekf.get_timeoffset_ns()
-                          << " gain=" << g_ekf.get_yawoffsetgain() << "\n";
-            }
+            // // Debug: show estimated timeoffset/gain occasionally
+            // if ((pose_count % 30) == 0) {
+            //     std::cout << "[EKF] toff_ns=" << g_ekf.get_timeoffset_ns()
+            //               << " gain=" << g_ekf.get_yawoffsetgain() << "\n";
+            // }
 
             if(false){
                 struct timeval tv;
