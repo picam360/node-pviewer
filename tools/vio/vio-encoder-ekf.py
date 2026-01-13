@@ -343,7 +343,8 @@ class DiffDriveEkf:
             self.P = (I - K @ H) @ self.P
 
             # clamp params
-            self.x[TOFF] = clamp(self.x[TOFF], -5e8, 5e8)
+            #self.x[TOFF] = clamp(self.x[TOFF], -5e7, 5e7)
+            self.x[TOFF] = clamp(self.x[TOFF], 0, 0)
             self.x[KV] = clamp(self.x[KV], 0.5, 1.5)
             self.x[KW] = clamp(self.x[KW], 0.5, 1.5)
             self.x[LR] = clamp(self.x[LR], -0.2, 0.2)
@@ -741,6 +742,11 @@ def main():
 
         ekf.predict_from_encoder_counts(t_ns, dL, dR, dt, zupt=zupt)
 
+        fused_p, fused_q = ekf.get_fused_pose()
+        t_pub_ns = t_ns + ekf.get_timeoffset_ns()
+        redis_publish_pose_equiv(r, fused_p, fused_q, t_pub_ns)
+
+
         enc_prev = {"t_ns": t_ns, "left": left, "right": right, "have": True}
 
         with lock:
@@ -783,8 +789,8 @@ def main():
         )
 
         # ---- publish fused pose (C++ redis_publish_pose equiv) ----
-        fused_p, fused_q = ekf.get_fused_pose()
-        redis_publish_pose_equiv(r, fused_p, fused_q, t_ns)
+        #fused_p, fused_q = ekf.get_fused_pose()
+        #redis_publish_pose_equiv(r, fused_p, fused_q, t_ns)
 
         with lock:
             vio_count += 1
