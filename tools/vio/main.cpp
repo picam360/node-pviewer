@@ -777,24 +777,78 @@ void stereo_thread()
 // ============================================================
 // Encoder parsing + thread
 // ============================================================
-struct EncOdom
-{
-    int64_t t_ns = 0;
+
+struct EncOdom {
+    int64_t t_ns = 0;       // epoch time [ns]
     int64_t left_cnt = 0;
     int64_t right_cnt = 0;
 };
 
-static inline bool parse_enc_message(const std::string &payload, EncOdom &out)
+class TsUsToEpoch
 {
+public:
+    int64_t convert(uint64_t ts_us)
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+
+        if (!initialized_) {
+            struct timeval now;
+            gettimeofday(&now, nullptr);
+
+            base_epoch_ns_ = (int64_t)now.tv_sec * 1000000000LL
+                           + (int64_t)now.tv_usec * 1000LL;
+            base_ts_us_    = ts_us;
+            initialized_   = true;
+
+            return base_epoch_ns_;
+        }
+
+        int64_t dt_us = (int64_t)ts_us - (int64_t)base_ts_us_;
+        return base_epoch_ns_ + dt_us * 1000LL;
+    }
+
+private:
+    std::mutex mtx_;
+    bool initialized_ = false;
+    int64_t  base_epoch_ns_ = 0;
+    uint64_t base_ts_us_ = 0;
+};
+
+static TsUsToEpoch g_tsconv;
+
+static inline bool parse_enc_message_array(const std::string &payload,
+                                           std::vector<EncOdom> &out_list)
+{
+    out_list.clear();
+
     json j = json::parse(payload);
 
-    const auto &ts = j["timestamp"];
-    int64_t sec = ts["sec"].get<int64_t>();
-    int64_t nsec = ts["nanosec"].get<int64_t>();
+    if (!j.is_array()) {
+        return false;
+    }
 
-    out.t_ns = sec * 1000000000LL + nsec;
-    out.left_cnt = j["left"].get<int64_t>();
-    out.right_cnt = j["right"].get<int64_t>();
+    out_list.reserve(j.size());
+
+    for (const auto &item : j) {
+        if (!item.is_object()) continue;
+
+        // ts_us
+        if (!item.contains("ts_us") || !item["ts_us"].is_number()) continue;
+        uint64_t ts_us = item["ts_us"].get<uint64_t>();
+
+        // enc: [left,right]
+        if (!item.contains("enc") || !item["enc"].is_array() || item["enc"].size() < 2) continue;
+
+        EncOdom out;
+        out.left_cnt  = item["enc"][0].get<int64_t>();
+        out.right_cnt = item["enc"][1].get<int64_t>();
+
+        // ts_us -> epoch(ns)
+        out.t_ns = g_tsconv.convert(ts_us);
+
+        out_list.push_back(out);
+    }
+
     return true;
 }
 
@@ -824,10 +878,10 @@ void enc_thread()
         if (payload.empty())
             continue;
 
-        EncOdom cur;
+        std::vector<EncOdom> encs;
         try
         {
-            if (!parse_enc_message(payload, cur))
+            if (!parse_enc_message_array(payload, encs))
                 continue;
         }
         catch (const std::exception &e)
@@ -836,35 +890,38 @@ void enc_thread()
             continue;
         }
 
-        if (!have_prev)
-        {
+        for (auto &cur : encs) {
+        
+            if (!have_prev)
+            {
+                prev = cur;
+                have_prev = true;
+                continue;
+            }
+    
+            int64_t dt_ns = cur.t_ns - prev.t_ns;
+            double dt = dt_ns * 1e-9;
+            if (!(dt > 0.0 && dt < 0.2))
+            {
+                prev = cur;
+                continue;
+            }
+    
+            int64_t dL = cur.left_cnt - prev.left_cnt;
+            int64_t dR = cur.right_cnt - prev.right_cnt;
+    
+            if (std::llabs(dL) <= 1)
+                dL = 0;
+            if (std::llabs(dR) <= 1)
+                dR = 0;
+    
+            g_ZUPT = (dL == 0 && dR == 0);
+    
+            // EKF predict (counts-based, best for kv/kw/lr estimation)
+            g_ekf.predict_from_encoder_counts(cur.t_ns, dL, dR, dt);
+    
             prev = cur;
-            have_prev = true;
-            continue;
         }
-
-        int64_t dt_ns = cur.t_ns - prev.t_ns;
-        double dt = dt_ns * 1e-9;
-        if (!(dt > 0.0 && dt < 0.2))
-        {
-            prev = cur;
-            continue;
-        }
-
-        int64_t dL = cur.left_cnt - prev.left_cnt;
-        int64_t dR = cur.right_cnt - prev.right_cnt;
-
-        if (std::llabs(dL) <= 1)
-            dL = 0;
-        if (std::llabs(dR) <= 1)
-            dR = 0;
-
-        g_ZUPT = (dL == 0 && dR == 0);
-
-        // EKF predict (counts-based, best for kv/kw/lr estimation)
-        g_ekf.predict_from_encoder_counts(cur.t_ns, dL, dR, dt);
-
-        prev = cur;
     }
 }
 
