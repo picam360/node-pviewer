@@ -294,7 +294,7 @@ function init_data_stream(callback) {
                 }catch(err){
                     rtp_mod.remove_conn(conn);
                 }
-            }, 33);
+            }, 10);
             
             conn.attr.transmitbytes = 0;
             conn.attr.timer2 = setInterval(()=>{
