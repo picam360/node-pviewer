@@ -134,7 +134,7 @@ const connectWifi = (ssid, password, callback, callback_arg) => {
     if (platform === 'win32') {
         // Windows
         command = `netsh wlan add profile filename="wifi-profile.xml" & netsh wlan connect name="${ssid}" ssid="${ssid}" interface="Wi-Fi"`;
-        // Windows用のWiFiプロファイルXMLを作成
+        // Windows??WiFi??????XML???
         const wifiProfile = `
       <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
         <name>${ssid}</name>
@@ -215,7 +215,7 @@ const getWifiNetworks = (callback, callback_arg) => {
 
         let networks = [];
         if (platform === 'win32') {
-            // Windowsの場合のパース
+            // Windows???????
             const ssidRegex = /SSID \d+ : (.+)/g;
             const signalRegex = /Signal\s*:\s*(\d+)%/g;
             let ssidMatch, signalMatch;
@@ -223,7 +223,7 @@ const getWifiNetworks = (callback, callback_arg) => {
                 networks.push({ ssid: ssidMatch[1], signal: parseInt(signalMatch[1]) });
             }
         } else if (platform === 'darwin') {
-            // macOSの場合のパース
+            // macOS???????
             const lines = stdout.split('\n').slice(1);
             lines.forEach(line => {
                 const parts = line.split(/\s+/).filter(part => part !== '');
@@ -234,7 +234,7 @@ const getWifiNetworks = (callback, callback_arg) => {
                 }
             });
         } else if (platform === 'linux') {
-            // Linuxの場合のパース
+            // Linux???????
             const lines = stdout.split('\n');
             lines.forEach(line => {
                 const [ssid, signal] = line.split(':');
@@ -259,7 +259,7 @@ function chunkDataWithSequenceAndChecksum(data, chunkSize) {
         var end = Math.min(offset + chunkSize, data.byteLength);
         var chunkData = new Uint8Array(data.slice(offset, end));
 
-        // シーケンス番号（先頭）とチェックサム（末尾）を追加
+        // ?????????????????????????
         var chunkWithMetadata = new Uint8Array(end - offset + CHUNK_META_SIZE);
         chunkWithMetadata[0] = sequenceNumber;
         chunkWithMetadata.set(chunkData, 1);
@@ -267,7 +267,7 @@ function chunkDataWithSequenceAndChecksum(data, chunkSize) {
 
         chunks.push(chunkWithMetadata);
 
-        sequenceNumber = (sequenceNumber + 1) & 0xFF; // シーケンス番号を1バイトで循環
+        sequenceNumber = (sequenceNumber + 1) & 0xFF; // ????????1??????
     }
 
     return chunks;
@@ -423,30 +423,16 @@ function main() {
             switch (params[1]) {
                 case "SET_VSTATE"://from esp32
                     try{
-                        const json_str = data.substring(14);
+                        const json_str = data.substring(15);
                         //console.log(json_str);
                         const vstate = JSON.parse(json_str);
-
-                        const filter_same_value = false;
-                        if(!filter_same_value || vstate.encoder_left !== undefined && vstate.encoder_right){
-                            const timestamp = now_ns();
-                            const left_encoder = parseInt(vstate.encoder_left);
-                            const right_encoder = parseInt(vstate.encoder_right);
-
-                            client.publish(`pserver-encoder`, JSON.stringify({
-                                timestamp,
-                                "left" : left_encoder,
-                                "right" : right_encoder,
-                            }), (err, reply) => {
-                                if (err) {
-                                    console.error('Error publishing message:', err);
-                                } else {
-                                    //console.log(`Message published to ${reply} subscribers.`);
-                                }
-                            });
-
-                            //console.log("encoder", left_encoder, right_encoder);
-                        }
+                        client.publish(`pserver-encoder`, JSON.stringify(vstate), (err, reply) => {
+                            if (err) {
+                                console.error('Error publishing message:', err);
+                            } else {
+                                //console.log(`Message published to ${reply} subscribers.`);
+                            }
+                        });
                     }catch(err){
 
                     }

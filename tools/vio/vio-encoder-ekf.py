@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-ROS-VIO bridge (ROS1 / ROS2 switchable) + Differential-drive EKF fusion
+OpenVINS bridge (ROS1 / ROS2 switchable) + Differential-drive EKF fusion
 
 Adds:
   - SUBSCRIBE "pserver-encoder"
@@ -10,14 +10,19 @@ Adds:
   - EKF update from /odom (VIO odom)
   - Publish fused pose back to Redis (equivalent to C++ redis_publish_pose)
 
+IMPORTANT PERFORMANCE FIX:
+  - DO NOT decode JPEG in Redis pubsub callback thread.
+  - Push image packets to a small queue (latest-only) and decode in worker thread.
+  - Prevent pubsub starvation -> IMU/ENC FPS stays stable.
+
 Usage:
   ROS1:
     source /opt/ros/noetic/setup.bash
-    python3 ROS-VIO_bridge_ekf.py --ros 1
+    python3 vio-encoder-ekf.py --ros 1
 
   ROS2:
     source /opt/ros/humble/setup.bash
-    python3 ROS-VIO_bridge_ekf.py --ros 2
+    python3 vio-encoder-ekf.py --ros 2
 """
 
 import argparse
@@ -30,6 +35,7 @@ import re
 import signal
 import sys
 import math
+from collections import deque
 
 import redis
 import cv2
@@ -44,11 +50,16 @@ from geometry_msgs.msg import Point
 # ============================================================
 
 def split_stereo_image(jpeg_bytes):
-    """Decode JPEG and split into left/right images"""
+    """Decode JPEG and split into left/right images (SAFE)"""
     jpg = np.frombuffer(jpeg_bytes, dtype=np.uint8)
     img = cv2.imdecode(jpg, cv2.IMREAD_COLOR)
+    if img is None or img.size == 0:
+        return None, None
 
     h, w = img.shape[:2]
+    if w < 2:
+        return None, None
+
     half = w // 2
     left = img[:, :half].copy()
     right = img[:, half:half * 2].copy()
@@ -57,7 +68,7 @@ def split_stereo_image(jpeg_bytes):
 
 def parse_xml_timestamp(xml_bytes):
     """Parse timestamp from XML header"""
-    xml_data = xml_bytes[4:].decode("utf-8")
+    xml_data = xml_bytes[4:].decode("utf-8", errors="ignore")
     xml_data = re.sub(r'</?\w+:(\w+)', r'<\1', xml_data)
     root = ET.fromstring(xml_data)
     sec, usec = root.attrib["timestamp"].split(",")
@@ -73,7 +84,7 @@ def wrap_pi(a):
 
 
 # ============================================================
-# EKF (ported from your C++ code)
+# EKF (ported from C++)
 # State:
 #   x = [px, py, pz, yaw, pitch, roll, toff_ns, kv, kw, lrlatio]
 # ============================================================
@@ -81,6 +92,7 @@ def wrap_pi(a):
 TICKS_PER_REV = 4096.0
 WHEEL_RADIUS_M_NOM = 0.027
 WHEEL_BASE_M_NOM = 0.200
+
 
 class DiffDriveEkf:
     def __init__(self):
@@ -92,21 +104,20 @@ class DiffDriveEkf:
             self.x = np.zeros((10,), dtype=np.float64)
             self.P = np.zeros((10, 10), dtype=np.float64)
 
-            # variances
-            self.P[0, 0] = 1.0   # px
-            self.P[1, 1] = 1.0   # py
-            self.P[2, 2] = 4.0   # pz
-            self.P[3, 3] = 0.5   # yaw
-            self.P[4, 4] = 0.5   # pitch
-            self.P[5, 5] = 0.5   # roll
-            self.P[6, 6] = 1e16  # toff_ns
-            self.P[7, 7] = 0.05 * 0.05  # kv
-            self.P[8, 8] = 0.05 * 0.05  # kw
-            self.P[9, 9] = 0.02 * 0.02  # lrlatio
+            self.P[0, 0] = 1.0
+            self.P[1, 1] = 1.0
+            self.P[2, 2] = 4.0
+            self.P[3, 3] = 0.5
+            self.P[4, 4] = 0.5
+            self.P[5, 5] = 0.5
+            self.P[6, 6] = 1e16
+            self.P[7, 7] = 0.05 * 0.05
+            self.P[8, 8] = 0.05 * 0.05
+            self.P[9, 9] = 0.02 * 0.02
 
-            self.x[7] = 1.0  # kv
-            self.x[8] = 1.0  # kw
-            self.x[9] = 0.0  # lr
+            self.x[7] = 1.0
+            self.x[8] = 1.0
+            self.x[9] = 0.0
 
             self.last_pred_t_ns = 0
             self.last_v_mps = 0.0
@@ -114,12 +125,6 @@ class DiffDriveEkf:
 
     @staticmethod
     def quat_to_ypr_zyx(qw, qx, qy, qz):
-        # rotation matrix
-        # yaw = atan2(R10, R00)
-        # pitch = asin(-R20)
-        # roll = atan2(R21, R22)
-        # build R from quaternion
-        # normalize
         n = math.sqrt(qw*qw + qx*qx + qy*qy + qz*qz)
         if n <= 0:
             return 0.0, 0.0, 0.0
@@ -138,7 +143,6 @@ class DiffDriveEkf:
 
     @staticmethod
     def ypr_zyx_to_quat(yaw, pitch, roll):
-        # q = qz(yaw) * qy(pitch) * qx(roll)
         cy = math.cos(yaw * 0.5)
         sy = math.sin(yaw * 0.5)
         cp = math.cos(pitch * 0.5)
@@ -150,13 +154,15 @@ class DiffDriveEkf:
         qx = cy*cp*sr - sy*sp*cr
         qy = cy*sp*cr + sy*cp*sr
         qz = sy*cp*cr - cy*sp*sr
-        # normalize
+
         n = math.sqrt(qw*qw + qx*qx + qy*qy + qz*qz)
+        if n <= 0:
+            return 1.0, 0.0, 0.0, 0.0
         return qw/n, qx/n, qy/n, qz/n
 
     def predict_from_encoder_counts(self, enc_t_ns, dL, dR, dt, zupt=False):
         with self._mtx:
-            TOFF = 6
+            PX, PY, PZ, YAW, PITCH, ROLL, TOFF, KV, KW, LR = range(10)
 
             toff_ns = int(round(self.x[TOFF]))
             t_ns = int(enc_t_ns + toff_ns)
@@ -171,15 +177,13 @@ class DiffDriveEkf:
                 self.last_pred_t_ns = t_ns
                 return
 
-            PX, PY, PZ, YAW, PITCH, ROLL, TOFF, KV, KW, LR = range(10)
+            px = float(self.x[PX])
+            py = float(self.x[PY])
+            yaw = float(self.x[YAW])
 
-            px = self.x[PX]
-            py = self.x[PY]
-            yaw = self.x[YAW]
-
-            kv = clamp(self.x[KV], 0.5, 1.5)
-            kw = clamp(self.x[KW], 0.5, 1.5)
-            lr = clamp(self.x[LR], -0.2, 0.2)
+            kv = clamp(float(self.x[KV]), 0.5, 1.5)
+            kw = clamp(float(self.x[KW]), 0.5, 1.5)
+            lr = clamp(float(self.x[LR]), -0.2, 0.2)
 
             self.x[KV] = kv
             self.x[KW] = kw
@@ -276,23 +280,19 @@ class DiffDriveEkf:
             self.last_v_mps = v
             self.last_w_rps = w
 
-    def update_from_odom(self, odom_t_ns, p, q):
-        """
-        p: (x,y,z)
-        q: (x,y,z,w)
-        """
+    def update_from_odom(self, odom_t_ns, p_xyz, q_xyzw):
         with self._mtx:
             PX, PY, PZ, YAW, PITCH, ROLL, TOFF, KV, KW, LR = range(10)
 
             if self.last_pred_t_ns == 0:
-                self._init_from_meas(odom_t_ns, p, q)
+                self._init_from_meas(odom_t_ns, p_xyz, q_xyzw)
                 return
 
-            yaw_meas, pitch_meas, roll_meas = self.quat_to_ypr_zyx(q[3], q[0], q[1], q[2])
+            qx, qy, qz, qw = q_xyzw
+            yaw_meas, pitch_meas, roll_meas = self.quat_to_ypr_zyx(qw, qx, qy, qz)
 
-            z = np.array([p[0], p[1], p[2], yaw_meas, pitch_meas, roll_meas], dtype=np.float64)
-            h = np.array([self.x[PX], self.x[PY], self.x[PZ],
-                          self.x[YAW], self.x[PITCH], self.x[ROLL]], dtype=np.float64)
+            z = np.array([p_xyz[0], p_xyz[1], p_xyz[2], yaw_meas, pitch_meas, roll_meas], dtype=np.float64)
+            h = np.array([self.x[PX], self.x[PY], self.x[PZ], self.x[YAW], self.x[PITCH], self.x[ROLL]], dtype=np.float64)
 
             r = z - h
             r[3] = wrap_pi(r[3])
@@ -305,18 +305,14 @@ class DiffDriveEkf:
             H[4, PITCH] = 1.0
             H[5, ROLL] = 1.0
 
-            # timeoffset approx jacobian
-            yaw = self.x[YAW]
+            yaw = float(self.x[YAW])
             c = math.cos(yaw)
             s = math.sin(yaw)
-            dpx_dtoff = self.last_v_mps * c * 1e-9
-            dpy_dtoff = self.last_v_mps * s * 1e-9
-            dyaw_dtoff = self.last_w_rps * 1e-9
-            H[0, TOFF] = dpx_dtoff
-            H[1, TOFF] = dpy_dtoff
-            H[3, TOFF] = dyaw_dtoff
 
-            # Measurement noise R
+            H[0, TOFF] = self.last_v_mps * c * 1e-9
+            H[1, TOFF] = self.last_v_mps * s * 1e-9
+            H[3, TOFF] = self.last_w_rps * 1e-9
+
             R = np.zeros((6, 6), dtype=np.float64)
             sigma_p_xy = 0.001
             sigma_p_z = 0.010
@@ -342,24 +338,22 @@ class DiffDriveEkf:
             I = np.eye(10, dtype=np.float64)
             self.P = (I - K @ H) @ self.P
 
-            # clamp params
-            #self.x[TOFF] = clamp(self.x[TOFF], -5e7, 5e7)
-            self.x[TOFF] = clamp(self.x[TOFF], 0, 0)
-            self.x[KV] = clamp(self.x[KV], 0.5, 1.5)
-            self.x[KW] = clamp(self.x[KW], 0.5, 1.5)
-            self.x[LR] = clamp(self.x[LR], -0.2, 0.2)
+            self.x[TOFF] = clamp(float(self.x[TOFF]), -5e8, 5e8)
+            self.x[KV] = clamp(float(self.x[KV]), 0.5, 1.5)
+            self.x[KW] = clamp(float(self.x[KW]), 0.5, 1.5)
+            self.x[LR] = clamp(float(self.x[LR]), -0.2, 0.2)
 
             if abs(int(odom_t_ns - self.last_pred_t_ns)) > int(2e9):
-                self._init_from_meas(odom_t_ns, p, q)
+                self._init_from_meas(odom_t_ns, p_xyz, q_xyzw)
 
-    def _init_from_meas(self, t_ns, p, q):
+    def _init_from_meas(self, t_ns, p_xyz, q_xyzw):
         PX, PY, PZ, YAW, PITCH, ROLL, TOFF, KV, KW, LR = range(10)
+        qx, qy, qz, qw = q_xyzw
+        yaw, pitch, roll = self.quat_to_ypr_zyx(qw, qx, qy, qz)
 
-        yaw, pitch, roll = self.quat_to_ypr_zyx(q[3], q[0], q[1], q[2])
-
-        self.x[PX] = p[0]
-        self.x[PY] = p[1]
-        self.x[PZ] = p[2]
+        self.x[PX] = p_xyz[0]
+        self.x[PY] = p_xyz[1]
+        self.x[PZ] = p_xyz[2]
         self.x[YAW] = yaw
         self.x[PITCH] = pitch
         self.x[ROLL] = roll
@@ -380,14 +374,14 @@ class DiffDriveEkf:
 
     def get_fused_pose(self):
         with self._mtx:
-            qw, qx, qy, qz = self.ypr_zyx_to_quat(self.x[3], self.x[4], self.x[5])
+            qw, qx, qy, qz = self.ypr_zyx_to_quat(float(self.x[3]), float(self.x[4]), float(self.x[5]))
             p = (float(self.x[0]), float(self.x[1]), float(self.x[2]))
-            q = (float(qx), float(qy), float(qz), float(qw))  # x,y,z,w
+            q = (float(qx), float(qy), float(qz), float(qw))  # xyzw
             return p, q
 
     def get_timeoffset_ns(self):
         with self._mtx:
-            return int(round(self.x[6]))
+            return int(round(float(self.x[6])))
 
     def get_calib(self):
         with self._mtx:
@@ -406,24 +400,22 @@ def redis_publish_pose_equiv(r, T_p, T_q_xyzw, t_ns):
     px, py, pz = T_p
     qx, qy, qz, qw = T_q_xyzw
 
-    # ---- publish vio_pose json ----
+    # vio_pose json
     j = {
         "t_ns": int(t_ns),
         "p": [px, py, pz],
-        "q": [qw, qx, qy, qz],  # C++ order w,x,y,z
+        "q": [qw, qx, qy, qz],  # w,x,y,z
     }
     s = json.dumps(j, ensure_ascii=False, indent=2)
     r.publish("vio_pose", s)
 
-    # yaw from quaternion
-    # yaw_ccw = atan2(2(wz+xy), 1-2(yy+zz))
     yaw_ccw = math.atan2(
         2.0 * (qw * qz + qx * qy),
         1.0 - 2.0 * (qy * qy + qz * qz)
     )
     heading = -yaw_ccw * 180.0 / math.pi
 
-    # ---- publish pserver-odometry-info ----
+    # pserver-odometry-info json
     j2 = {
         "mode": "odom",
         "state": "UPDATE_ODOMETRY",
@@ -438,7 +430,7 @@ def redis_publish_pose_equiv(r, T_p, T_q_xyzw, t_ns):
     s2 = json.dumps(j2, ensure_ascii=False, indent=2)
     r.publish("pserver-odometry-info", s2)
 
-    # ---- publish vehicle_pos csv ----
+    # vehicle_pos csv
     yaw_deg = (-yaw_ccw) * 180.0 / math.pi
     csv = f"{-py},{0.13},{px},{yaw_deg},{float(t_ns)/1e9}"
     r.publish("vehicle_pos", csv)
@@ -463,13 +455,11 @@ class ROS1Bridge:
 
         self.image_color = image_color
 
-        rospy.init_node("ROS-VIO_bridge", anonymous=False)
+        rospy.init_node("openvins_bridge", anonymous=False)
 
         self.imu_pub = rospy.Publisher("/imu0", Imu, queue_size=200)
         self.cam0_pub = rospy.Publisher("/cam0/image_raw", Image, queue_size=2)
         self.cam1_pub = rospy.Publisher("/cam1/image_raw", Image, queue_size=2)
-        self.vio_odom_pub = rospy.Publisher("/vio/odom", Odometry, queue_size=50)
-        self.cam_vis_pub = rospy.Publisher("/vio/camera_pose_visual", MarkerArray, queue_size=10)
 
     def make_stamp(self, sec, nsec):
         return self.rospy.Time(secs=sec, nsecs=nsec)
@@ -503,15 +493,12 @@ class ROS1Bridge:
                 gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY)
             else:
                 gray = mat
-
             msg.encoding = "mono8"
             msg.step = msg.width
             msg.data = gray.tobytes()
-
-        else:  # bgr
+        else:
             if mat.ndim == 2:
                 mat = cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
-
             msg.encoding = "bgr8"
             msg.step = msg.width * 3
             msg.data = mat.tobytes()
@@ -530,14 +517,12 @@ class ROS2Bridge:
     def __init__(self, image_color):
         import rclpy
         from rclpy.node import Node
-        import tf_transformations
         from sensor_msgs.msg import Imu, Image
         from nav_msgs.msg import Odometry
 
         self.rclpy = rclpy
         rclpy.init()
-        self.node = Node("ROS-VIO_bridge")
-        self.tf_transformations = tf_transformations
+        self.node = Node("openvins_bridge")
 
         self.Imu = Imu
         self.Image = Image
@@ -548,8 +533,6 @@ class ROS2Bridge:
         self.imu_pub = self.node.create_publisher(Imu, "/imu0", 200)
         self.cam0_pub = self.node.create_publisher(Image, "/cam0/image_raw", 2)
         self.cam1_pub = self.node.create_publisher(Image, "/cam1/image_raw", 2)
-        self.vio_odom_pub = self.node.create_publisher(Odometry, "/vio/odom", 50)
-        self.cam_vis_pub = self.node.create_publisher(MarkerArray, "/vio/camera_pose_visual", 10)
 
         self._spin_stop = threading.Event()
         self._spin_thread = threading.Thread(target=self._spin_loop, daemon=True)
@@ -557,7 +540,7 @@ class ROS2Bridge:
 
     def _spin_loop(self):
         while not self._spin_stop.is_set():
-            self.rclpy.spin_once(self.node, timeout_sec=0.1)
+            self.rclpy.spin_once(self.node, timeout_sec=0.05)
 
     def shutdown(self):
         try:
@@ -605,15 +588,12 @@ class ROS2Bridge:
                 gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY)
             else:
                 gray = mat
-
             msg.encoding = "mono8"
             msg.step = msg.width
             msg.data = gray.tobytes()
-
-        else:  # bgr
+        else:
             if mat.ndim == 2:
                 mat = cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
-
             msg.encoding = "bgr8"
             msg.step = msg.width * 3
             msg.data = mat.tobytes()
@@ -639,25 +619,21 @@ def main():
     parser.add_argument("--vio-redis-channel", default="pserver-vio",
                         help="Redis pub channel for raw VIO pose JSON")
 
-    parser.add_argument(
-        "--image-color",
-        choices=["mono", "bgr"],
-        default="bgr",
-        help="sensor_msgs/Image encoding: mono8 or bgr8"
-    )
+    parser.add_argument("--image-color", choices=["mono", "bgr"], default="bgr",
+                        help="sensor_msgs/Image encoding: mono8 or bgr8")
 
     args = parser.parse_args()
 
-    ros = (ROS1Bridge if args.ros == 1 else ROS2Bridge)(
-        image_color=args.image_color
-    )
+    ros = (ROS1Bridge if args.ros == 1 else ROS2Bridge)(image_color=args.image_color)
 
     r = redis.Redis(host=args.host, port=args.port)
     pubsub = r.pubsub()
 
-    tmp_img = []
     ekf = DiffDriveEkf()
 
+    # ================================
+    # FPS counters
+    # ================================
     imu_count = 0
     img_count = 0
     vio_count = 0
@@ -666,50 +642,102 @@ def main():
 
     stop_event = threading.Event()
 
-    # ===== Encoder prev state =====
-    enc_prev = {"t_ns": 0, "left": 0, "right": 0, "have": False}
+    # ================================
+    # Image packet collector + worker queue
+    # ================================
+    tmp_img = []  # collects 3 chunks
+    img_queue = deque(maxlen=2)  # keep latest only
+    img_q_lock = threading.Lock()
+    img_q_event = threading.Event()
 
-    def on_imu(msg):
-        nonlocal imu_count
-        data = json.loads(msg["data"].decode())
-        stamp = ros.make_stamp(
-            data["timestamp"]["sec"],
-            data["timestamp"]["nanosec"]
-        )
-        ros.publish_imu(stamp, data["gyro"], data["accel"])
+    def image_worker():
+        nonlocal img_count
+        while not stop_event.is_set():
+            img_q_event.wait(0.2)
+            img_q_event.clear()
 
-        with lock:
-            imu_count += 1
+            item = None
+            with img_q_lock:
+                if img_queue:
+                    # latest-only
+                    item = img_queue.pop()
+                    img_queue.clear()
 
-    def on_image(msg):
-        nonlocal tmp_img, img_count
-        data = msg["data"]
+            if item is None:
+                continue
 
-        if len(data) == 0 and tmp_img:
-            sec, nsec = parse_xml_timestamp(tmp_img[0])
+            sec, nsec, jpeg = item
             stamp = ros.make_stamp(sec, nsec)
-            left, right = split_stereo_image(tmp_img[2])
+
+            left, right = split_stereo_image(jpeg)
+            if left is None:
+                continue
+
             ros.publish_image(left, "cam0", stamp)
             ros.publish_image(right, "cam1", stamp)
 
             with lock:
                 img_count += 1
 
+    threading.Thread(target=image_worker, daemon=True).start()
+
+    # ================================
+    # Encoder prev state
+    # ================================
+    enc_prev = {"t_ns": 0, "left": 0, "right": 0, "have": False}
+
+    # ============================================================
+    # Redis callbacks (pubsub thread MUST be light!)
+    # ============================================================
+
+    def on_imu(msg):
+        nonlocal imu_count
+        try:
+            data = json.loads(msg["data"].decode())
+            stamp = ros.make_stamp(
+                data["timestamp"]["sec"],
+                data["timestamp"]["nanosec"]
+            )
+            ros.publish_imu(stamp, data["gyro"], data["accel"])
+            with lock:
+                imu_count += 1
+        except Exception as e:
+            print("[imu] error:", e)
+
+    def on_image(msg):
+        """
+        IMPORTANT:
+          This callback must be LIGHT.
+          Only collect chunks + push jpeg to queue.
+          NO jpeg decode here.
+        """
+        nonlocal tmp_img
+        data = msg["data"]
+
+        # end chunk
+        if len(data) == 0 and tmp_img:
+            if len(tmp_img) == 3:
+                try:
+                    sec, nsec = parse_xml_timestamp(tmp_img[0])
+                    jpeg = tmp_img[2]
+                    with img_q_lock:
+                        img_queue.append((sec, nsec, jpeg))
+                        img_q_event.set()
+                except Exception as e:
+                    print("[stereo] pack error:", e)
+
             tmp_img = []
-        else:
+            return
+
+        # append chunk
+        try:
             tmp_img.append(base64.b64decode(data))
+        except Exception as e:
+            print("[stereo] base64 decode error:", e)
+            tmp_img = []
 
     def on_encoder(msg):
-        """
-        Expect JSON:
-        {
-          "timestamp": {"sec":..., "nanosec":...},
-          "left": int64,
-          "right": int64
-        }
-        """
         nonlocal enc_count, enc_prev
-
         try:
             data = json.loads(msg["data"].decode())
             ts = data["timestamp"]
@@ -742,63 +770,64 @@ def main():
 
         ekf.predict_from_encoder_counts(t_ns, dL, dR, dt, zupt=zupt)
 
-        fused_p, fused_q = ekf.get_fused_pose()
-        t_pub_ns = t_ns + ekf.get_timeoffset_ns()
-        redis_publish_pose_equiv(r, fused_p, fused_q, t_pub_ns)
-
-
         enc_prev = {"t_ns": t_ns, "left": left, "right": right, "have": True}
 
         with lock:
             enc_count += 1
 
-    # ----------------------------
-    # ROS (VIO Odom) -> EKF update -> Redis fused publish
-    # ----------------------------
+    # ============================================================
+    # ROS (VIO Odom) -> EKF update -> Redis publish fused
+    # ============================================================
+
     def vio_odom_cb(msg):
         nonlocal vio_count
 
-        if args.ros == 1:
-            sec = int(msg.header.stamp.secs)
-            nsec = int(msg.header.stamp.nsecs)
-        else:
-            sec = int(msg.header.stamp.sec)
-            nsec = int(msg.header.stamp.nanosec)
+        try:
+            if args.ros == 1:
+                sec = int(msg.header.stamp.secs)
+                nsec = int(msg.header.stamp.nsecs)
+            else:
+                sec = int(msg.header.stamp.sec)
+                nsec = int(msg.header.stamp.nanosec)
 
-        t_ns = sec * 1000000000 + nsec
+            t_ns = sec * 1000000000 + nsec
 
-        p = msg.pose.pose.position
-        q = msg.pose.pose.orientation
+            p = msg.pose.pose.position
+            q = msg.pose.pose.orientation
 
-        # raw VIO publish (optional keep)
-        payload = {
-            "timestamp": {"sec": sec, "nanosec": nsec},
-            "position": {"x": float(p.x), "y": float(p.y), "z": float(p.z)},
-            "orientation": {"x": float(q.x), "y": float(q.y), "z": float(q.z), "w": float(q.w)},
-            "frame_id": getattr(msg.header, "frame_id", ""),
-            "child_frame_id": getattr(msg, "child_frame_id", ""),
-        }
-        s = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        r.publish(args.vio_redis_channel, s)
+            # raw publish (optional)
+            payload = {
+                "timestamp": {"sec": sec, "nanosec": nsec},
+                "position": {"x": float(p.x), "y": float(p.y), "z": float(p.z)},
+                "orientation": {"x": float(q.x), "y": float(q.y), "z": float(q.z), "w": float(q.w)},
+                "frame_id": getattr(msg.header, "frame_id", ""),
+                "child_frame_id": getattr(msg, "child_frame_id", ""),
+            }
+            r.publish(args.vio_redis_channel, json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
-        # ---- EKF update ----
-        ekf.update_from_odom(
-            t_ns,
-            (float(p.x), float(p.y), float(p.z)),
-            (float(q.x), float(q.y), float(q.z), float(q.w))
-        )
+            # EKF update
+            ekf.update_from_odom(
+                t_ns,
+                (float(p.x), float(p.y), float(p.z)),
+                (float(q.x), float(q.y), float(q.z), float(q.w))
+            )
 
-        # ---- publish fused pose (C++ redis_publish_pose equiv) ----
-        #fused_p, fused_q = ekf.get_fused_pose()
-        #redis_publish_pose_equiv(r, fused_p, fused_q, t_ns)
+            # publish fused pose
+            fused_p, fused_q = ekf.get_fused_pose()
+            redis_publish_pose_equiv(r, fused_p, fused_q, t_ns)
 
-        with lock:
-            vio_count += 1
+            with lock:
+                vio_count += 1
 
-    # subscribe VIO odom
+        except Exception as e:
+            print("[vio] callback error:", e)
+
     ros.subscribe_vio_odom(args.vio_odom_topic, vio_odom_cb)
 
+    # ============================================================
     # FPS monitor
+    # ============================================================
+
     def fps_monitor():
         nonlocal imu_count, img_count, vio_count, enc_count
         interval = 5.0
@@ -821,6 +850,12 @@ def main():
                 f"[EKF] toff_ns={toff} kv={kv:.6f} kw={kw:.6f} lr={lr:.6f}"
             )
 
+    threading.Thread(target=fps_monitor, daemon=True).start()
+
+    # ============================================================
+    # Subscribe Redis
+    # ============================================================
+
     pubsub.subscribe(**{
         "pserver-imu": on_imu,
         "pserver-forward-pst": on_image,
@@ -828,7 +863,10 @@ def main():
     })
 
     pubsub_thread = pubsub.run_in_thread(sleep_time=0.01)
-    threading.Thread(target=fps_monitor, daemon=True).start()
+
+    # ============================================================
+    # Shutdown
+    # ============================================================
 
     def shutdown_all(exit_code=0):
         stop_event.set()
@@ -862,7 +900,7 @@ def main():
 
     signal.signal(signal.SIGINT, handle_sigint)
 
-    print("ROS-VIO bridge + EKF started (Ctrl+C to stop)")
+    print("OpenVINS bridge + EKF started (Ctrl+C to stop)")
     print(f"  ROS: {args.ros}")
     print(f"  Redis: {args.host}:{args.port}")
     print(f"  VIO odom topic: {args.vio_odom_topic} -> Redis channel(raw): {args.vio_redis_channel}")
