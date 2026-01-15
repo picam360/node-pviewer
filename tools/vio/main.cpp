@@ -872,11 +872,13 @@ void enc_thread()
                 w_enc = clamp(w_enc, -10.0, 10.0);
             }
 
-            g_toff_est.push_encoder(cur.t_ns, w_enc);
+            if (!g_ZUPT) {
+                g_toff_est.push_encoder(cur.t_ns, w_enc);
+            }
 
             // ---- estimate toff online ----
             int64_t toff_ns_new;
-            if (g_toff_est.estimate(toff_ns_new))
+            if (!g_ZUPT && g_toff_est.estimate(toff_ns_new))
             {
                 // clamp
                 toff_ns_new = std::max<int64_t>(-500000000LL, std::min<int64_t>(500000000LL, toff_ns_new));
@@ -943,7 +945,7 @@ int main(int argc, char **argv)
                 Eigen::Vector3d ypr = quat_to_ypr_zyx(q);
                 double yaw = ypr(0);
 
-                if (vio_have_prev) {
+                if (!g_ZUPT && vio_have_prev) {
                     double dyaw = std::atan2(std::sin(yaw - vio_yaw_prev),
                                              std::cos(yaw - vio_yaw_prev));
                     double dt = (st->t_ns - vio_t_prev) * 1e-9;
