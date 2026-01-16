@@ -426,7 +426,14 @@ function main() {
                         const json_str = data.substring(15);
                         //console.log(json_str);
                         const vstate = JSON.parse(json_str);
-                        client.publish(`pserver-encoder`, JSON.stringify(vstate), (err, reply) => {
+                        client.publish(`pserver-enc-raw`, JSON.stringify(vstate.enc), (err, reply) => {
+                            if (err) {
+                                console.error('Error publishing message:', err);
+                            } else {
+                                //console.log(`Message published to ${reply} subscribers.`);
+                            }
+                        });
+                        client.publish(`pserver-imu-raw`, JSON.stringify(vstate.imu), (err, reply) => {
                             if (err) {
                                 console.error('Error publishing message:', err);
                             } else {
