@@ -401,6 +401,8 @@ function main() {
         m_msg_queue = [];
     }, 50);
 
+    let now_us_base = 0;
+    let now_epoch_us_base = 0;
     parser.on('data', (data) => {
         const options = {
             header : "",
@@ -426,20 +428,34 @@ function main() {
                         const json_str = data.substring(15);
                         //console.log(json_str);
                         const vstate = JSON.parse(json_str);
-                        client.publish(`pserver-enc-raw`, JSON.stringify(vstate.enc), (err, reply) => {
-                            if (err) {
-                                console.error('Error publishing message:', err);
-                            } else {
-                                //console.log(`Message published to ${reply} subscribers.`);
+                        if(now_us_base === 0){
+                            now_us_base = vstate.now;
+                            now_epoch_us_base = Date.now() * 1000;
+                        }
+                        {
+                            for(const item of vstate.enc){
+                                item[0] = (item[0] - now_us_base) + now_epoch_us_base;
                             }
-                        });
-                        client.publish(`pserver-imu-raw`, JSON.stringify(vstate.imu), (err, reply) => {
-                            if (err) {
-                                console.error('Error publishing message:', err);
-                            } else {
-                                //console.log(`Message published to ${reply} subscribers.`);
+                            client.publish(`pserver-enc-raw`, JSON.stringify(vstate.enc, null, 2), (err, reply) => {
+                                if (err) {
+                                    console.error('Error publishing message:', err);
+                                } else {
+                                    //console.log(`Message published to ${reply} subscribers.`);
+                                }
+                            });
+                        }
+                        {
+                            for(const item of vstate.imu){
+                                item[0] = (item[0] - now_us_base) + now_epoch_us_base;
                             }
-                        });
+                            client.publish(`pserver-imu-raw`, JSON.stringify(vstate.imu, null, 2), (err, reply) => {
+                                if (err) {
+                                    console.error('Error publishing message:', err);
+                                } else {
+                                    //console.log(`Message published to ${reply} subscribers.`);
+                                }
+                            });
+                        }
                     }catch(err){
 
                     }
