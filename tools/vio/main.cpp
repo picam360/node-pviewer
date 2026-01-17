@@ -46,6 +46,7 @@
 #include <basalt/serialization/headers_serialization.h>
 
 #include <sophus/se3.hpp>
+#include <CLI/CLI.hpp>
 
 #include "toff_estimator.h"
 #include "zupt_drift_canceller.h"
@@ -974,14 +975,31 @@ void enc_thread()
 // ============================================================
 int main(int argc, char **argv)
 {
+
+    CLI::App app{"basalt helper"};
+
+    // ---- options ----
+    std::string config_path = "vio_config.json";
+    std::string calib_path = "calib.json";
+    bool enable_zupt = true;
+
+    app.add_option("--config", config_path, "Configuration json file path");
+    app.add_option("--calib", calib_path, "Calibration json file path");
+    app.add_flag("--zupt", enable_zupt, "Enable ZUPT (default: true)");
+
+    CLI11_PARSE(app, argc, argv);
+
+    std::cout << "[INFO] config_path=" << config_path << "\n";
+    std::cout << "[INFO] calib_path=" << calib_path << "\n";
+    std::cout << "[INFO] zupt=" << (enable_zupt ? "true" : "false") << "\n";
+
     // ---- load calibration (same as vio.cpp) ----
     {
-        std::ifstream is("calib.json");
+        std::ifstream is(calib_path);
         cereal::JSONInputArchive ar(is);
         ar(calib);
     }
-
-    vio_config.load("vio_config.json");
+    vio_config.load(config_path);
 
     opt_flow = basalt::OpticalFlowFactory::getOpticalFlow(vio_config, calib);
     vio = basalt::VioEstimatorFactory::getVioEstimator(
@@ -1007,19 +1025,22 @@ int main(int argc, char **argv)
         const size_t n = vio->out_state_queue->size();
         for (size_t i = 0; i < n; ++i)
         {
-
             basalt::PoseVelBiasState<double>::Ptr st;
             vio->out_state_queue->pop(st);
-
-            Sophus::SE3d T_corr = g_zupt_cancel.apply(st->T_w_i, g_ZUPT);
-
-            // publish corrected pose
-            redis_publish_pose(T_corr, st->t_ns);
 
             if (!st.get())
                 break;
 
             pose_count++;
+
+            if(enable_zupt){
+                Sophus::SE3d T_corr = g_zupt_cancel.apply(st->T_w_i, g_ZUPT);
+    
+                // publish corrected pose
+                redis_publish_pose(T_corr, st->t_ns);
+            }else{
+                redis_publish_pose(st->T_w_i, st->t_ns);
+            }
 
             // ---- VIO yawrate for TOFF estimator ----
             {

@@ -10,6 +10,8 @@ find_package(TBB REQUIRED)
 find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
 find_library(HIREDIS_LIBRARY hiredis)
 
+find_package(CLI11 CONFIG REQUIRED)
+
 if(NOT HIREDIS_INCLUDE_DIR OR NOT HIREDIS_LIBRARY)
   message(FATAL_ERROR "hiredis not found. sudo apt-get install libhiredis-dev")
 endif()
@@ -32,6 +34,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ${HIREDIS_LIBRARY}
   TBB::tbb
   /home/picam360/github/basalt/build/libbasalt.so
+  CLI11::CLI11
 )
 
 # ============================================================
