@@ -82,7 +82,7 @@ public:
 
             // Output pose with XY + Yaw frozen at hold
             // (Pitch/Roll/Z are kept as current corrected pose to avoid unnatural freeze)
-            Sophus::SE3d T_frozen = freeze_xy_yaw(T_corr, hold_xy_, hold_yaw_);
+            Sophus::SE3d T_frozen = freeze_xy_yaw(T_corr, hold_xy_, hold_yaw_, enable_xy_, enable_yaw_);
             zupt_prev_ = zupt_active;
             return T_frozen;
         }
@@ -98,6 +98,9 @@ public:
 private:
     bool zupt_prev_ = false;
     bool in_zupt_ = false;
+
+    bool enable_xy_ = true;
+    bool enable_yaw_ = true;
 
     // accumulated bias (persistent across intermittent ZUPT)
     Eigen::Vector2d bias_xy_;
@@ -141,27 +144,47 @@ private:
 
         return Sophus::SE3d(Rout, t);
     }
-
+    
     static Sophus::SE3d freeze_xy_yaw(const Sophus::SE3d &Tin,
                                       const Eigen::Vector2d &xy_hold,
-                                      double yaw_hold)
+                                      double yaw_hold,
+                                      bool enable_xy,
+                                      bool enable_yaw)
     {
+        // translation
         Eigen::Vector3d t = Tin.translation();
-        t.x() = xy_hold.x();
-        t.y() = xy_hold.y();
+        if (enable_xy)
+        {
+            t.x() = xy_hold.x();
+            t.y() = xy_hold.y();
+        }
 
-        // keep pitch/roll from Tin, overwrite yaw only
-        Eigen::Matrix3d R = Tin.so3().matrix();
-        double pitch = std::asin(-R(2, 0));
-        double roll = std::atan2(R(2, 1), R(2, 2));
+        // rotation
+        Sophus::SO3d Rout = Tin.so3();
 
-        // reconstruct rotation from (yaw_hold, pitch, roll) using ZYX
-        Eigen::AngleAxisd Rz(yaw_hold, Eigen::Vector3d::UnitZ());
-        Eigen::AngleAxisd Ry(pitch, Eigen::Vector3d::UnitY());
-        Eigen::AngleAxisd Rx(roll, Eigen::Vector3d::UnitX());
+        if (enable_yaw)
+        {
+            // keep pitch/roll from Tin, overwrite yaw only
+            Eigen::Matrix3d R = Tin.so3().matrix();
 
-        Eigen::Matrix3d Rnew = Rz.toRotationMatrix() * Ry.toRotationMatrix() * Rx.toRotationMatrix();
-        Sophus::SO3d Rout(Rnew);
+            // ZYX convention:
+            // pitch = asin(-R(2,0))
+            // roll  = atan2(R(2,1), R(2,2))
+            double pitch = std::asin(std::max(-1.0, std::min(1.0, -R(2, 0))));
+            double roll = std::atan2(R(2, 1), R(2, 2));
+
+            // reconstruct rotation from (yaw_hold, pitch, roll) using ZYX
+            Eigen::AngleAxisd Rz(yaw_hold, Eigen::Vector3d::UnitZ());
+            Eigen::AngleAxisd Ry(pitch, Eigen::Vector3d::UnitY());
+            Eigen::AngleAxisd Rx(roll, Eigen::Vector3d::UnitX());
+
+            Eigen::Matrix3d Rnew =
+                Rz.toRotationMatrix() *
+                Ry.toRotationMatrix() *
+                Rx.toRotationMatrix();
+
+            Rout = Sophus::SO3d(Rnew);
+        }
 
         return Sophus::SE3d(Rout, t);
     }
