@@ -23,6 +23,7 @@ import xml.etree.ElementTree as ET
 import re
 import signal
 import sys
+import math
 
 import redis
 import cv2
@@ -369,14 +370,27 @@ def main():
     def on_imu(msg):
         nonlocal imu_count
         data = json.loads(msg["data"].decode())
-        stamp = ros.make_stamp(
-            data["timestamp"]["sec"],
-            data["timestamp"]["nanosec"]
-        )
-        ros.publish_imu(stamp, data["gyro"], data["accel"])
 
-        with lock:
-            imu_count += 1
+        # data = [[ts_us, ax, ay, az, gx, gy, gz], ...]
+        for item in data:
+            if not isinstance(item, list) or len(item) < 7:
+                continue
+
+            ts_us, ax, ay, az, gx, gy, gz = item[:7]
+
+            # us -> ROS stamp (sec, nanosec)
+            sec = int(ts_us // 1_000_000)
+            nanosec = int((ts_us % 1_000_000) * 1_000)
+
+            stamp = ros.make_stamp(sec, nanosec)
+
+            ros.publish_imu(
+                stamp,
+                {"x": gx, "y": gy, "z": gz},
+                {"x": ax, "y": ay, "z": az},
+            )
+            with lock:
+                imu_count += 1
 
     def on_image(msg):
         nonlocal tmp_img, img_count
@@ -454,6 +468,26 @@ def main():
         s = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         r.publish(args.vio_redis_channel, s)
 
+
+        p = msg.pose.pose.position
+        q = msg.pose.pose.orientation  # q.x q.y q.z q.w
+
+        # yaw_ccw (Z-up, quaternion -> yaw)
+        yaw_ccw = math.atan2(
+            2.0 * (q.w * q.z + q.x * q.y),
+            1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        )
+        yaw_cw = -yaw_ccw
+        yaw_deg = yaw_cw * 180.0 / math.pi
+
+        # stamp
+        if args.ros == 1:
+            t_ns = f"{msg.header.stamp.secs}.{msg.header.stamp.nsecs:09d}"
+        else:
+            t_ns = f"{msg.header.stamp.sec}.{msg.header.stamp.nanosec:09d}"
+        buff = f"{-p.y},{0.13},{p.x},{yaw_deg},{t_ns}"
+        r.publish("vehicle_pos", buff.encode("utf-8"))
+
         with lock:
             vio_count += 1
 
@@ -480,9 +514,9 @@ def main():
             )
 
     pubsub.subscribe(**{
-        #"pserver-imu": on_imu,
-        #"pserver-forward-pst": on_image,
-        "vio_pose": on_vio_pose,
+        "pserver-imu-raw": on_imu,
+        "pserver-forward-pst": on_image,
+        #"vio_pose": on_vio_pose,
     })
 
     pubsub_thread = pubsub.run_in_thread(sleep_time=0.01)

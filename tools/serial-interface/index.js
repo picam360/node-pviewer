@@ -428,9 +428,13 @@ function main() {
                         const json_str = data.substring(15);
                         //console.log(json_str);
                         const vstate = JSON.parse(json_str);
-                        if(now_us_base === 0){
+                        const now_us = Date.now() * 1000;
+                        const sp1_us = now_epoch_us_base - now_us_base;
+                        const sp2_us = now_us - vstate.now;
+                        if(sp2_us - sp1_us > 1000000){
                             now_us_base = vstate.now;
-                            now_epoch_us_base = Date.now() * 1000;
+                            now_epoch_us_base = now_us;
+                            console.log("update now_epoch_us_base", now_epoch_us_base, now_us_base);
                         }
                         {
                             for(const item of vstate.enc){
