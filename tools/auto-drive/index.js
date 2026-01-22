@@ -132,6 +132,7 @@ let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = -1;//negative value means init state
 let m_auto_drive_direction = "forward";//forward or backward
 let m_auto_drive_heading_tuning = false;
+let m_auto_drive_slowdown = 0;
 let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
 let m_vord_person = {
@@ -682,12 +683,14 @@ function tracking_handler(direction) {
 		const elapsed_from_last_wapoints_updated = Date.now() - (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms || 0);
 		if(elapsed_from_last_wapoints_updated > 250 && depth < centering_depth && m_auto_drive_cur > 0){//tune
 			const shift_pix = maxLoc.x - roi.cols/2;
-			const gain = 0.01;
+			const gain = 0.0025;
 			const tune = shift_pix * gain;
 			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading -= tune;
 			console.log("TRACKING_DEBUG", m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading, tune, shift_pix, depth);
 
 			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms = Date.now();
+
+			m_auto_drive_slowdown = 5;
 		}
 	}
 
@@ -870,7 +873,7 @@ function auto_drive_handler(odom_type, arrived_fnc) {
 		let headingError = m_odometry_conf[odom_type].headingError;
 
 		let tolerance_distance = m_options.tolerance_distance;
-		let tolerance_heading = (m_auto_drive_heading_tuning ? 999 : 999);
+		let tolerance_heading = (m_auto_drive_heading_tuning ? 5 : 999);
 		if (cur == keys.length - 1) {
 			tolerance_distance = m_options.tolerance_distance / 10;
 			// switch(m_auto_drive_last_state){
@@ -898,13 +901,14 @@ function auto_drive_handler(odom_type, arrived_fnc) {
 
 			// Control logic: move forward/backward or rotate
 			if (Math.abs(headingError) > tolerance_heading) {
-				rotate_robot(headingError);
-				m_auto_drive_heading_tuning = true;
+				const rotate = (headingError > 0 ? 1 : -1) * 90;
+				console.log("DEBUG pwm rotate", headingError, rotate);
+				move_pwm_robot(distanceToTarget, rotate, 10);
 			} else {
 				let tune = (distanceToTarget > 0 ? -1 : 1) * shiftToTarget / m_options.tolerance_shift * 60;
 				tune = Math.max(-90, Math.min(tune, 90));
 				console.log("DEBUG pwm", headingError, tune);
-				move_pwm_robot(distanceToTarget, headingError + tune);
+				move_pwm_robot(distanceToTarget, headingError + tune, m_auto_drive_slowdown);
 				//move_robot(distanceToTarget);
 				m_auto_drive_heading_tuning = false;
 			}
@@ -1481,6 +1485,8 @@ function command_handler(cmd) {
 					m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.init(waypoints, () => {
 						m_drive_submode = "TRACKING";
 						m_auto_drive_direction = "forward";
+						m_auto_drive_heading_tuning = true;
+						m_auto_drive_slowdown = 0;
 					}, false);
 					m_odometry_conf[ODOMETRY_TYPE.ENCODER].last_waypoints_updated_ms = Date.now();
 					m_odometry_conf[ODOMETRY_TYPE.ENCODER].in_tolerance_count = 0;
@@ -1576,6 +1582,8 @@ function command_handler(cmd) {
 				}
 
 				m_auto_drive_last_reverse = m_options.reverse;
+				m_auto_drive_heading_tuning = true;
+				m_auto_drive_slowdown = 0;
 
 				m_auto_drive_ready = false;
 				m_drive_mode = "AUTO";
