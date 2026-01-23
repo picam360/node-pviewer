@@ -280,6 +280,7 @@ async.waterfall([
 			config_json += "        \"plugins/opus_encoder_st.so\",\n";
 			config_json += "        \"plugins/opus_decoder_st.so\",\n";
 		}else if(process.platform === 'linux') {
+			config_json += "        \"plugins/memcpy_st.so\",\n";
 			config_json += "        \"plugins/pcuda_remapper_st.so\",\n";
 			config_json += "        \"plugins/v4l2_capture_st.so\",\n";
 			config_json += "        \"plugins/argus_capture_st.so\",\n";
