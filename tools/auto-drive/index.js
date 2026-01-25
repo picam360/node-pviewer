@@ -132,6 +132,7 @@ let m_auto_drive_waypoints = null;
 let m_auto_drive_cur = -1;//negative value means init state
 let m_auto_drive_direction = "forward";//forward or backward
 let m_auto_drive_heading_tuning = false;
+let m_auto_drive_last_ctr_heading = 0;
 let m_auto_drive_slowdown = 0;
 let m_auto_drive_last_state = 0;
 let m_auto_drive_last_lastdistance = 0;
@@ -622,7 +623,9 @@ function tracking_handler(direction) {
 	const uint16_max = ((1 << 16) - 1);
 	const fov_deg = 90;
 	const fov_rad = fov_deg * Math.PI / 180;
+	//f[pixels] means distance from base pint to pixel image plane
 	const f  = (disparity_map.cols / 2) / Math.tan(fov_rad / 2);
+	
 
 	{
 		const roi = gen_tracking_roi(
@@ -683,10 +686,14 @@ function tracking_handler(direction) {
 		const elapsed_from_last_wapoints_updated = Date.now() - (m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms || 0);
 		if(elapsed_from_last_wapoints_updated > 250 && depth < centering_depth && m_auto_drive_cur > 0){//tune
 			const shift_pix = maxLoc.x - roi.cols/2;
-			const gain = 0.0025;
-			const tune = shift_pix * gain;
-			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading -= tune;
-			console.log("TRACKING_DEBUG", m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading, tune, shift_pix, depth);
+			const shift_m = depth * shift_pix / f;
+			const depth_from_vehicle_m = depth + m_options.cameras[direction].cam_offset.y;
+			const angle = 180.0 * Math.atan2(shift_m, depth_from_vehicle_m) / Math.PI;
+			const gain = 0.05;
+			const tune = -angle * gain;
+			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading += tune;
+			console.log("TRACKING_DEBUG", m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.encoder_params.heading, 
+				tune, shift_pix, shift_m, depth, depth_from_vehicle_m, angle, m_auto_drive_last_ctr_heading);
 
 			m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.last_waypoints_updated_ms = Date.now();
 
@@ -730,17 +737,21 @@ function move_pwm_robot(distance, angle, minus=0) {
 	}
 
 	if (m_auto_drive_direction == "forward") {
-		const left_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
-		const right_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
-		const left_pwd = m_options.forward_pwm_base - Math.round(left_minus) - minus;
-		const right_pwd = m_options.forward_pwm_base - Math.round(right_minus) - minus;
+		const pwm_range = m_options.pwm_range - minus;
+		const pwm_base = m_options.forward_pwm_base - minus;
+		const left_minus = Math.min(pwm_range, angle < 0 ? pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
+		const right_minus = Math.min(pwm_range, angle > 0 ? pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
+		const left_pwd = pwm_base - Math.round(left_minus);
+		const right_pwd = pwm_base - Math.round(right_minus);
 		console.log("move_forward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_forward_pwm ${left_pwd * m_options.lr_ratio_forward} ${right_pwd} ${now}`);
 	} else if (m_auto_drive_direction == "backward") {
-		const left_minus = Math.min(m_options.pwm_range, angle > 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
-		const right_minus = Math.min(m_options.pwm_range, angle < 0 ? m_options.pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
-		const left_pwd = m_options.backward_pwm_base - Math.round(left_minus) - minus;
-		const right_pwd = m_options.backward_pwm_base - Math.round(right_minus) - minus;
+		const pwm_range = m_options.pwm_range - minus;
+		const pwm_base = m_options.backward_pwm_base - minus;
+		const left_minus = Math.min(pwm_range, angle > 0 ? pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
+		const right_minus = Math.min(pwm_range, angle < 0 ? pwm_range * Math.abs(angle) * m_options.pwm_control_gain : 0);
+		const left_pwd = pwm_base - Math.round(left_minus);
+		const right_pwd = pwm_base - Math.round(right_minus);
 		console.log("move_backward_pwm", distance, angle, left_minus, right_minus, left_pwd, right_pwd);
 		m_client.publish('pserver-vehicle-wheel', `CMD move_backward_pwm ${left_pwd * m_options.lr_ratio_backward} ${right_pwd} ${now}`);
 	}
@@ -901,9 +912,10 @@ function auto_drive_handler(odom_type, arrived_fnc) {
 
 			// Control logic: move forward/backward or rotate
 			if (Math.abs(headingError) > tolerance_heading) {
-				const rotate = (headingError > 0 ? 1 : -1) * 90;
+				const rotate = (headingError > 0 ? 1 : -1) * 60;
 				console.log("DEBUG pwm rotate", headingError, rotate);
-				move_pwm_robot(distanceToTarget, rotate, 10);
+				move_pwm_robot(distanceToTarget, rotate, 5);
+				m_auto_drive_last_ctr_heading = 0;
 			} else {
 				let tune = (distanceToTarget > 0 ? -1 : 1) * shiftToTarget / m_options.tolerance_shift * 60;
 				tune = Math.max(-90, Math.min(tune, 90));
@@ -911,6 +923,7 @@ function auto_drive_handler(odom_type, arrived_fnc) {
 				move_pwm_robot(distanceToTarget, headingError + tune, m_auto_drive_slowdown);
 				//move_robot(distanceToTarget);
 				m_auto_drive_heading_tuning = false;
+				m_auto_drive_last_ctr_heading = headingError + tune;
 			}
 
 			const handlers = {};
@@ -1486,6 +1499,7 @@ function command_handler(cmd) {
 						m_drive_submode = "TRACKING";
 						m_auto_drive_direction = "forward";
 						m_auto_drive_heading_tuning = true;
+						m_auto_drive_last_ctr_heading = 0;
 						m_auto_drive_slowdown = 0;
 					}, false);
 					m_odometry_conf[ODOMETRY_TYPE.ENCODER].last_waypoints_updated_ms = Date.now();
@@ -1583,6 +1597,7 @@ function command_handler(cmd) {
 
 				m_auto_drive_last_reverse = m_options.reverse;
 				m_auto_drive_heading_tuning = true;
+				m_auto_drive_last_ctr_heading = 0;
 				m_auto_drive_slowdown = 0;
 
 				m_auto_drive_ready = false;
