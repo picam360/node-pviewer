@@ -537,28 +537,90 @@ function check_person_detected(direction) {
 	return false;
 }
 
-function gen_tracking_waypoints(obj_distance, obj_heading){
+
+function generateTractrix(L, gamma, r, N = 100)
+{
+    const pts = [];
+
+    // direction basis (gamma from +Y clockwise)
+    const sing = Math.sin(gamma);
+    const cosg = Math.cos(gamma);
+
+    // initial constant from (0,-r)
+    const K = Math.tan(gamma / 2);
+
+    for (let i = 0; i <= N; i++)
+    {
+        // distance of tractor along straight line
+        const s = L * i / N;
+
+        // exponential parameter
+        const t = K * Math.exp(-s / r);
+        const d = 1 + t*t;
+
+        // local coordinates (pulling frame)
+        const X = s - r * (1 - t*t) / d;
+        const Y = -r * (2*t) / d;
+
+        // rotate back to world
+        const x = X * sing - Y * cosg;
+        const y = X * cosg + Y * sing;
+
+        pts.push({ x, y });
+    }
+
+    return pts;
+}
+
+function formay_angle_180(angle){
+    angle = (angle % 360);
+    if(angle > 180){
+        angle -= 360;
+    }
+    if(angle < -180){
+        angle += 360;
+    }
+    return angle;
+}
+
+function formay_rad_pi(rad){
+    rad = (rad % (2*Math.PI));
+    if(rad > Math.PI){
+        rad -= 2*Math.PI;
+    }
+    if(rad < -Math.PI){
+        rad += 2*Math.PI;
+    }
+    return rad;
+}
+
+function gen_tracking_waypoints(obj_distance, obj_heading, cam_offset_y = 0){
+	const step = 100;
+	const obj_heading_rad = obj_heading * Math.PI / 180.0;
+	const pts = generateTractrix(obj_distance, obj_heading_rad, cam_offset_y, step);
 
 	const settings = EncoderOdometry.settings;
-	const dtheta = obj_heading * Math.PI / 180.0;
 	const waypoints = {};
-	const step = 100;
-	waypoints[0] = {
-		encoder : JSON.stringify({
-			left : 0,
-			right : 0,
-		})
-	};
-	for(let i=0;i<=step;i++){
-		const d = i * obj_distance / step;
-		const distance_left = d - dtheta * settings.wheel_separation / 2;
-		const distance_right = d + dtheta * settings.wheel_separation / 2;
-		waypoints[i+1] = {
-			encoder : JSON.stringify({
-				left : distance_left / settings.meter_per_pulse * settings.left_direction / settings.lr_ratio_forward,
-				right : distance_right / settings.meter_per_pulse * settings.right_direction,
-			})
-		};
+	let left = 0;
+	let right = 0;
+	let pre_heading_rad = 0;
+	waypoints[0] = { encoder : JSON.stringify({ left, right }) };
+	for(let i=1;i<pts.length;i++){
+		const dx = pts[i].x - pts[i-1].x;
+		const dy = pts[i].y - pts[i-1].y;
+
+		const heading_rad = Math.atan2(dx, dy);
+		const dheading = formay_rad_pi(heading_rad - pre_heading_rad);
+		const dl = Math.sqrt(dx*dx + dy*dy);
+
+		const distance_left = dl + dheading * settings.wheel_separation / 2;
+		const distance_right = dl - dheading * settings.wheel_separation / 2;
+		left += distance_left / settings.meter_per_pulse * settings.left_direction / settings.lr_ratio_forward;
+		right += distance_right / settings.meter_per_pulse * settings.right_direction;
+
+		waypoints[i] = { encoder : JSON.stringify({ left, right }) };
+
+		pre_heading_rad = heading_rad;
 	}
 	return waypoints;
 }
@@ -1485,9 +1547,10 @@ function command_handler(cmd) {
 				}));
 
 				if(options.tracking){
+					const direction = "forward";
 					const obj_distance = options.distance || 10 + 10;
 					const obj_heading = options.heading || 0;
-					const waypoints = gen_tracking_waypoints(obj_distance, obj_heading);
+					const waypoints = gen_tracking_waypoints(obj_distance, obj_heading, m_options.cameras[direction].cam_offset.y);
 
 					update_auto_drive_waypoints({
 						src: waypoints
@@ -1497,7 +1560,7 @@ function command_handler(cmd) {
 					m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler = new EncoderOdometry();
 					m_odometry_conf[ODOMETRY_TYPE.ENCODER].handler.init(waypoints, () => {
 						m_drive_submode = "TRACKING";
-						m_auto_drive_direction = "forward";
+						m_auto_drive_direction = direction;
 						m_auto_drive_heading_tuning = true;
 						m_auto_drive_last_ctr_heading = 0;
 						m_auto_drive_slowdown = 0;
