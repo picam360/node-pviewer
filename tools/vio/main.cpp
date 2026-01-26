@@ -471,6 +471,9 @@ void stereo_thread()
                 continue;
             }
 
+            int w = left.cols;
+            int h = left.rows;
+
             cv::Mat left_gray8, right_gray8;
             cv::cvtColor(left, left_gray8, cv::COLOR_BGR2GRAY);
             cv::cvtColor(right, right_gray8, cv::COLOR_BGR2GRAY);
@@ -480,11 +483,11 @@ void stereo_thread()
             right_gray8.convertTo(right_gray16, CV_16U, 256.0);
 
             basalt::ImageData img_l, img_r;
-            img_l.img.reset(new basalt::ManagedImage<uint16_t>(512, 512));
-            img_r.img.reset(new basalt::ManagedImage<uint16_t>(512, 512));
+            img_l.img.reset(new basalt::ManagedImage<uint16_t>(w, h));
+            img_r.img.reset(new basalt::ManagedImage<uint16_t>(w, h));
 
-            std::memcpy(img_l.img->ptr, left_gray16.data, 512 * 512 * sizeof(uint16_t));
-            std::memcpy(img_r.img->ptr, right_gray16.data, 512 * 512 * sizeof(uint16_t));
+            std::memcpy(img_l.img->ptr, left_gray16.data, w * h * sizeof(uint16_t));
+            std::memcpy(img_r.img->ptr, right_gray16.data, w * h * sizeof(uint16_t));
 
             basalt::OpticalFlowInput::Ptr in(new basalt::OpticalFlowInput);
             in->t_ns = sec * 1000000000LL + nsec;
