@@ -163,27 +163,6 @@ basalt::VioEstimatorBase::Ptr vio;
 tbb::concurrent_bounded_queue<basalt::PoseVelBiasState<double>::Ptr> out_state_queue;
 
 // ============================================================
-// Utilities: quaternion <-> yaw/pitch/roll (ZYX)
-// ============================================================
-static inline Eigen::Vector3d quat_to_ypr_zyx(const Eigen::Quaterniond &q)
-{
-    Eigen::Matrix3d R = q.normalized().toRotationMatrix();
-    double yaw = std::atan2(R(1, 0), R(0, 0));
-    double pitch = std::asin(clamp(-R(2, 0), -1.0, 1.0));
-    double roll = std::atan2(R(2, 1), R(2, 2));
-    return Eigen::Vector3d(yaw, pitch, roll);
-}
-
-static inline Eigen::Quaterniond ypr_zyx_to_quat(double yaw, double pitch, double roll)
-{
-    Eigen::AngleAxisd az(yaw, Eigen::Vector3d::UnitZ());
-    Eigen::AngleAxisd ay(pitch, Eigen::Vector3d::UnitY());
-    Eigen::AngleAxisd ax(roll, Eigen::Vector3d::UnitX());
-    Eigen::Quaterniond q = az * ay * ax;
-    return q.normalized();
-}
-
-// ============================================================
 // TOFF Estimator (ENC yawrate vs VIO yawrate)
 // ============================================================
 static SlidingXcorrToffEstimator g_toff_est;
