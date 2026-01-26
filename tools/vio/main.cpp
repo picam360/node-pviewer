@@ -67,25 +67,6 @@ static const char *CH_ENC = "pserver-enc-raw";
 static const char *CH_POSE = "vio_pose";
 
 // ============================================================
-// Encoder / robot parameters (nominal)
-// ============================================================
-// Encoder ticks per revolution [ticks/rev]
-static constexpr double TICKS_PER_REV = 4096.0; // 12bit
-
-// Nominal wheel radius [m]
-static constexpr double WHEEL_RADIUS_M_NOM = 0.027;
-
-// Nominal wheel baseline [m]
-static constexpr double WHEEL_BASE_M_NOM = 0.200;
-
-static bool g_ZUPT = false;
-
-static inline double clamp(double v, double lo, double hi)
-{
-    return std::max(lo, std::min(hi, v));
-}
-
-// ============================================================
 // Redis helpers
 // ============================================================
 redisContext *redis_sub(const char *ch)
@@ -142,7 +123,7 @@ void redis_publish_pose(const Sophus::SE3d &T_w_i, int64_t t_ns)
         std::string s = j.dump(2);
         redisCommand(c, "PUBLISH %s %b", "pserver-odometry-info", s.data(), s.size());
     }
-    
+
     {
         Eigen::Quaterniond q = T_w_i.unit_quaternion();
 
@@ -664,11 +645,7 @@ void enc_thread()
             double w_enc = 0.0;
             if (!g_ZUPT)
             {
-                const double mpt = (2.0 * M_PI * WHEEL_RADIUS_M_NOM) / TICKS_PER_REV;
-                const double dSl = (double)dL * mpt;
-                const double dSr = (double)dR * mpt;
-                const double Bnom = WHEEL_BASE_M_NOM;
-                w_enc = (dSr - dSl) / (Bnom * dt);
+                w_enc = g_ekf.cal_yaw(dL, dR) / dt;
                 w_enc = clamp(w_enc, -10.0, 10.0);
             }
 

@@ -1,5 +1,30 @@
 #pragma once
 
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+
+using namespace std;
+
+
+// ============================================================
+// Encoder / robot parameters (nominal)
+// ============================================================
+// Encoder ticks per revolution [ticks/rev]
+static constexpr double TICKS_PER_REV = 4096.0; // 12bit
+
+// Nominal wheel radius [m]
+static constexpr double WHEEL_RADIUS_M_NOM = 0.027;
+
+// Nominal wheel baseline [m]
+static constexpr double WHEEL_BASE_M_NOM = 0.200;
+
+static bool g_ZUPT = false;
+
+static inline double clamp(double v, double lo, double hi)
+{
+    return std::max(lo, std::min(hi, v));
+}
+
 // ============================================================
 // EKF state (TOFF removed):
 //   [px, py, pz, yaw, pitch, roll, kv, kw, lrlatio]  (9 states)
@@ -277,6 +302,16 @@ public:
         kv = st_.x(6);
         kw = st_.x(7);
         lr = st_.x(8);
+    }
+
+    double cal_yaw(int64_t dL, int64_t dR){
+        double yaw = 0;
+        const double mpt = (2.0 * M_PI * WHEEL_RADIUS_M_NOM) / TICKS_PER_REV;
+        const double dSl = (double)dL * mpt;
+        const double dSr = (double)dR * mpt;
+        const double Bnom = WHEEL_BASE_M_NOM;
+        yawrate = (dSr - dSl) / Bnom;
+        return yawrate;
     }
 
 private:
