@@ -448,6 +448,20 @@ function main() {
                                 }
                             });
                         }
+                        if(vstate.enc.length != 0){
+                            const item = vstate.enc[vstate.enc.length - 1];
+                            client.publish(`pserver-encoder`, JSON.stringify({
+                                "ts_us": item[0],
+                                "left": item[1],
+                                "right": item[2],
+                            }, null, 2), (err, reply) => {
+                                if (err) {
+                                    console.error('Error publishing message:', err);
+                                } else {
+                                    //console.log(`Message published to ${reply} subscribers.`);
+                                }
+                            });
+                        }
                         {
                             for(const item of vstate.imu){
                                 item[0] = (item[0] - now_us_base) + now_epoch_us_base;

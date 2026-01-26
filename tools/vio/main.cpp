@@ -142,7 +142,7 @@ void redis_publish_pose(const Sophus::SE3d &T_w_i, int64_t t_ns)
         std::string s = j.dump(2);
         redisCommand(c, "PUBLISH %s %b", "pserver-odometry-info", s.data(), s.size());
     }
-
+    
     {
         Eigen::Quaterniond q = T_w_i.unit_quaternion();
 
@@ -152,10 +152,19 @@ void redis_publish_pose(const Sophus::SE3d &T_w_i, int64_t t_ns)
         double yaw_cw = -yaw_ccw;
         double yaw_deg = yaw_cw * 180.0 / M_PI;
 
+        double pitch = std::asin(
+            std::clamp(2.0 * (q.w() * q.y() - q.z() * q.x()), -1.0, 1.0));
+        double pitch_deg = pitch * 180.0 / M_PI;
+
+        double roll = std::atan2(
+            2.0 * (q.w() * q.x() + q.y() * q.z()),
+            1.0 - 2.0 * (q.x() * q.x() + q.y() * q.y()));
+        double roll_deg = roll * 180.0 / M_PI;
+
         char buff[1024];
-        int size = snprintf(buff, 1024, "%lf,%lf,%lf,%lf,%lf",
+        int size = snprintf(buff, 1024, "%lf,%lf,%lf,%lf,%lf,%lf,%lf",
                             -T_w_i.translation().y(), 0.13, T_w_i.translation().x(),
-                            yaw_deg, (double)t_ns / 1e9);
+                            yaw_deg, (double)t_ns / 1e9, pitch_deg, roll_deg);
 
         redisCommand(c, "PUBLISH %s %b", "vehicle_pos", buff, size);
     }
