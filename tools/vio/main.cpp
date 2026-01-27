@@ -51,7 +51,6 @@
 #include "toff_estimator.h"
 #include "zupt_drift_canceller.h"
 #include "ekf.h"
-#include "stabilizer.h"
 
 using json = nlohmann::json;
 
@@ -385,10 +384,6 @@ bool split_stereo_image(const std::vector<uint8_t> &jpeg, cv::Mat &left, cv::Mat
     return true;
 }
 
-
-static Mat g_left;
-static Mat g_right;
-
 // ============================================================
 // Redis stereo thread (feed_images equivalent)
 // ============================================================
@@ -464,71 +459,6 @@ void stereo_thread()
             in->t_ns = t_ns;
             in->img_data = {img_l, img_r};
             opt_flow->input_queue.push(in);
-
-            {//stabilizer
-                if (g_left.empty()){
-                    g_left = left;
-                    g_right = right;
-                }
-                Point2d shift;
-                Mat affine_out;
-
-
-                struct timeval st = { };
-                gettimeofday(&st, NULL);
-
-                bool ret = estimateShift(g_left, left, w, h/2, shift, affine_out);
-
-                struct timeval et = { };
-                gettimeofday(&et, NULL);
-
-                struct timeval diff;
-                timersub(&et, &st, &diff);
-                float elapsed_sec = (float) diff.tv_sec + (float) diff.tv_usec / 1000000;
-                if(ret){
-                    double fov = 90.0;
-                    double fov_rad = fov * M_PI / 180.0;
-                    double fx = w / (2 * tan(fov_rad/2));
-                    double fy = h / (2 * tan(fov_rad/2));
-
-                    double yaw   = atan( shift.x / fx );
-                    double pitch = atan( shift.y / fy );
-
-                    double yaw_deg   = yaw   * 180.0 / CV_PI;
-                    double pitch_deg = pitch * 180.0 / CV_PI;
-
-                    double roll = atan2(affine_out.at<double>(1,0), affine_out.at<double>(0,0));
-                    double roll_deg = roll * 180.0 / M_PI;
-
-                    // printf("stabilizer : euler=%+.6f,%+.6f,%+.6f, shift=%+.6f,%+.6f, elapsed=%+.6f\n",
-                    //     yaw_deg, pitch_deg, roll_deg, shift.x, shift.y, elapsed_sec);
-                    //std::cout << "Affine:\n" << affine_out << std::endl;
-                    {
-                        redisContext *c = redisConnect(REDIS_HOST, REDIS_PORT);
-                        if (c) {
-                            char buff[1024];
-                            int size = snprintf(buff, 1024, "%lf,%lf,%lf,%lf",
-                                yaw_deg, pitch_deg, roll_deg, (double)t_ns / 1e9);
-                            redisCommand(c, "PUBLISH %s %b", "stabilizer", buff, size);
-
-                            // json j;
-                            // j["t_ns"] = t_ns;
-                            // j["shift"] = { shift.x, shift.y };
-                            // j["euler"] = { yaw_deg, pitch_deg, roll_deg };
-
-                            // std::string s = j.dump(2);
-                            // redisCommand(c, "PUBLISH %s %b", "pserver-stabilizer", s.data(), s.size());
-
-                            redisFree(c);
-                        }
-                    }
-                }else{
-                    printf("estimateShift : failed : %f, %ld\n", elapsed_sec, t_ns);
-                }
-
-                g_left = left;
-                g_right = right;
-            }
 
             tmp_img.clear();
             freeReplyObject(r);
