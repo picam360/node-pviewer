@@ -24,7 +24,7 @@ class EncoderOdometry {
     //     meter_per_pulse: 0.00902127575039515,
     //     wheel_separation: 3.093597564134178,
     //     imu_heading_error: 0.0,
-    //     left_direction: -1,
+    //     left_direction: 1,
     //     right_direction: 1,
 
     //     lock_gps_heading : true,
@@ -39,7 +39,7 @@ class EncoderOdometry {
         // wheel_separation: 0.208,
 
         imu_heading_error: 0,
-        left_direction: -1,
+        left_direction: 1,
         right_direction: 1,
     
        lock_gps_heading : true,
@@ -61,6 +61,10 @@ class EncoderOdometry {
         try {
             let delta_left = left_counts - encoder_params.last_left_counts;
             let delta_right = right_counts - encoder_params.last_right_counts;
+
+            if(Math.abs(delta_left) < 3 || Math.abs(delta_right) < 3){
+                return;
+            }
 
             delta_right *= encoder_params.right_gain;
     

@@ -105,6 +105,7 @@ function localization_handler(tmp_img){
 	const header_size = data.readUInt16BE(2);
 	const xml = data.slice(4, 4 + header_size).toString('utf-8');
 	const img_dom = xml_parser.parse(xml);
+	const ts = img_dom["picam360:image"].timestamp.split(',');
 
 	const meta_size = parseInt(img_dom["picam360:image"].meta_size, 10);
 	const meta = data.slice(4 + header_size, 4 + header_size + meta_size);
@@ -120,7 +121,7 @@ function localization_handler(tmp_img){
 	if(m_odometry_conf[m_odometry_conf.odom_type].handler.is_ready() == false){
 		return;
 	}
-	const timestamp = Date.now() / 1000;
+	const timestamp = parseFloat(ts[0]) + parseFloat(ts[1]) / 1e6;
 	const odom = m_odometry_conf[m_odometry_conf.odom_type].handler.getPosition();
 	m_client.publish('pserver-odometry-info', JSON.stringify({
 		"mode" : m_drive_mode,
@@ -128,6 +129,7 @@ function localization_handler(tmp_img){
 		"odom" : odom,
 		"timestamp" : timestamp,
 	}));
+	m_client.publish('vehicle_pos', `${odom.x},0.13,${odom.y},${odom.heading},${timestamp}`);
 	m_client.set('pserver-odometry-backup', JSON.stringify({
 		"odom" : odom,
 		"timestamp" : timestamp,
