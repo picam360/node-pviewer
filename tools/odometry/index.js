@@ -206,7 +206,7 @@ function main() {
 		m_client.get('pserver-odometry-backup').then((json_str) => {
 			try{
 				const backup = JSON.parse(json_str);
-				console.log("restore backup", backup);
+				console.log("restore backup from pserver-odometry-backup", backup);
 				if (backup) {
 					if(m_odometry_conf.odom_type == ODOMETRY_TYPE.ENCODER) {
 						EncoderOdometry.settings.x_initial = backup.odom.x;
