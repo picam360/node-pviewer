@@ -32,8 +32,8 @@ class EncoderOdometry {
     static settings = {//jetchariot
         right_gain: 1.0,
 
-        meter_per_pulse: 0.00004032,
-        wheel_separation: 0.211765,
+        meter_per_pulse: 0.00004,
+        wheel_separation: 0.19,
 
         // meter_per_pulse: 0.00004,
         // wheel_separation: 0.208,
@@ -62,7 +62,7 @@ class EncoderOdometry {
             let delta_left = left_counts - encoder_params.last_left_counts;
             let delta_right = right_counts - encoder_params.last_right_counts;
 
-            if(Math.abs(delta_left) < 3 || Math.abs(delta_right) < 3){
+            if(Math.abs(delta_left) <= 1 && Math.abs(delta_right) <= 1){
                 return;
             }
 
