@@ -1,1 +1,1 @@
-sudo apt install android-tools-adb
+sudo apt install -y nano android-tools-adb
