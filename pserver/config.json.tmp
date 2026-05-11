@@ -49,6 +49,7 @@
     },
     "plugin_paths" : [
         "plugins/redis.js",
+        "plugins/heartbeat.js",
         "plugins/camera/take-picture.js",
         "plugins/camera/generate-psf.js",
         "plugins/network/host.js",
