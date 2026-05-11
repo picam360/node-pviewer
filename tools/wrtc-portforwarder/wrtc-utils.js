@@ -300,8 +300,16 @@ const bind_wrtc_and_ws = (dc, ws, options) => {
     };
     ws.onclose = (event) => {
         console.log("ws closed.");
-        dc.close();
+        if(dc){
+            dc.close();
+        }
     };
+    ws.on('error', (err) => {
+        console.log('ws error:', err);
+        if(dc){
+            dc.close();
+        }
+    });
 
     // DataChannel -> WebSocket
     dc.onopen = (event) => {
@@ -315,6 +323,10 @@ const bind_wrtc_and_ws = (dc, ws, options) => {
     };
     dc.onclose = (event) => {
         console.log("dc closed.");
+        ws.close();
+    };
+    dc.onerror = (err) => {
+        console.log('dc error : ' + err);
         ws.close();
     };
 };

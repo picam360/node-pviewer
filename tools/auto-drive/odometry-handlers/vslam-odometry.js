@@ -378,6 +378,7 @@ class VslamOdometry {
         this.options = options || {};
         this.host = this.options.host || "localhost";
 
+        this.callback = null;
         this.loaded = false;
         this.initialized = false;
         this.waypoints = null;
@@ -402,6 +403,7 @@ class VslamOdometry {
             cur : 0,
             ref_cur : 0,
             pushed_data : null,
+            n_tracks : 0,
             _enc_odom : new EncoderOdometry(),
             _enc_waypoints : [],
             finalized : false,
@@ -421,6 +423,7 @@ class VslamOdometry {
     }
 
     init(waypoints, callback, reverse) {
+        this.callback = callback;
         this.enc_odom.init(waypoints, (enc_waypoints) => {
             this.enc_waypoints = enc_waypoints;
 
@@ -503,8 +506,8 @@ class VslamOdometry {
                             this.vslam_waypoints = vslam_waypoints;
                             this.active_points = active_points;
                             
-                            if(callback){
-                                callback(this.vslam_waypoints);
+                            if(this.callback){
+                                this.callback(this.vslam_waypoints);
                             }
 
                             this.update_reconstruction_progress(100);
@@ -656,26 +659,33 @@ class VslamOdometry {
                 const dy = pos.y - ref_pos.y;
                 if(dx != 0 || dy != 0){
                     this.requestTrack(`${this.reconstruction._enc_waypoints.length - 1}`, this.reconstruction.pushed_data.jpeg_data, true);
+                    this.n_tracks++;
                 }else{
                     console.log("no need to track last frame");
                 }
             }
     
+            if(this.n_tracks >= 2){
+                this.m_client.publish('picam360-vslam', JSON.stringify({
+                    "cmd": "backend",
+                    "itr": 8,
+                }));
+                this.m_client.publish('picam360-vslam', JSON.stringify({
+                    "cmd": "save",
+                    "filename": VslamOdometry.settings.vslam_filename,
+                    "reverse": this.options.reverse ? true : false,
+                }));
+            }
+        }
+        if(this.n_tracks >= 2){
             this.m_client.publish('picam360-vslam', JSON.stringify({
-                "cmd": "backend",
-                "itr": 8,
-            }));
-            this.m_client.publish('picam360-vslam', JSON.stringify({
-                "cmd": "save",
+                "cmd": "load",
                 "filename": VslamOdometry.settings.vslam_filename,
                 "reverse": this.options.reverse ? true : false,
             }));
+        }else{
+            this.callback(null);
         }
-        this.m_client.publish('picam360-vslam', JSON.stringify({
-            "cmd": "load",
-            "filename": VslamOdometry.settings.vslam_filename,
-            "reverse": this.options.reverse ? true : false,
-        }));
         this.reconstruction.finalized = true;
         //this.enc_waypoints = this.reconstruction._enc_waypoints;
     }
@@ -783,6 +793,7 @@ class VslamOdometry {
                 console.log(`timestamp ${cur} : track`);
 
                 this.reconstruction.ref_cur = cur;
+                this.reconstruction.n_tracks++;
             }
 
             return true;

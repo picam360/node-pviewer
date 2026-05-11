@@ -695,7 +695,9 @@ int main(int argc, char **argv)
                 break;
 
             pose_count++;
-
+            
+#define USE_EKF
+#ifndef USE_EKF
             if(enable_zupt){
                 Sophus::SE3d T_corr = g_zupt_cancel.apply(st->T_w_i, g_ZUPT);
     
@@ -704,6 +706,7 @@ int main(int argc, char **argv)
             }else{
                 redis_publish_pose(st->T_w_i, st->t_ns);
             }
+#endif
 
             // ---- VIO yawrate for TOFF estimator ----
             {
@@ -737,13 +740,15 @@ int main(int argc, char **argv)
                 vio_have_prev = true;
             }
 
+#ifdef USE_EKF
             // EKF update with VIO measurement
             Eigen::Vector3d p = st->T_w_i.translation();
             Eigen::Quaterniond q = st->T_w_i.unit_quaternion();
             g_ekf.update_from_vio(st->t_ns, p, q);
 
             Sophus::SE3d T_fused = g_ekf.get_fused_T_w_i();
-            // redis_publish_pose(T_fused, st->t_ns);
+            redis_publish_pose(T_fused, st->t_ns);
+#endif
 
             // debug print
             if ((pose_count % 60) == 0)
