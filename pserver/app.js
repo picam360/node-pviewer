@@ -497,8 +497,10 @@ async.waterfall([
 				}
 			}
 		};
-		m_plugin_host.load_pstdef = function(pstdef_path) {
-			console.log("loading... " + pstdef_path);
+		m_plugin_host.load_pstdef = function(pstdef_path, verbose) {
+			if(verbose){
+				console.log("loading... " + pstdef_path);
+			}
 			if (fs.existsSync(pstdef_path)) {
 				const lines = fs.readFileSync(pstdef_path, 'utf-8').replace(/\r/g, '').split('\n')
 				for(var i=0;i<lines.length;i++){
@@ -518,24 +520,15 @@ async.waterfall([
 				return null;
 			}
 		};
-		/**
-		 * build pstreamer
-		 *
-		 * @param {object} pstdef - { "base" : "string", "params" : {}, "replacements" : {} }
-		 * @param {function} callback - callback( { pst, params, pstcore } )
-		 * @returns {}
-		 */
-		m_plugin_host.build_pstreamer = function(pstdef, callback) {
+		m_plugin_host.get_pstdef = function(pstdef, verbose) {
 			if(typeof pstdef === 'string'){
 				pstdef = {
 					"base" : pstdef
 				};
 			}
 			if(!m_pstdefs[pstdef.base]){
-				console.log(`no stream definition "${pstdef.base}" use default stream definition`);
-				pstdef.base = m_options["pstdefs"].default;
+				return null;
 			}
-			console.log("use stream definition : " + pstdef.base);
 
 			const name_list = [];
 			{
@@ -545,7 +538,7 @@ async.waterfall([
 
 						{//dynamic update
 							const pstdef = m_pstdefs[name];
-							const new_pstdef = m_plugin_host.load_pstdef(pstdef.path);
+							const new_pstdef = m_plugin_host.load_pstdef(pstdef.path, verbose);
 							if(!new_pstdef || new_pstdef.name != pstdef.name){
 								console.error("Invalid Operation", new_pstdef, pstdef);
 								if(callback){
@@ -605,8 +598,15 @@ async.waterfall([
 				if(!str){
 					return str;
 				}
-				for(var key in replacements) {
-					str = str.replace(new RegExp(key, "g"), replacements[key]);
+				for(let i=0;i<10;i++) {
+					let new_str = str;
+					for(const key in replacements) {
+						new_str = new_str.replace(new RegExp(key, "g"), replacements[key]);
+					}
+					if(new_str == str){
+						break;
+					}
+					str = new_str;
 				}
 				return str;
 			}
@@ -622,9 +622,38 @@ async.waterfall([
 				}
 				params = replaced;
 			}
-			pstcore.pstcore_build_pstreamer(def, (pst) => {
+
+			return {
+				def,
+				params,
+				replacements,
+				pviewer_config_ext,
+				replace,
+			};
+		};
+		/**
+		 * build pstreamer
+		 *
+		 * @param {object} pstdef - { "base" : "string", "params" : {}, "replacements" : {} }
+		 * @param {function} callback - callback( { pst, params, pstcore } )
+		 * @returns {}
+		 */
+		m_plugin_host.build_pstreamer = function(pstdef, callback) {
+			if(typeof pstdef === 'string'){
+				pstdef = {
+					"base" : pstdef
+				};
+			}
+			if(!m_pstdefs[pstdef.base]){
+				console.log(`no stream definition "${pstdef.base}" use default stream definition`);
+				pstdef.base = m_options["pstdefs"].default;
+			}
+			console.log("use stream definition : " + pstdef.base);
+
+			const ctx = m_plugin_host.get_pstdef(pstdef, true);
+			pstcore.pstcore_build_pstreamer(ctx.def, (pst) => {
 				if(callback){
-					callback( { pstcore, pst, params, pviewer_config_ext } );
+					callback( { pstcore, pst, params : ctx.params, pviewer_config_ext : ctx.pviewer_config_ext } );
 				}
 			});
 		}
@@ -641,7 +670,7 @@ async.waterfall([
 		if (m_options["pstdefs"]) {
 			for (var k in m_options["pstdefs"]["paths"]) {
 				const pstdef_path = m_options["pstdefs"]["paths"][k];
-				const pstdef = m_plugin_host.load_pstdef(pstdef_path);
+				const pstdef = m_plugin_host.load_pstdef(pstdef_path, true);
 				if(pstdef){
 					m_pstdefs[pstdef.name] = pstdef;
 				}
