@@ -45,6 +45,7 @@ var self = {
                         if(!name || !param || !value){
                             continue;
                         }
+                        console.log("stream params : ", name, param, value);
                         pstcore.pstcore_set_param(res.pst, name, param, value);
                     }
 
