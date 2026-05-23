@@ -12,17 +12,23 @@ var self = {
             name: PLUGIN_NAME,
             init_options: function (options) {
                 m_options = options["startup"];
-                if(m_options.enabled && m_options.cmd){
-                    setTimeout(() => {
-                        plugin_host.send_command(
-                            m_options.cmd,
-                            m_options.cmd_args,
-                            (res) => {
-                                console.log("done");
-                            }
-                        );
-                    }, m_options.delay_ms || 1000);
+                if (!Array.isArray(m_options)) {
+                    m_options = [m_options];
                 }
+
+                m_options.forEach((opt) => {
+                    if (opt.enabled && opt.cmd) {
+                        setTimeout(() => {
+                            plugin_host.send_command(
+                                opt.cmd,
+                                opt.cmd_args,
+                                (res) => {
+                                    console.log("done");
+                                }
+                            );
+                        }, opt.delay_ms || 1000);
+                    }
+                });
             },
             pst_started: function (pstcore, pst) {
             },
