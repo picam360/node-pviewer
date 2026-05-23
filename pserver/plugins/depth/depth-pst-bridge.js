@@ -92,8 +92,8 @@ var self = {
                                     m_client.publish('picam360-depth', JSON.stringify({
                                         "cmd": "disparity",
                                         "test": false,
-                                        "show": m_options["depth_debug"],
-                                        "binning": m_options["depth_binning"],
+                                        "show": m_options["depth_debug"] || false,
+                                        "binning": m_options["depth_binning"] || 2,
                                         "jpeg_data": jpeg_data.toString("base64"),
                                         "user_data": { direction },
                                     }));
