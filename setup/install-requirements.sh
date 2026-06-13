@@ -1,1 +1,7 @@
-sudo apt install -y nano android-tools-adb
+sudo apt install -y android-tools-adb \
+                        cmake \
+                        curl \
+                        git \
+                        nano \
+                        p7zip-full p7zip-rar \
+                        redis

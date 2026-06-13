@@ -149,14 +149,16 @@ function getStations(callback) {
 const self = {
     create_plugin: function (plugin_host) {
         const m_plugin_host = plugin_host;
+        let m_options = {};
         console.log("create host plugin");
         const plugin = {
             name: PLUGIN_NAME,
             ssid: "NOT_INITIALIZED",
             wifi_stations: {},
             init_options: function (options) {
-                m_options = options["jetson-stats"];
+                m_options = options["jetson-stats"] || {};
 
+                let last_aws_publish_date = Date.now();
                 setInterval(() => {
                     getSSID((err, ssid) => {
                         if (err) {
@@ -176,6 +178,7 @@ const self = {
                     });
                 }, 1000);
                 setInterval(() => {
+                    const now = Date.now();
                     if(!m_plugin_host.get_redis_client){
                         return;
                     }
@@ -228,6 +231,12 @@ const self = {
 								//console.log(`Message published to ${reply} subscribers.`);
 							}
 						});
+                        if(m_options.aws_interval_sec && now - last_aws_publish_date > m_options.aws_interval_sec * 1000){
+                            if(m_plugin_host.aws_iot_publish){
+                                m_plugin_host.aws_iot_publish('pserver-jetson-stats', JSON.stringify(stats));
+                            }
+                            last_aws_publish_date = now;
+                        }
 					}
                 }, 1000);
             },
