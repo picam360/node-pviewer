@@ -231,12 +231,6 @@ const self = {
 								//console.log(`Message published to ${reply} subscribers.`);
 							}
 						});
-                        if(m_options.aws_interval_sec && now - last_aws_publish_date > m_options.aws_interval_sec * 1000){
-                            if(m_plugin_host.aws_iot_publish){
-                                m_plugin_host.aws_iot_publish('pserver-jetson-stats', JSON.stringify(stats));
-                            }
-                            last_aws_publish_date = now;
-                        }
 					}
                 }, 1000);
             },

@@ -14,7 +14,7 @@ const self = {
             init_options: function (options) {
                 m_options = options["influxdb-aws-mqtt-subscriber"] || {};
 
-                if(m_options.topics && m_plugin_host.get_aws_iot_mqtt_client){
+                if(m_options.aws_topics && m_plugin_host.get_aws_iot_mqtt_client){
                     setTimeout(() => {
     
                         const mqtt_client = m_plugin_host.get_aws_iot_mqtt_client();
@@ -26,7 +26,7 @@ const self = {
 
                         const writeApis = {};
                         
-                        for(const topic of Object.keys(m_options.topics)){
+                        for(const topic of Object.keys(m_options.aws_topics)){
 
                             writeApis[topic] = influx.getWriteApi(
                                 "picam360",
@@ -61,7 +61,7 @@ const self = {
                                 const point = new Point(topic)
                                     .tag("device", device);
 
-                                for(const field of m_options.topics[topic]){
+                                for(const field of m_options.aws_topics[topic]){
                                     if(json[field] != null){
                                         point.floatField(field, json[field]);
                                     }

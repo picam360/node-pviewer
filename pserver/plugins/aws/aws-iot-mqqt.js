@@ -95,6 +95,24 @@ var self = {
 
                     return true;
                 };
+
+                if(m_options.redis_channels && m_plugin_host.get_redis_client){
+
+                    setTimeout(() => {
+                        for(const channel of m_options.redis_channels){
+                            const client = m_plugin_host.get_redis_client();
+                            const subscriber = client.duplicate();
+                            subscriber.connect().then(() => {
+                                console.log('redis subscriber connected:');
+                                
+                                subscriber.subscribe(channel, (data, key) => {
+                                    m_plugin_host.aws_iot_publish(channel, data);
+                                });
+                            });
+                        }
+                    }, 3000);
+
+                }
             },
 
             pst_stopped: function (pstcore, pst) {
