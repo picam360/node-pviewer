@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cd @SCRIPT_DIR@
+@PYTHON_PATH@ index.py

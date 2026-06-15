@@ -69,7 +69,7 @@ const self = {
 
                                 writeApis[topic].writePoint(point);
 
-                                console.log(device, json);
+                                //console.log(device, json);
 
                             } catch (e) {
                                 console.log(e);
