@@ -75,7 +75,7 @@ function getSSID(callback) {
     );
 }
 
-function getStations(callback) {
+function getStations(wifi_device, callback) {
     getArpTable((err, arpMap) => {
         if (err) {
             console.error(err);
@@ -84,7 +84,7 @@ function getStations(callback) {
         }
 
         //const st = performance.now();
-        exec('iw dev wlan0 station dump',
+        exec(`iw dev ${wifi_device} station dump`,
             { encoding: 'utf8' },
             (error, stdout, stderr) => {
     
@@ -158,6 +158,8 @@ const self = {
             init_options: function (options) {
                 m_options = options["jetson-stats"] || {};
 
+                const wifi_device = m_options.wifi_device || "wlan0";
+
                 let last_aws_publish_date = Date.now();
                 setInterval(() => {
                     getSSID((err, ssid) => {
@@ -168,7 +170,7 @@ const self = {
                         
                         self.ssid = ssid;
                     });
-                    getStations((err, wifi_stations) => {
+                    getStations(wifi_device, (err, wifi_stations) => {
                         if (err) {
                             console.error(err);
                             return;
