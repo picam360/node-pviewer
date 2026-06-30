@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encoder Control with BLE</title>
+    <style>
+        body {
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 50px;
+            flex-direction: column;
+        }
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .textbox {
+            width: 60px;
+            text-align: center;
+            font-size: 18px;
+        }
+        .button-container {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        button {
+            font-size: 18px;
+            padding: 10px 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="input-group">
+            <span>ENC</span>
+            <input type="text" id="encoderValue" class="textbox" value="***">
+        </div>
+        <div class="input-group">
+            <span>SPEED</span>
+            <input type="text" id="speedValue" class="textbox" value="1000">
+        </div>
+        <div class="input-group">
+            <span>VALID_MSEC</span>
+            <input type="text" id="validMsecValue" class="textbox" value="200">
+        </div>
+    </div>
+
+    <div class="button-container">
+        <button id="decreaseValue">&lt;&lt;</button>
+        <button onclick="connectBLE()">connect</button>
+        <button id="increaseValue">&gt;&gt;</button>
+    </div>
+
+    <script>
+        const BLE_SRV_CHARIOT      = "70333680-7067-0000-0001-000000000001";
+        const BLE_SRV_CHARIOT_C_RX = "70333681-7067-0000-0001-000000000001";
+        const BLE_SRV_CHARIOT_C_TX = "70333682-7067-0000-0001-000000000001";
+        const BLE_CONN_RETRY_MS = 6000;
+
+        async function connectBLE() {
+            try {
+                var options = {
+                    optionalServices : []
+                };
+                options.optionalServices.push(BLE_SRV_CHARIOT);
+                const params = new URLSearchParams(window.location.search);
+                if(params.has('disable-ble-filter')){
+                    options.acceptAllDevices = true;
+                }else{
+                    options.filters = [{ namePrefix: "chariot" }];
+                }
+                const device = await navigator.bluetooth.requestDevice(options);
+
+                console.log("接続するデバイス:", device.name || "不明なデバイス");
+
+                alert(`BLEデバイス「${device.name || "不明なデバイス"}」を選択しました`);
+
+                //start service
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(BLE_SRV_CHARIOT);
+                const c_rx = await service.getCharacteristic(BLE_SRV_CHARIOT_C_RX);
+                const c_tx = await service.getCharacteristic(BLE_SRV_CHARIOT_C_TX);
+                console.log("Connected to device: " + service.device.name);
+
+                c_tx.startNotifications().then((event) => {
+                    console.log("start notification", event);
+
+                    function onNotifiedGattValue(event) {
+                        const str = new TextDecoder().decode(event.target.value);
+                        if(str.startsWith("RES GET_SERVO_ENC ")){
+                            const servo_enc = str.substring(18);
+
+                            document.getElementById('encoderValue').value = parseInt(servo_enc);
+                        }
+                        
+                        console.log("notifed from BLE_TX : ", str);
+                    }
+
+                    let in_progress = false;
+                    async function writeGattValue(value) {
+                        if (in_progress) {
+                            console.log('GATT operation already in progress.');
+                            return;
+                        }
+
+                        in_progress = true;
+                        try {
+                            await c_rx.writeValue(new TextEncoder().encode(value));
+                        } catch (error) {
+                            console.error('GATT operation failed:', error);
+                        } finally {
+                            in_progress = false;
+                        }
+                        console.log("send to BLE_RX : ", value);
+                    }
+
+                    document.getElementById('decreaseValue').onclick = (event) => {
+                        const speed = parseInt(document.getElementById('speedValue').value);
+                        const valid_ms = parseInt(document.getElementById('validMsecValue').value);
+                        writeGattValue(`REQ BACKWARD ${speed} ${valid_ms}`);
+                    };
+                    document.getElementById('increaseValue').onclick = (event) => {
+                        const speed = parseInt(document.getElementById('speedValue').value);
+                        const valid_ms = parseInt(document.getElementById('validMsecValue').value);
+                        writeGattValue(`REQ FORWARD ${speed} ${valid_ms}`);
+                    };
+                    c_tx.addEventListener('characteristicvaluechanged', onNotifiedGattValue);
+
+                    setInterval(() => {
+                        writeGattValue("REQ GET_SERVO_ENC");
+                    }, 1000);
+                });
+            } catch (error) {
+                console.error("BLE接続エラー:", error);
+                alert("BLEデバイスの検索中にエラーが発生しました");
+            }
+        }
+    </script>
+
+</body>
+</html>
