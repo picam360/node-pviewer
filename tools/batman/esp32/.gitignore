@@ -1,0 +1,16 @@
+.pio
+.vscode
+
+src/nvs_tools.cpp
+src/rover_settings.cpp
+src/rtk.cpp
+src/ubloxmsgreader.cpp
+src/tools.cpp
+
+include/nvs_tools.h
+include/rover_settings.h
+include/rtk.h
+include/ubloxmsgreader.h
+include/tools.h
+include/nmea_gga.h
+include/secrets.h

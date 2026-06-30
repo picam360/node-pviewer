@@ -17,18 +17,26 @@
 
 //params
 static bool g_pwr_ctl = false;
+static int g_bat_soc = 0;
 
 // ble
-#define BLE_DEVICE_NAME "chariot"
-#define BLE_SRV_CHARIOT "70333680-7067-0000-0001-000000000001"
-#define BLE_SRV_CHARIOT_C_RX "70333681-7067-0000-0001-000000000001"
-#define BLE_SRV_CHARIOT_C_TX "70333682-7067-0000-0001-000000000001"
-static NimBLEServer *_ble_svr = nullptr;
-static NimBLEAdvertising *_ble_adv = nullptr;
-static NimBLEService *_ble_svc = nullptr;
-static NimBLECharacteristic *_ble_c_rx = nullptr;
-static NimBLECharacteristic *_ble_c_tx = nullptr;
-static SemaphoreHandle_t _sem_var_access;
+// ターゲットのBLE情報
+const char* TARGET_NAME = "L-12200BNN160-C00028";
+const char* TARGET_ADDRESS = "C8:47:80:46:03:C0";
+
+// UUIDの設定
+static BLEUUID SERVICE_UUID((uint16_t)0xFFE0);
+static BLEUUID READ_UUID((uint16_t)0xFFE1);
+static BLEUUID WRITE_UUID((uint16_t)0xFFE2);
+
+// 送信コマンド (QUERY_BATTERY_STATUS)
+const uint8_t QUERY_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x13, 0x55, 0xAA, 0x17};
+
+static NimBLEClient* pClient = nullptr;
+static NimBLERemoteCharacteristic* pWriteChar = nullptr;
+static bool doConnect = false;
+static bool connected = false;
+static NimBLEAdvertisedDevice* advDevice;
 
 static std::vector<uint8_t> _read_line;
 static std::string _ssid = "ERROR_NO_RESPONSE";
@@ -39,6 +47,9 @@ static int status_loop_count = 0;
 static unsigned long last_status_msec = 0;
 static long status_interval_msec = 100;
 
+//#define DBG_OUT_ENABLE
+#define DBGP_BUFF_SIZE 512
+static char g_last_dbgp_msg[DBGP_BUFF_SIZE];
 void dbgPrintf(char *format, ...) {
 #ifdef DBG_OUT_ENABLE
   if(USBSerial){
@@ -56,85 +67,146 @@ void dbgPrintf(char *format, ...) {
 void dbgPrintf(String msg) { dbgPrintf("%s", msg.c_str()); }
 
 /** >>>> BLE */
-
-void startAdvertising()
-{
-    if (_ble_adv != nullptr)
-    {
-        _ble_adv->stop();
-    }
-    _ble_adv = NimBLEDevice::getAdvertising();
-
-    // ★ 追加：バッテリーに優しいアドバタイジング設定（スキャンレスポンスをオフにする）
-    // これにより、電波を出す回数が減り、瞬発的な負荷が下がります
-    _ble_adv->setScanResponse(false);
-
-    // only one uuid is valid
-    _ble_adv->addServiceUUID(_ble_svc->getUUID());
-    // rtk_ble_add_service_uuid(_ble_adv);
-
-    _ble_adv->start();
+// エンディアン変換用（Pythonのrev_hexをシミュレート）
+uint32_t get_uint32_le(const uint8_t* data, int start) {
+    return (data[start+3] << 24) | (data[start+2] << 16) | (data[start+1] << 8) | data[start];
 }
 
-class BleSvrCb : public NimBLEServerCallbacks
-{
-    void onConnect(NimBLEServer *_ble_svr)
-    {
-        dbgPrintf("ble client connected\n");
-        startAdvertising();
-    }
-    void onDisconnect(NimBLEServer *_ble_svr)
-    {
-        dbgPrintf("ble client disconnected\n");
-    }
-};
+uint16_t get_uint16_le(const uint8_t* data, int start) {
+    return (data[start+1] << 8) | data[start];
+}
 
-static void write_tx(std::string str)
-{
-    if (_ble_c_tx->getSubscribedCount() > 0)
-    {
-        if (xSemaphoreTake(_sem_var_access, 50) != pdFALSE)
-        {
-            _ble_c_tx->setValue(str);
-            _ble_c_tx->notify();
+// データパースと画面表示
+void parse_litime(const uint8_t* data, size_t length) {
+    if (length < 90) return; // 最低限必要なデータ長をチェック
 
-            if(USBSerial){
-                USBSerial.printf("DBG : BLE_TX %s\n", str.c_str());
-            }
+    // 電圧・電流・容量の解析
+    float total_voltage = get_uint32_le(data, 8) / 1000.0;
+    
+    int16_t raw_current = get_uint16_le(data, 48);
+    // Pythonの「r = ~raw_current; (-r if r > 0 else raw_current)」に相当する符号付き処理
+    float current = ((int16_t)raw_current) / 1000.0; 
 
-            xSemaphoreGive(_sem_var_access);
-        }
+    int16_t cell_temp_raw = get_uint16_le(data, 52);
+    float cell_temp = (float)cell_temp_raw; // 2の補数処理はint16_tのキャストで自動適用されます
+
+    int soc = data[90]; // 90番目のバイト
+
+    // // 画面の更新
+    // AtomS3.Display.clear();
+    // AtomS3.Display.setCursor(0, 10);
+    // AtomS3.Display.printf("SOC: %d%%\n", soc);
+    // AtomS3.Display.printf("Volt: %.2fV\n", total_voltage);
+    // AtomS3.Display.printf("Curr: %.2fA\n", current);
+    // AtomS3.Display.printf("Temp: %.1fC\n", cell_temp);
+
+    g_bat_soc = soc;
+    
+    if(USBSerial){
+        USBSerial.printf("SOC: %d%%, V: %.2fV, A: %.2fA, Temp: %.1fC\n", soc, total_voltage, current, cell_temp);
     }
 }
 
-class BleChRx : public NimBLECharacteristicCallbacks
-{
-    void onWrite(NimBLECharacteristic *pCharacteristic)
-    {
-        NimBLEAttValue rxData = pCharacteristic->getValue();
-        const char *cmd = rxData.c_str();
-        if (strncmp(cmd, "REQ GET_SERVO_ENC", 17) == 0)
-        {
-        }
-        else if (strncmp(cmd, "REQ FORWARD", 11) == 0)
-        {
-        }
-        else if (strncmp(cmd, "REQ BACKWARD", 12) == 0)
-        {
-        }
-        else
-        { // relay
-            if(USBSerial){
-                USBSerial.printf("EXTRX %s\n", cmd);
-            }
+// 通知（Notify）コールバック
+static void notifyCallback(NimBLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
+    parse_litime(pData, length);
+}
+
+// BLEスキャンコールバック
+class MyAdvertisedDeviceCallbacks: public NimBLEAdvertisedDeviceCallbacks {
+    void onResult(NimBLEAdvertisedDevice* advertisedDevice) {
+        if (advertisedDevice->getAddress().toString() == TARGET_ADDRESS || advertisedDevice->getName() == TARGET_NAME) {
+            NimBLEDevice::getScan()->stop();
+            advDevice = advertisedDevice;
+            doConnect = true;
         }
     }
 };
-class BleChTx : public NimBLECharacteristicCallbacks
-{
-};
+
+// 接続処理
+bool connectToServer() {
+    if (pClient == nullptr) {
+        pClient = NimBLEDevice::createClient();
+    }
+    
+    if (!pClient->connect(advDevice)) return false;
+    
+    // {
+    //     std::vector<NimBLERemoteService*>* services = pClient->getServices(true);
+    //     if(USBSerial){
+    //         USBSerial.println("\n========= 【重要】発見されたサービスUUID一覧 =========");
+    //     }
+    //     for (auto* service : *services) {
+    //         String uuidStr = service->getUUID().toString().c_str();
+    //         if(USBSerial){
+    //             USBSerial.printf(" 🔍 発見: %s\n", uuidStr.c_str());
+    //         }
+    //     }
+    //     if(USBSerial){
+    //         USBSerial.println("====================================================\n");
+    //     }
+    // }
+
+    NimBLERemoteService* pRemoteService = pClient->getService(SERVICE_UUID);
+    
+    if (pRemoteService == nullptr) { 
+        if(USBSerial){
+            USBSerial.println("[エラー] サービス(0xFFE0)が見つかりませんでした。");
+        }
+        pClient->disconnect(); 
+        return false; 
+    }
+    if(USBSerial){
+        USBSerial.println("[BLE] サービス(0xFFE0)の特定に成功！");
+    }
+
+    // {
+    //     std::vector<NimBLERemoteCharacteristic*>* characteristics = pRemoteService->getCharacteristics(true);
+    //     if(USBSerial){
+    //         USBSerial.println("\n========= 【重要】発見されたcharacteristic UUID一覧 =========");
+    //     }
+    //     for (auto* characteristic : *characteristics) {
+    //         String uuidStr = characteristic->getUUID().toString().c_str();
+    //         if(USBSerial){
+    //             USBSerial.printf(" 🔍 発見: %s\n", uuidStr.c_str());
+    //         }
+    //     }
+    //     if(USBSerial){
+    //         USBSerial.println("====================================================\n");
+    //     }
+    // }
+
+    NimBLERemoteCharacteristic* pReadChar = pRemoteService->getCharacteristic(READ_UUID);
+    if (pReadChar && pReadChar->canNotify()) {
+        pReadChar->subscribe(true, notifyCallback);
+        if(USBSerial){
+            USBSerial.println("[BLE] Notify（通知）の登録完了！");
+        }
+    } else {
+        if(USBSerial){
+            USBSerial.println("[エラー] READキャラスティックが見つからない、またはNotifyに対応していません。");
+        }
+        pClient->disconnect();
+        return false;
+    }
+
+    pWriteChar = pRemoteService->getCharacteristic(WRITE_UUID);
+    if (pWriteChar == nullptr) {
+        if(USBSerial){
+            USBSerial.println("[エラー] WRITEキャラスティックが見つかりません。");
+        }
+        pClient->disconnect();
+        return false;
+    }
+
+    if(USBSerial){
+        USBSerial.println("[BLE] すべての接続・初期化が正常に完了しました！");
+    }
+    return true;
+}
 
 /** BLE <<<< */
+
 void servoTask(void *pvParameters) {
 }
 static int32_t g_dial_pos = 0;
@@ -170,33 +242,20 @@ void setup()
     digitalWrite(PWR_CTR_PIN, LOW); // 初期状態はオフ
 #endif
 
+    USBSerial.begin(115200);//need to be called for USBSerial.isPlugged=true
+    //USBSerial.setRxBufferSize(4096);//for big rtcm data
     if(USBSerial){
-        USBSerial.begin(115200);
-        USBSerial.setRxBufferSize(4096);//for big rtcm data
-
-        USBSerial.printf("BLE Device Name : %s\n", BLE_DEVICE_NAME);
+        USBSerial.println("DBG : setup started.");
     }
 
-    // semaphore
-    _sem_var_access = xSemaphoreCreateMutex();
-
-    NimBLEDevice::init(BLE_DEVICE_NAME);
-    NimBLEDevice::setPower(ESP_PWR_LVL_N24); 
-    dbgPrintf("ble addr: %s\n",
-              NimBLEDevice::getAddress().toString().c_str());
-    _ble_svr = NimBLEDevice::createServer();
-    _ble_svr->setCallbacks(new BleSvrCb());
-
-    _ble_svc = _ble_svr->createService(BLE_SRV_CHARIOT);
-    {
-        _ble_c_rx = _ble_svc->createCharacteristic(BLE_SRV_CHARIOT_C_RX, NIMBLE_PROPERTY::WRITE);
-        _ble_c_rx->setCallbacks(new BleChRx());
-        _ble_c_tx = _ble_svc->createCharacteristic(BLE_SRV_CHARIOT_C_TX, NIMBLE_PROPERTY::NOTIFY);
-        _ble_c_tx->setCallbacks(new BleChTx());
-    }
-    _ble_svc->start();
-
-    startAdvertising();
+    // ble
+    NimBLEDevice::init("");
+    NimBLEScan* pBLEScan = NimBLEDevice::getScan();
+    pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+    pBLEScan->setInterval(45);
+    pBLEScan->setWindow(15);
+    pBLEScan->setActiveScan(true);
+    pBLEScan->start(10, false);
 
     // xTaskCreatePinnedToCore(
     //     servoTask,  // 実行する関数
@@ -231,7 +290,7 @@ void LCD_printf(const char *format, ...) {
     int w = 128 - x;
     int h = M5.Lcd.fontHeight();
   
-    M5.Lcd.printf(buff);
+    M5.Lcd.printf("%s", buff);
     M5.Lcd.fillRect(x, y, w, h, BLACK);
 }
 
@@ -295,8 +354,14 @@ void loop()
         M5.Lcd.setTextColor(WHITE, BLACK);                 // 文字色
         M5.Lcd.setTextFont(2);                             // フォント
         M5.Lcd.setCursor(0, 0);                            // カーソル座標指定
-        LCD_printf("DIAL:%d\n", g_dial_pos);         // アクセスポイント時のSSID表示
-        LCD_printf("PWR:%s\n", g_pwr_ctl ? "ON" : "OFF");         // アクセスポイント時のSSID表示
+        LCD_printf("DIAL: %d\n", g_dial_pos);         // アクセスポイント時のSSID表示
+        LCD_printf("USB: %s\n", USBSerial ? "1" : "0"); 
+        LCD_printf("PWR: %s\n", g_pwr_ctl ? "ON" : "OFF");
+        if(connected){
+            LCD_printf("BAT: %d%%\n", g_bat_soc);
+        }else{
+            LCD_printf("BAT: -\n");
+        }
 
         M5.Lcd.drawFastHLine(0, 50, 128, WHITE);           // 指定座標から横線
         
@@ -305,12 +370,19 @@ void loop()
         if (M5.BtnA.wasPressed()) {
             DinMeter.Encoder.readAndReset();
             //DinMeter.Encoder.write(0);
+            if(USBSerial){
+                USBSerial.println("DBG : wasPressed");
+            }
         }
         if (long_press == false && M5.BtnA.pressedFor(3000)) {
             long_press = true;
 
             g_pwr_ctl = !g_pwr_ctl;
             digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
+
+            if(USBSerial){
+                USBSerial.println("DBG : wasLongPressed");
+            }
         }
         if (M5.BtnA.wasReleased()) {
             long_press = false; 
@@ -330,6 +402,31 @@ void loop()
     //             break;
     //         }
     //     }
+    }
+
+    //ble
+    if (doConnect) {
+        doConnect = false;
+        if (connectToServer()) {
+            connected = true;
+        } else {
+            connected = false;
+            delay(2000);
+            NimBLEDevice::getScan()->start(10, false); // 再スキャン
+        }
+    }
+
+    // 接続中なら1秒ごとにリクエストコマンドを送信
+    if (connected) {
+        if (pClient->isConnected()) {
+            if (pWriteChar != nullptr) {
+                pWriteChar->writeValue(QUERY_CMD, sizeof(QUERY_CMD), true);
+            }
+            delay(1000);
+        } else {
+            connected = false;
+            NimBLEDevice::getScan()->start(10, false);
+        }
     }
 
     while (USBSerial && USBSerial.available() > 0)
