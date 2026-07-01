@@ -1,10 +1,15 @@
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <MQTTClient.h>
+#include <ArduinoJson.h>
+#include "WiFi.h"
+#include "secrets.h"
 
 #include <unordered_map>
 
-//#define TARGET_DEVICE_ATOMS3
+// #define TARGET_DEVICE_ATOMS3
 #define TARGET_DEVICE_M5DINMETER
 #if defined(TARGET_DEVICE_ATOMS3)
 #include <M5AtomS3.h> // ATOMS3用ライブラリ
@@ -15,14 +20,19 @@
 
 // debug flgs
 
-//params
+// aws
+WiFiClientSecure net = WiFiClientSecure();
+MQTTClient client = MQTTClient(256);
+
+// params
 static bool g_pwr_ctl = false;
 static int g_bat_soc = 0;
+static float g_bat_temp = 0;
 
 // ble
 // ターゲットのBLE情報
-const char* TARGET_NAME = "L-12200BNN160-C00028";
-const char* TARGET_ADDRESS = "C8:47:80:46:03:C0";
+const char *TARGET_NAME = "L-12200BNN160-C00028";
+const char *TARGET_ADDRESS = "C8:47:80:46:03:C0";
 
 // UUIDの設定
 static BLEUUID SERVICE_UUID((uint16_t)0xFFE0);
@@ -32,60 +42,147 @@ static BLEUUID WRITE_UUID((uint16_t)0xFFE2);
 // 送信コマンド (QUERY_BATTERY_STATUS)
 const uint8_t QUERY_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x13, 0x55, 0xAA, 0x17};
 
-static NimBLEClient* pClient = nullptr;
-static NimBLERemoteCharacteristic* pWriteChar = nullptr;
+static NimBLEClient *pClient = nullptr;
+static NimBLERemoteCharacteristic *pWriteChar = nullptr;
 static bool doConnect = false;
 static bool connected = false;
-static NimBLEAdvertisedDevice* advDevice;
+static NimBLEAdvertisedDevice *advDevice;
 
 static std::vector<uint8_t> _read_line;
 static std::string _ssid = "ERROR_NO_RESPONSE";
 static std::string _ip_address = "ERROR_NO_RESPONSE";
 
-//system
+// system
 static int status_loop_count = 0;
 static unsigned long last_status_msec = 0;
 static long status_interval_msec = 100;
 
-//#define DBG_OUT_ENABLE
+// #define DBG_OUT_ENABLE
 #define DBGP_BUFF_SIZE 512
 static char g_last_dbgp_msg[DBGP_BUFF_SIZE];
-void dbgPrintf(char *format, ...) {
+void dbgPrintf(char *format, ...)
+{
 #ifdef DBG_OUT_ENABLE
-  if(USBSerial){
-    char buff[DBGP_BUFF_SIZE];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(buff, DBGP_BUFF_SIZE, format, args);
-    va_end(args);
-    memcpy(g_last_dbgp_msg, buff, DBGP_BUFF_SIZE);
-    USBSerial.print(buff);
-  }
+    if (USBSerial)
+    {
+        char buff[DBGP_BUFF_SIZE];
+        va_list args;
+        va_start(args, format);
+        vsnprintf(buff, DBGP_BUFF_SIZE, format, args);
+        va_end(args);
+        memcpy(g_last_dbgp_msg, buff, DBGP_BUFF_SIZE);
+        USBSerial.print(buff);
+    }
 #endif
 }
 
 void dbgPrintf(String msg) { dbgPrintf("%s", msg.c_str()); }
 
+/** >>>> AWS */
+void messageHandler(String &topic, String &payload)
+{
+    USBSerial.println("Topic: " + topic);
+    USBSerial.println("Payload: " + payload);
+
+    // JSON解析
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (error)
+    {
+        USBSerial.println("JSON parse failed");
+        return;
+    }
+
+    const bool pwr_ctl = doc["pwr_ctl"];
+    g_pwr_ctl = pwr_ctl;
+    digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
+
+    if (USBSerial)
+    {
+        USBSerial.println("DBG : mqtt subscribed");
+    }
+}
+void connectAWS()
+{
+    M5.Display.fillScreen(BLACK); // 画面を黒でクリア
+    M5.Display.setTextSize(1);    // 文字サイズ設定
+    M5.Display.setCursor(0, 0);   // 左上にカーソルセット
+    M5.Display.println("Connecting...");
+    M5.Display.println("Wi-Fi...");
+
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(500);
+        M5.Display.print("."); // 画面にドットを追加していく
+        USBSerial.print(".");  // シリアルにも出力
+    }
+
+    // 接続完了の表示
+    M5.Display.println("\nOK!");
+
+    // --- AWS接続 ---
+    M5.Display.println("AWS IoT...");
+
+    net.setCACert(AWS_CERT_CA);
+    net.setCertificate(AWS_CERT_CRT);
+    net.setPrivateKey(AWS_CERT_PRIVATE);
+
+    client.onMessage(messageHandler); // コールバックをセット
+    client.begin(AWS_IOT_ENDPOINT, 8883, net);
+
+    // 接続試行中も表示を更新
+    while (!client.connect(THINGNAME))
+    {
+        delay(1000);
+        M5.Display.print(".");
+        USBSerial.print(".");
+    }
+    M5.Display.println("Subscribe");
+    M5.Display.println(String(AWS_IOT_SUBSCRIBE_TOPIC));
+    bool subret = client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
+    M5.Display.println(subret ? "OK!" : "FAILED!");
+    delay(2000); // メッセージを確認するために少し待機
+
+    // 接続成功
+    M5.Display.fillScreen(BLACK);
+    M5.Display.setCursor(0, 0);
+    M5.Display.setTextColor(GREEN); // 成功時は緑に
+    M5.Display.println("Connected to");
+    M5.Display.println("AWS IoT!");
+
+    delay(2000);                  // メッセージを確認するために少し待機
+    M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
+}
+/** <<<< AWS */
+
 /** >>>> BLE */
 // エンディアン変換用（Pythonのrev_hexをシミュレート）
-uint32_t get_uint32_le(const uint8_t* data, int start) {
-    return (data[start+3] << 24) | (data[start+2] << 16) | (data[start+1] << 8) | data[start];
+uint32_t get_uint32_le(const uint8_t *data, int start)
+{
+    return (data[start + 3] << 24) | (data[start + 2] << 16) | (data[start + 1] << 8) | data[start];
 }
 
-uint16_t get_uint16_le(const uint8_t* data, int start) {
-    return (data[start+1] << 8) | data[start];
+uint16_t get_uint16_le(const uint8_t *data, int start)
+{
+    return (data[start + 1] << 8) | data[start];
 }
 
 // データパースと画面表示
-void parse_litime(const uint8_t* data, size_t length) {
-    if (length < 90) return; // 最低限必要なデータ長をチェック
+void parse_litime(const uint8_t *data, size_t length)
+{
+    if (length < 90)
+        return; // 最低限必要なデータ長をチェック
 
     // 電圧・電流・容量の解析
     float total_voltage = get_uint32_le(data, 8) / 1000.0;
-    
+
     int16_t raw_current = get_uint16_le(data, 48);
     // Pythonの「r = ~raw_current; (-r if r > 0 else raw_current)」に相当する符号付き処理
-    float current = ((int16_t)raw_current) / 1000.0; 
+    float current = ((int16_t)raw_current) / 1000.0;
 
     int16_t cell_temp_raw = get_uint16_le(data, 52);
     float cell_temp = (float)cell_temp_raw; // 2の補数処理はint16_tのキャストで自動適用されます
@@ -101,21 +198,27 @@ void parse_litime(const uint8_t* data, size_t length) {
     // AtomS3.Display.printf("Temp: %.1fC\n", cell_temp);
 
     g_bat_soc = soc;
-    
-    if(USBSerial){
+    g_bat_temp = cell_temp;
+
+    if (USBSerial)
+    {
         USBSerial.printf("SOC: %d%%, V: %.2fV, A: %.2fA, Temp: %.1fC\n", soc, total_voltage, current, cell_temp);
     }
 }
 
 // 通知（Notify）コールバック
-static void notifyCallback(NimBLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
+static void notifyCallback(NimBLERemoteCharacteristic *pBLERemoteCharacteristic, uint8_t *pData, size_t length, bool isNotify)
+{
     parse_litime(pData, length);
 }
 
 // BLEスキャンコールバック
-class MyAdvertisedDeviceCallbacks: public NimBLEAdvertisedDeviceCallbacks {
-    void onResult(NimBLEAdvertisedDevice* advertisedDevice) {
-        if (advertisedDevice->getAddress().toString() == TARGET_ADDRESS || advertisedDevice->getName() == TARGET_NAME) {
+class MyAdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks
+{
+    void onResult(NimBLEAdvertisedDevice *advertisedDevice)
+    {
+        if (advertisedDevice->getAddress().toString() == TARGET_ADDRESS || advertisedDevice->getName() == TARGET_NAME)
+        {
             NimBLEDevice::getScan()->stop();
             advDevice = advertisedDevice;
             doConnect = true;
@@ -124,13 +227,16 @@ class MyAdvertisedDeviceCallbacks: public NimBLEAdvertisedDeviceCallbacks {
 };
 
 // 接続処理
-bool connectToServer() {
-    if (pClient == nullptr) {
+bool connectToServer()
+{
+    if (pClient == nullptr)
+    {
         pClient = NimBLEDevice::createClient();
     }
-    
-    if (!pClient->connect(advDevice)) return false;
-    
+
+    if (!pClient->connect(advDevice))
+        return false;
+
     // {
     //     std::vector<NimBLERemoteService*>* services = pClient->getServices(true);
     //     if(USBSerial){
@@ -147,16 +253,19 @@ bool connectToServer() {
     //     }
     // }
 
-    NimBLERemoteService* pRemoteService = pClient->getService(SERVICE_UUID);
-    
-    if (pRemoteService == nullptr) { 
-        if(USBSerial){
+    NimBLERemoteService *pRemoteService = pClient->getService(SERVICE_UUID);
+
+    if (pRemoteService == nullptr)
+    {
+        if (USBSerial)
+        {
             USBSerial.println("[エラー] サービス(0xFFE0)が見つかりませんでした。");
         }
-        pClient->disconnect(); 
-        return false; 
+        pClient->disconnect();
+        return false;
     }
-    if(USBSerial){
+    if (USBSerial)
+    {
         USBSerial.println("[BLE] サービス(0xFFE0)の特定に成功！");
     }
 
@@ -176,14 +285,19 @@ bool connectToServer() {
     //     }
     // }
 
-    NimBLERemoteCharacteristic* pReadChar = pRemoteService->getCharacteristic(READ_UUID);
-    if (pReadChar && pReadChar->canNotify()) {
+    NimBLERemoteCharacteristic *pReadChar = pRemoteService->getCharacteristic(READ_UUID);
+    if (pReadChar && pReadChar->canNotify())
+    {
         pReadChar->subscribe(true, notifyCallback);
-        if(USBSerial){
+        if (USBSerial)
+        {
             USBSerial.println("[BLE] Notify（通知）の登録完了！");
         }
-    } else {
-        if(USBSerial){
+    }
+    else
+    {
+        if (USBSerial)
+        {
             USBSerial.println("[エラー] READキャラスティックが見つからない、またはNotifyに対応していません。");
         }
         pClient->disconnect();
@@ -191,15 +305,18 @@ bool connectToServer() {
     }
 
     pWriteChar = pRemoteService->getCharacteristic(WRITE_UUID);
-    if (pWriteChar == nullptr) {
-        if(USBSerial){
+    if (pWriteChar == nullptr)
+    {
+        if (USBSerial)
+        {
             USBSerial.println("[エラー] WRITEキャラスティックが見つかりません。");
         }
         pClient->disconnect();
         return false;
     }
 
-    if(USBSerial){
+    if (USBSerial)
+    {
         USBSerial.println("[BLE] すべての接続・初期化が正常に完了しました！");
     }
     return true;
@@ -207,13 +324,17 @@ bool connectToServer() {
 
 /** BLE <<<< */
 
-void servoTask(void *pvParameters) {
+void servoTask(void *pvParameters)
+{
 }
 static int32_t g_dial_pos = 0;
-void dialTask(void *pvParameters) {
-    while (1) {
+void dialTask(void *pvParameters)
+{
+    while (1)
+    {
         int32_t dial_pos = DinMeter.Encoder.read();
-        if (dial_pos != g_dial_pos) {
+        if (dial_pos != g_dial_pos)
+        {
             g_dial_pos = dial_pos;
         }
         delay(1);
@@ -242,15 +363,19 @@ void setup()
     digitalWrite(PWR_CTR_PIN, LOW); // 初期状態はオフ
 #endif
 
-    USBSerial.begin(115200);//need to be called for USBSerial.isPlugged=true
-    //USBSerial.setRxBufferSize(4096);//for big rtcm data
-    if(USBSerial){
+    USBSerial.begin(115200); // need to be called for USBSerial.isPlugged=true
+    // USBSerial.setRxBufferSize(4096);//for big rtcm data
+    if (USBSerial)
+    {
         USBSerial.println("DBG : setup started.");
     }
 
+    // aws
+    connectAWS();
+
     // ble
     NimBLEDevice::init("");
-    NimBLEScan* pBLEScan = NimBLEDevice::getScan();
+    NimBLEScan *pBLEScan = NimBLEDevice::getScan();
     pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
     pBLEScan->setInterval(45);
     pBLEScan->setWindow(15);
@@ -268,17 +393,18 @@ void setup()
     // );
 
     xTaskCreatePinnedToCore(
-        dialTask,  // 実行する関数
+        dialTask,       // 実行する関数
         "DialoderTask", // タスク名
-        4096, // スタックサイズ
-        NULL, // パラメータ
-        1, // 優先度
-        NULL, // ハンドル
-        0 // コア0で実行
+        4096,           // スタックサイズ
+        NULL,           // パラメータ
+        1,              // 優先度
+        NULL,           // ハンドル
+        0               // コア0で実行
     );
 }
 
-void LCD_printf(const char *format, ...) {
+void LCD_printf(const char *format, ...)
+{
     char buff[32];
     va_list args;
     va_start(args, format);
@@ -289,7 +415,7 @@ void LCD_printf(const char *format, ...) {
     int y = M5.Lcd.getCursorY();
     int w = 128 - x;
     int h = M5.Lcd.fontHeight();
-  
+
     M5.Lcd.printf("%s", buff);
     M5.Lcd.fillRect(x, y, w, h, BLACK);
 }
@@ -299,7 +425,7 @@ void LCD_printf(const char *format, ...) {
  */
 void loop()
 {
-    unsigned long msec = millis(); 
+    unsigned long msec = millis();
 
     if (msec - last_status_msec >= status_interval_msec)
     {
@@ -312,28 +438,33 @@ void loop()
 
         M5.update();
 
-        if (M5.BtnA.wasPressed()) {
+        if (M5.BtnA.wasPressed())
+        {
             button_state = true;
-        } else if (M5.BtnA.wasReleased()) {
-            if(button_state){
+        }
+        else if (M5.BtnA.wasReleased())
+        {
+            if (button_state)
+            {
                 display_mode++;
-                
+
                 M5.Lcd.fillScreen(BLACK); // 背景
             }
             button_state = false;
         }
 
-        M5.Lcd.setTextColor(WHITE, BLACK);                 // 文字色
-        M5.Lcd.setTextFont(2);                             // フォント
-        M5.Lcd.setCursor(0, 0);                            // カーソル座標指定
-        LCD_printf("SSID:%.11s\n", _ssid.c_str());         // アクセスポイント時のSSID表示
-        M5.Lcd.setTextColor(ORANGE, BLACK);                // 文字色
-        LCD_printf("IP:%.13s\n", _ip_address.c_str());     // IPアドレス表示
-        M5.Lcd.drawFastHLine(0, 34, 128, WHITE);           // 指定座標から横線
+        M5.Lcd.setTextColor(WHITE, BLACK);             // 文字色
+        M5.Lcd.setTextFont(2);                         // フォント
+        M5.Lcd.setCursor(0, 0);                        // カーソル座標指定
+        LCD_printf("SSID:%.11s\n", _ssid.c_str());     // アクセスポイント時のSSID表示
+        M5.Lcd.setTextColor(ORANGE, BLACK);            // 文字色
+        LCD_printf("IP:%.13s\n", _ip_address.c_str()); // IPアドレス表示
+        M5.Lcd.drawFastHLine(0, 34, 128, WHITE);       // 指定座標から横線
 
-        M5.Lcd.setCursor(0, 38);                           // カーソル座標指定
-        M5.Lcd.setTextColor(CYAN, BLACK);                  // 文字色
-        switch(display_mode%3){
+        M5.Lcd.setCursor(0, 38);          // カーソル座標指定
+        M5.Lcd.setTextColor(CYAN, BLACK); // 文字色
+        switch (display_mode % 3)
+        {
         case 2:
             LCD_printf("*****\n");
             break;
@@ -350,66 +481,107 @@ void loop()
 
         DinMeter.update();
 
-        //DinMeter.Speaker.tone(8000, 20);
-        M5.Lcd.setTextColor(WHITE, BLACK);                 // 文字色
-        M5.Lcd.setTextFont(2);                             // フォント
-        M5.Lcd.setCursor(0, 0);                            // カーソル座標指定
-        LCD_printf("DIAL: %d\n", g_dial_pos);         // アクセスポイント時のSSID表示
-        LCD_printf("USB: %s\n", USBSerial ? "1" : "0"); 
+        // DinMeter.Speaker.tone(8000, 20);
+        M5.Lcd.setTextColor(WHITE, BLACK);    // 文字色
+        M5.Lcd.setTextSize(1);                // 文字サイズ設定
+        M5.Lcd.setTextFont(2);                // フォント
+        M5.Lcd.setCursor(0, 0);               // カーソル座標指定
+        LCD_printf("DIAL: %d\n", g_dial_pos); // アクセスポイント時のSSID表示
+        LCD_printf("USB: %s\n", USBSerial ? "1" : "0");
         LCD_printf("PWR: %s\n", g_pwr_ctl ? "ON" : "OFF");
-        if(connected){
-            LCD_printf("BAT: %d%%\n", g_bat_soc);
-        }else{
+        if (connected)
+        {
+            LCD_printf("BAT: %d%%, %.1fC\n", g_bat_soc, g_bat_temp);
+        }
+        else
+        {
             LCD_printf("BAT: -\n");
         }
 
-        M5.Lcd.drawFastHLine(0, 50, 128, WHITE);           // 指定座標から横線
-        
-        //M5.Lcd.setCursor(0, 50);                           // カーソル座標指定
+        // M5.Lcd.drawFastHLine(0, 50, 128, WHITE);           // 指定座標から横線
 
-        if (M5.BtnA.wasPressed()) {
+        // M5.Lcd.setCursor(0, 50);                           // カーソル座標指定
+
+        if (M5.BtnA.wasPressed())
+        {
             DinMeter.Encoder.readAndReset();
-            //DinMeter.Encoder.write(0);
-            if(USBSerial){
+            // DinMeter.Encoder.write(0);
+            if (USBSerial)
+            {
                 USBSerial.println("DBG : wasPressed");
             }
         }
-        if (long_press == false && M5.BtnA.pressedFor(3000)) {
+        if (long_press == false && M5.BtnA.pressedFor(3000))
+        {
             long_press = true;
 
             g_pwr_ctl = !g_pwr_ctl;
             digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
 
-            if(USBSerial){
+            if (USBSerial)
+            {
                 USBSerial.println("DBG : wasLongPressed");
             }
         }
-        if (M5.BtnA.wasReleased()) {
-            long_press = false; 
+        if (M5.BtnA.wasReleased())
+        {
+            long_press = false;
         }
 #endif
 
-    //     status_loop_count++;
-    //     int step_count = 20;
-    //     if ((status_loop_count % step_count) == 0)
-    //     {
-    //         int step = (status_loop_count / step_count) % 2;
-    //         switch (step)
-    //         {
-    //         case 0:
-    //             break;
-    //         case 1:
-    //             break;
-    //         }
-    //     }
+        //     status_loop_count++;
+        //     int step_count = 20;
+        //     if ((status_loop_count % step_count) == 0)
+        //     {
+        //         int step = (status_loop_count / step_count) % 2;
+        //         switch (step)
+        //         {
+        //         case 0:
+        //             break;
+        //         case 1:
+        //             break;
+        //         }
+        //     }
     }
 
-    //ble
-    if (doConnect) {
+    // aws
+    client.loop();
+    if (!client.connected())
+    {
+        connectAWS();
+    }
+
+    // 10秒ごとに送信
+    static unsigned long lastMillis = 0;
+    if (millis() - lastMillis > 10000)
+    {
+        lastMillis = millis();
+
+        JsonDocument doc; // ArduinoJson v7の書き方
+        doc["time"] = millis();
+        doc["bat_soc"] = g_bat_soc;
+        doc["bat_temp"] = g_bat_temp;
+        doc["pwr_ctl"] = g_pwr_ctl;
+
+        char jsonBuffer[512];
+        serializeJson(doc, jsonBuffer);
+
+        if (client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer))
+        {
+            USBSerial.println("Published: " + String(jsonBuffer));
+        }
+    }
+
+    // ble
+    if (doConnect)
+    {
         doConnect = false;
-        if (connectToServer()) {
+        if (connectToServer())
+        {
             connected = true;
-        } else {
+        }
+        else
+        {
             connected = false;
             delay(2000);
             NimBLEDevice::getScan()->start(10, false); // 再スキャン
@@ -417,13 +589,18 @@ void loop()
     }
 
     // 接続中なら1秒ごとにリクエストコマンドを送信
-    if (connected) {
-        if (pClient->isConnected()) {
-            if (pWriteChar != nullptr) {
+    if (connected)
+    {
+        if (pClient->isConnected())
+        {
+            if (pWriteChar != nullptr)
+            {
                 pWriteChar->writeValue(QUERY_CMD, sizeof(QUERY_CMD), true);
             }
             delay(1000);
-        } else {
+        }
+        else
+        {
             connected = false;
             NimBLEDevice::getScan()->start(10, false);
         }
