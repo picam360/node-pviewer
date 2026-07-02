@@ -27,21 +27,23 @@ const self = {
                         const writeApis = {};
                         
                         for(const topic of Object.keys(m_options.aws_topics)){
+                            const full_topic = `clients/${m_options.client}/devices/${m_options.device}/${topic}`;
+                            console.log("sub", full_topic);
 
                             writeApis[topic] = influx.getWriteApi(
                                 "picam360",
-                                topic,
-                                "ms"
+                                m_options.client,
+                                "ms"//timestamp order
                             );
 
                             mqtt_client.subscribe(
-                                `devices/${m_options.device}/${topic}`,
+                                full_topic,
                                 { qos: 0 },
                                 (err) => {
                                     if (err) {
                                         console.log(err);
                                     } else {
-                                        console.log("Subscribed", topic);
+                                        console.log("Subscribed", full_topic);
                                     }
                                 }
                             );
@@ -53,12 +55,14 @@ const self = {
 
                                 const json = JSON.parse(payload.toString());
 
-                                // devices/nenkoumuseum-001/pserver-jetson-stats
+                                // clients/nenkoumuseum/devices/nenkoumuseum-001/pserver-jetson-stats
                                 const parts = full_topic.split("/");
-                                const device = parts[1];
-                                const topic = parts[2];
+                                const client = parts[1];
+                                const device = parts[3];
+                                const topic = parts[4];
 
                                 const point = new Point(topic)
+                                    .tag("client", client)
                                     .tag("device", device);
 
                                 for(const field of m_options.aws_topics[topic]){
@@ -69,7 +73,7 @@ const self = {
 
                                 writeApis[topic].writePoint(point);
 
-                                //console.log(device, json);
+                                console.log(device, json);
 
                             } catch (e) {
                                 console.log(e);
