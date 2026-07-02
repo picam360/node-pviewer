@@ -98,12 +98,9 @@ void messageHandler(String &topic, String &payload)
     g_pwr_ctl = pwr_ctl;
     digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
 
-    if (USBSerial)
-    {
-        USBSerial.println("DBG : mqtt subscribed");
-    }
+    USBSerial.println("DBG : mqtt subscribed");
 }
-void connectAWS()
+void connectWifi()
 {
     M5.Display.fillScreen(BLACK); // 画面を黒でクリア
     M5.Display.setTextSize(1);    // 文字サイズ設定
@@ -123,8 +120,15 @@ void connectAWS()
 
     // 接続完了の表示
     M5.Display.println("\nOK!");
-
-    // --- AWS接続 ---
+    delay(2000); // メッセージを確認するために少し待機
+    M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
+}
+void connectAWS()
+{
+    M5.Display.fillScreen(BLACK); // 画面を黒でクリア
+    M5.Display.setTextSize(1);    // 文字サイズ設定
+    M5.Display.setCursor(0, 0);   // 左上にカーソルセット
+    M5.Display.println("Connecting...");
     M5.Display.println("AWS IoT...");
 
     net.setCACert(AWS_CERT_CA);
@@ -200,10 +204,7 @@ void parse_litime(const uint8_t *data, size_t length)
     g_bat_soc = soc;
     g_bat_temp = cell_temp;
 
-    if (USBSerial)
-    {
-        USBSerial.printf("SOC: %d%%, V: %.2fV, A: %.2fA, Temp: %.1fC\n", soc, total_voltage, current, cell_temp);
-    }
+    USBSerial.printf("SOC: %d%%, V: %.2fV, A: %.2fA, Temp: %.1fC\n", soc, total_voltage, current, cell_temp);
 }
 
 // 通知（Notify）コールバック
@@ -257,17 +258,11 @@ bool connectToServer()
 
     if (pRemoteService == nullptr)
     {
-        if (USBSerial)
-        {
-            USBSerial.println("[エラー] サービス(0xFFE0)が見つかりませんでした。");
-        }
+        USBSerial.println("[エラー] サービス(0xFFE0)が見つかりませんでした。");
         pClient->disconnect();
         return false;
     }
-    if (USBSerial)
-    {
-        USBSerial.println("[BLE] サービス(0xFFE0)の特定に成功！");
-    }
+    USBSerial.println("[BLE] サービス(0xFFE0)の特定に成功！");
 
     // {
     //     std::vector<NimBLERemoteCharacteristic*>* characteristics = pRemoteService->getCharacteristics(true);
@@ -289,17 +284,11 @@ bool connectToServer()
     if (pReadChar && pReadChar->canNotify())
     {
         pReadChar->subscribe(true, notifyCallback);
-        if (USBSerial)
-        {
-            USBSerial.println("[BLE] Notify（通知）の登録完了！");
-        }
+        USBSerial.println("[BLE] Notify（通知）の登録完了！");
     }
     else
     {
-        if (USBSerial)
-        {
-            USBSerial.println("[エラー] READキャラスティックが見つからない、またはNotifyに対応していません。");
-        }
+        USBSerial.println("[エラー] READキャラスティックが見つからない、またはNotifyに対応していません。");
         pClient->disconnect();
         return false;
     }
@@ -307,18 +296,12 @@ bool connectToServer()
     pWriteChar = pRemoteService->getCharacteristic(WRITE_UUID);
     if (pWriteChar == nullptr)
     {
-        if (USBSerial)
-        {
-            USBSerial.println("[エラー] WRITEキャラスティックが見つかりません。");
-        }
+        USBSerial.println("[エラー] WRITEキャラスティックが見つかりません。");
         pClient->disconnect();
         return false;
     }
 
-    if (USBSerial)
-    {
-        USBSerial.println("[BLE] すべての接続・初期化が正常に完了しました！");
-    }
+    USBSerial.println("[BLE] すべての接続・初期化が正常に完了しました！");
     return true;
 }
 
@@ -365,12 +348,10 @@ void setup()
 
     USBSerial.begin(115200); // need to be called for USBSerial.isPlugged=true
     // USBSerial.setRxBufferSize(4096);//for big rtcm data
-    if (USBSerial)
-    {
-        USBSerial.println("DBG : setup started.");
-    }
+    USBSerial.println("DBG : setup started.");
 
     // aws
+    connectWifi();
     connectAWS();
 
     // ble
@@ -506,10 +487,7 @@ void loop()
         {
             DinMeter.Encoder.readAndReset();
             // DinMeter.Encoder.write(0);
-            if (USBSerial)
-            {
-                USBSerial.println("DBG : wasPressed");
-            }
+            USBSerial.println("DBG : wasPressed");
         }
         if (long_press == false && M5.BtnA.pressedFor(3000))
         {
@@ -518,10 +496,7 @@ void loop()
             g_pwr_ctl = !g_pwr_ctl;
             digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
 
-            if (USBSerial)
-            {
-                USBSerial.println("DBG : wasLongPressed");
-            }
+            USBSerial.println("DBG : wasLongPressed");
         }
         if (M5.BtnA.wasReleased())
         {
@@ -561,7 +536,7 @@ void loop()
         doc["time"] = millis();
         doc["bat_soc"] = g_bat_soc;
         doc["bat_temp"] = g_bat_temp;
-        doc["pwr_ctl"] = g_pwr_ctl;
+        doc["pwr_ctl"] = g_pwr_ctl ? 1 : 0;
 
         char jsonBuffer[512];
         serializeJson(doc, jsonBuffer);
