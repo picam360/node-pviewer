@@ -523,6 +523,7 @@ void loop()
     client.loop();
     if (!client.connected())
     {
+        connectWifi();
         connectAWS();
     }
 
