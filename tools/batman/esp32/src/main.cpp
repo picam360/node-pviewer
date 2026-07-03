@@ -1,7 +1,10 @@
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <HTTPClient.h>
+#include <WiFi.h>
+#ifdef USE_AWS
 #include <WiFiClientSecure.h>
+#endif
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
 #include "WiFi.h"
@@ -20,8 +23,11 @@
 
 // debug flgs
 
-// aws
+// network
+WiFiClient net;
+#ifdef USE_AWS
 WiFiClientSecure net = WiFiClientSecure();
+#endif
 MQTTClient client = MQTTClient(256);
 
 // params
@@ -79,27 +85,6 @@ void dbgPrintf(char *format, ...)
 void dbgPrintf(String msg) { dbgPrintf("%s", msg.c_str()); }
 
 /** >>>> AWS */
-void messageHandler(String &topic, String &payload)
-{
-    USBSerial.println("Topic: " + topic);
-    USBSerial.println("Payload: " + payload);
-
-    // JSON解析
-    JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, payload);
-
-    if (error)
-    {
-        USBSerial.println("JSON parse failed");
-        return;
-    }
-
-    const bool pwr_ctl = doc["pwr_ctl"];
-    g_pwr_ctl = pwr_ctl;
-    digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
-
-    USBSerial.println("DBG : mqtt subscribed");
-}
 void connectWifi()
 {
     M5.Display.fillScreen(BLACK); // 画面を黒でクリア
@@ -123,6 +108,62 @@ void connectWifi()
     delay(2000); // メッセージを確認するために少し待機
     M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 }
+void messageHandler(String &topic, String &payload)
+{
+    USBSerial.println("Topic: " + topic);
+    USBSerial.println("Payload: " + payload);
+
+    // JSON解析
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (error)
+    {
+        USBSerial.println("JSON parse failed");
+        return;
+    }
+
+    const bool pwr_ctl = doc["pwr_ctl"];
+    g_pwr_ctl = pwr_ctl;
+    digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
+
+    USBSerial.println("DBG : mqtt subscribed");
+}
+void connectTB()
+{
+    M5.Display.fillScreen(BLACK); // 画面を黒でクリア
+    M5.Display.setTextSize(1);    // 文字サイズ設定
+    M5.Display.setCursor(0, 0);   // 左上にカーソルセット
+    M5.Display.println("Connecting...");
+    M5.Display.println("ThingsBoard...");
+
+    client.onMessage(messageHandler);
+    client.begin(TB_SERVER, TB_PORT, net);
+
+    while (!client.connect(THINGNAME, TB_TOKEN, ""))
+    {
+        delay(1000);
+        M5.Display.print(".");
+        USBSerial.print(".");
+    }
+
+    M5.Display.println("Subscribe");
+    M5.Display.println(String(TB_SUBSCRIBE_TOPIC));
+    bool subret = client.subscribe(TB_SUBSCRIBE_TOPIC);
+    M5.Display.println(subret ? "OK!" : "FAILED!");
+    delay(2000); // メッセージを確認するために少し待機
+
+    // 接続成功
+    M5.Display.fillScreen(BLACK);
+    M5.Display.setCursor(0, 0);
+    M5.Display.setTextColor(GREEN); // 成功時は緑に
+    M5.Display.println("Connected to");
+    M5.Display.println("AWS IoT!");
+
+    delay(2000);                  // メッセージを確認するために少し待機
+    M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
+}
+#ifdef USE_AWS
 void connectAWS()
 {
     M5.Display.fillScreen(BLACK); // 画面を黒でクリア
@@ -161,6 +202,7 @@ void connectAWS()
     delay(2000);                  // メッセージを確認するために少し待機
     M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 }
+#endif
 /** <<<< AWS */
 
 /** >>>> BLE */
@@ -352,7 +394,10 @@ void setup()
 
     // aws
     connectWifi();
+    connectTB();
+#ifdef USE_AWS
     connectAWS();
+#endif
 
     // ble
     NimBLEDevice::init("");
@@ -524,7 +569,10 @@ void loop()
     if (!client.connected())
     {
         connectWifi();
+        connectTB();
+#ifdef USE_AWS
         connectAWS();
+#endif
     }
 
     // 10秒ごとに送信
@@ -541,8 +589,11 @@ void loop()
 
         char jsonBuffer[512];
         serializeJson(doc, jsonBuffer);
-
+        
+        if (client.publish(TB_PUBLISH_TOPIC, jsonBuffer))
+#ifdef USE_AWS
         if (client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer))
+#endif
         {
             USBSerial.println("Published: " + String(jsonBuffer));
         }
