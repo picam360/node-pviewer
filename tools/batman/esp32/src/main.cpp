@@ -209,6 +209,10 @@ void connectCATM()
             modem.waitResponse();
             delay(3000);
 
+            modem.sendAT("+COPS=0");
+            modem.waitResponse();
+            delay(3000);
+
             // modem.sendAT("+CGDCONT=1,\"IP\",\"iot.1nce.net\"");
             // modem.waitResponse();
             // delay(3000);
