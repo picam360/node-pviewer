@@ -1,14 +1,25 @@
+
+#include "secrets.h"
+
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+
+#ifdef USE_CAT_M
+#define TINY_GSM_MODEM_SIM7080
+#define TINY_GSM_DEBUG USBSerial
+#define TINY_GSM_RX_BUFFER 1024
+#include <TinyGsmClient.h>
+#else
 #include <HTTPClient.h>
-#include <WiFi.h>
 #ifdef USE_AWS
 #include <WiFiClientSecure.h>
+#else
+#include <WiFi.h>
 #endif
+#endif
+
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
-#include "WiFi.h"
-#include "secrets.h"
 
 #include <unordered_map>
 
@@ -24,9 +35,21 @@
 // debug flgs
 
 // network
-WiFiClient net;
+#ifdef USE_CAT_M
+HardwareSerial SerialAT(1);
+
+// SIMモジュールピン（環境に合わせて変更）
+#define MODEM_TX 13
+#define MODEM_RX 15
+
+TinyGsm modem(SerialAT);
+TinyGsmClient net(modem);
+#else
 #ifdef USE_AWS
 WiFiClientSecure net = WiFiClientSecure();
+#else
+WiFiClient net;
+#endif
 #endif
 MQTTClient client = MQTTClient(256);
 
@@ -85,6 +108,224 @@ void dbgPrintf(char *format, ...)
 void dbgPrintf(String msg) { dbgPrintf("%s", msg.c_str()); }
 
 /** >>>> AWS */
+#ifdef USE_CAT_M
+String getResponce(int wait_ms){
+    String responce;
+    unsigned long st = millis();
+    while (millis() - st < wait_ms) {
+        while (SerialAT.available()) {
+            char c = (char)SerialAT.read();
+            if(c == '\n') {
+                responce += "\\n";
+            }else if(c == '\r') {
+                responce += "\\r";
+            }else{
+                responce += c;
+            }
+        }
+    }
+    return responce;
+}
+bool waitModemStable()
+{
+
+    return false;
+}
+void connectCATM()
+{
+    unsigned long start = millis();
+
+    int step = 0;
+    while (millis() - start < 3600000)
+    {
+        M5.Display.fillScreen(BLACK); // 画面を黒でクリア
+        M5.Display.setTextSize(1);    // 文字サイズ設定
+        M5.Display.setCursor(0, 0);   // 左上にカーソルセット
+        M5.Display.println("Connect CAT-M...");
+        M5.Display.print("STEP: ");
+        M5.Display.println(step);
+
+        if(step == 0){
+            M5.Display.println("Restart Modem");
+            modem.restart();
+            step++;
+            delay(2000);
+        }else if(step == 1){
+            String mi = modem.getModemInfo();
+            M5.Display.print("Modem: ");
+            if(mi.isEmpty()){
+                M5.Display.println("Wait Info");
+                delay(1000);
+                continue;
+            }
+            M5.Display.println(mi);
+            step++;
+            delay(2000);
+        }else if(step == 2){
+            if (modem.getSimStatus() != 1)
+            {
+                M5.Display.println("Sim: Not READY");
+                delay(1000);
+                continue;
+            }
+
+            M5.Display.println("Sim: READY");
+            step++;
+            delay(2000);
+        }else if(step == 3){
+            M5.Display.print("CSQ: ");
+            SerialAT.println("AT+CSQ");
+            String csq = getResponce(1000);
+            M5.Display.println(csq);
+
+            M5.Display.print("CPIN: ");
+            SerialAT.println("AT+CPIN?");
+            String cpin = getResponce(1000);
+            M5.Display.println(cpin);
+
+            // ④ 信号確認
+            int16_t sq = modem.getSignalQuality();
+            M5.Display.print("Signal: ");
+            if (sq == 99)
+            {
+                M5.Display.println("Not Ready");
+                delay(1000);
+                continue;
+            }
+            M5.Display.println(sq);
+            M5.Display.println("Modem: Stable!");
+
+            step++;
+            delay(2000);
+        }else if(step == 4){
+            //fix CAT-M LTE
+            M5.Display.println("FIX: CAT-M, LTE");
+
+            modem.sendAT("+CMNB=1");
+            modem.waitResponse();
+            delay(3000);
+
+            modem.sendAT("+CNMP=38");
+            modem.waitResponse();
+            delay(3000);
+
+            // modem.sendAT("+CGDCONT=1,\"IP\",\"iot.1nce.net\"");
+            // modem.waitResponse();
+            // delay(3000);
+        
+            // M5.Display.print("COPS: ");
+            // SerialAT.println("AT+COPS=?");
+            // while(!SerialAT.available()){
+            //     delay(1000);
+            //     M5.Display.print(".");
+            // }
+            // String copsq = getResponce(1000);
+            // M5.Display.println(copsq);
+            // USBSerial.println(copsq);
+
+            // M5.Display.print("SET COPS: ");
+            
+            // //SerialAT.println("AT+COPS=1,2,\"44020\",7");//softbank
+            // SerialAT.println("AT+COPS=1,2,\"44020\"");//softbank
+            // while(!SerialAT.available()){
+            //     delay(1000);
+            //     M5.Display.print(".");
+            // }
+            // String set_cops = getResponce(1000);
+            // M5.Display.print(set_cops);
+            // USBSerial.println(set_cops);
+            
+            step++;
+            delay(2000);
+        }else if(step == 5){
+
+            M5.Display.print("waitForNetwork: ");
+            if (!modem.waitForNetwork(3000))
+            {
+                M5.Display.println("Failed");
+
+                M5.Display.print("CSQ: ");
+                SerialAT.println("AT+CSQ");
+                String csq = getResponce(1000);
+                M5.Display.println(csq);
+
+                M5.Display.print("CREG: ");
+                SerialAT.println("AT+CREG?");
+                String creg = getResponce(1000);
+                M5.Display.println(creg);
+
+                M5.Display.print("CEREG: ");
+                SerialAT.println("AT+CEREG?");
+                String cereg = getResponce(1000);
+                M5.Display.println(cereg);
+
+                M5.Display.print("CPSI: ");
+                SerialAT.println("AT+CPSI?");
+                String cpsi = getResponce(1000);
+                M5.Display.println(cpsi);
+
+                M5.Display.print("CMNB: ");
+                SerialAT.println("AT+CMNB?");
+                String cmnb = getResponce(1000);
+                M5.Display.println(cmnb);
+
+                M5.Display.print("CNMP: ");
+                SerialAT.println("AT+CNMP?");
+                String cnmp = getResponce(1000);
+                M5.Display.println(cnmp);
+
+                M5.Display.print("COPS: ");
+                SerialAT.println("AT+COPS?");
+                String cops = getResponce(1000);
+                M5.Display.println(cops);
+
+                M5.Display.print("CEER: ");
+                SerialAT.println("AT+CEER");
+                String ceer = getResponce(1000);
+                M5.Display.println(ceer);
+                
+                delay(1000);
+                continue;
+            }
+            M5.Display.println("OK!");
+
+            step++;
+            delay(2000);
+        }else if(step == 6){
+            if (!modem.isNetworkConnected())
+            {
+                M5.Display.println("Network not connected");
+                delay(1000);
+                continue;
+            }
+            M5.Display.println("Network connected");
+
+            step++;
+            delay(2000);
+        }else if(step == 7){
+            USBSerial.println("Connecting...");
+            
+            if (!modem.gprsConnect(CATM_APN, CATM_USR, CATM_PWD))
+            {
+                M5.Display.print("CSQ: ");
+                SerialAT.println("AT+CSQ");
+                String csq = getResponce(1000);
+                M5.Display.println(csq);
+                
+                delay(1000);
+                continue;
+            }
+            
+            step++;
+            delay(2000);
+        }else if(step == 8){
+            M5.Display.println("\nOK!");
+            delay(2000);                  // メッセージを確認するために少し待機
+            M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
+        }
+    }
+}
+#else
 void connectWifi()
 {
     M5.Display.fillScreen(BLACK); // 画面を黒でクリア
@@ -105,9 +346,10 @@ void connectWifi()
 
     // 接続完了の表示
     M5.Display.println("\nOK!");
-    delay(2000); // メッセージを確認するために少し待機
+    delay(2000);                  // メッセージを確認するために少し待機
     M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 }
+#endif
 void messageHandler(String &topic, String &payload)
 {
     USBSerial.println("Topic: " + topic);
@@ -128,40 +370,6 @@ void messageHandler(String &topic, String &payload)
     digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
 
     USBSerial.println("DBG : mqtt subscribed");
-}
-void connectTB()
-{
-    M5.Display.fillScreen(BLACK); // 画面を黒でクリア
-    M5.Display.setTextSize(1);    // 文字サイズ設定
-    M5.Display.setCursor(0, 0);   // 左上にカーソルセット
-    M5.Display.println("Connecting...");
-    M5.Display.println("ThingsBoard...");
-
-    client.onMessage(messageHandler);
-    client.begin(TB_SERVER, TB_PORT, net);
-
-    while (!client.connect(THINGNAME, TB_TOKEN, ""))
-    {
-        delay(1000);
-        M5.Display.print(".");
-        USBSerial.print(".");
-    }
-
-    M5.Display.println("Subscribe");
-    M5.Display.println(String(TB_SUBSCRIBE_TOPIC));
-    bool subret = client.subscribe(TB_SUBSCRIBE_TOPIC);
-    M5.Display.println(subret ? "OK!" : "FAILED!");
-    delay(2000); // メッセージを確認するために少し待機
-
-    // 接続成功
-    M5.Display.fillScreen(BLACK);
-    M5.Display.setCursor(0, 0);
-    M5.Display.setTextColor(GREEN); // 成功時は緑に
-    M5.Display.println("Connected to");
-    M5.Display.println("AWS IoT!");
-
-    delay(2000);                  // メッセージを確認するために少し待機
-    M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 }
 #ifdef USE_AWS
 void connectAWS()
@@ -189,6 +397,41 @@ void connectAWS()
     M5.Display.println("Subscribe");
     M5.Display.println(String(AWS_IOT_SUBSCRIBE_TOPIC));
     bool subret = client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
+    M5.Display.println(subret ? "OK!" : "FAILED!");
+    delay(2000); // メッセージを確認するために少し待機
+
+    // 接続成功
+    M5.Display.fillScreen(BLACK);
+    M5.Display.setCursor(0, 0);
+    M5.Display.setTextColor(GREEN); // 成功時は緑に
+    M5.Display.println("Connected to");
+    M5.Display.println("AWS IoT!");
+
+    delay(2000);                  // メッセージを確認するために少し待機
+    M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
+}
+#else
+void connectTB()
+{
+    M5.Display.fillScreen(BLACK); // 画面を黒でクリア
+    M5.Display.setTextSize(1);    // 文字サイズ設定
+    M5.Display.setCursor(0, 0);   // 左上にカーソルセット
+    M5.Display.println("Connecting...");
+    M5.Display.println("ThingsBoard...");
+
+    client.onMessage(messageHandler);
+    client.begin(TB_SERVER, TB_PORT, net);
+
+    while (!client.connect(THINGNAME, TB_TOKEN, ""))
+    {
+        delay(1000);
+        M5.Display.print(".");
+        USBSerial.print(".");
+    }
+
+    M5.Display.println("Subscribe");
+    M5.Display.println(String(TB_SUBSCRIBE_TOPIC));
+    bool subret = client.subscribe(TB_SUBSCRIBE_TOPIC);
     M5.Display.println(subret ? "OK!" : "FAILED!");
     delay(2000); // メッセージを確認するために少し待機
 
@@ -393,10 +636,16 @@ void setup()
     USBSerial.println("DBG : setup started.");
 
     // aws
+#ifdef USE_CAT_M
+    SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
+    connectCATM();
+#else
     connectWifi();
-    connectTB();
+#endif
 #ifdef USE_AWS
     connectAWS();
+#else
+    connectTB();
 #endif
 
     // ble
@@ -568,10 +817,15 @@ void loop()
     client.loop();
     if (!client.connected())
     {
+#ifdef USE_CAT_M
+        connectCATM();
+#else
         connectWifi();
-        connectTB();
+#endif
 #ifdef USE_AWS
         connectAWS();
+#else
+        connectTB();
 #endif
     }
 
@@ -589,10 +843,11 @@ void loop()
 
         char jsonBuffer[512];
         serializeJson(doc, jsonBuffer);
-        
-        if (client.publish(TB_PUBLISH_TOPIC, jsonBuffer))
+
 #ifdef USE_AWS
         if (client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer))
+#else
+        if (client.publish(TB_PUBLISH_TOPIC, jsonBuffer))
 #endif
         {
             USBSerial.println("Published: " + String(jsonBuffer));
