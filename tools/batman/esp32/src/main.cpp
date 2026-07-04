@@ -201,15 +201,15 @@ void connectCATM()
             //fix CAT-M LTE
             M5.Display.println("FIX: CAT-M, LTE");
 
+            modem.sendAT("+COPS=0");
+            modem.waitResponse();
+            delay(3000);
+
             modem.sendAT("+CMNB=1");
             modem.waitResponse();
             delay(3000);
 
             modem.sendAT("+CNMP=38");
-            modem.waitResponse();
-            delay(3000);
-
-            modem.sendAT("+COPS=0");
             modem.waitResponse();
             delay(3000);
 
