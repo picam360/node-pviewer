@@ -354,6 +354,7 @@ void connectWifi()
     M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 }
 #endif
+#ifdef USE_AWS
 void messageHandler(String &topic, String &payload)
 {
     USBSerial.println("Topic: " + topic);
@@ -375,7 +376,6 @@ void messageHandler(String &topic, String &payload)
 
     USBSerial.println("DBG : mqtt subscribed");
 }
-#ifdef USE_AWS
 void connectAWS()
 {
     M5.Display.fillScreen(BLACK); // 画面を黒でクリア
@@ -415,6 +415,63 @@ void connectAWS()
     M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 }
 #else
+void messageHandler(String &topic, String &payload)
+{
+    USBSerial.println("Topic: " + topic);
+    USBSerial.println("Payload: " + payload);
+
+    // 1. トピックがRPCリクエストか確認
+    String rpcRequestTopic = "v1/devices/me/rpc/request/";
+    if (!topic.startsWith(rpcRequestTopic)) {
+        return; // RPC以外のトピックは無視
+    }
+
+    // 2. トピックの末尾から Request ID を抽出
+    String requestId = topic.substring(rpcRequestTopic.length());
+
+    // 3. JSON解析
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (error)
+    {
+        USBSerial.println("JSON parse failed");
+        return;
+    }
+
+    // 4. メソッド名の確認（ThingsBoardのウィジェット側で指定したmethod名。例: "setPwrCtl"）
+    const char* method = doc["method"];
+    
+    if (method && strcmp(method, "set_pwr_ctl") == 0) 
+    {
+        // params の中身を取得（単一の値、またはオブジェクト）
+        // ThingsBoardのスイッチの設定次第で `doc["params"]` が直接 boolean だったり、オブジェクトだったりします
+        bool pwr_ctl = doc["params"]; 
+        
+        g_pwr_ctl = pwr_ctl;
+        digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
+        USBSerial.println("DBG : GPIO State Changed via RPC");
+
+        // 5. サーバー（ダッシュボード）へレスポンスを返却
+        // レスポンスを返さないと、ダッシュボード側で「タイムアウトエラー」になります
+        String responseTopic = "v1/devices/me/rpc/response/" + requestId;
+        
+        JsonDocument responseDoc;
+        responseDoc["success"] = true; // クライアント側に返すステータス
+        responseDoc["pwr_ctl"] = g_pwr_ctl;
+
+        String responsePayload;
+        serializeJson(responseDoc, responsePayload);
+        
+        // MQTTでレスポンスをPublish
+        client.publish(responseTopic.c_str(), responsePayload.c_str());
+        USBSerial.println("DBG : Sent RPC response to " + responseTopic);
+    }
+    else 
+    {
+        USBSerial.println("Unknown RPC method received");
+    }
+}
 void connectTB()
 {
     M5.Display.fillScreen(BLACK); // 画面を黒でクリア
