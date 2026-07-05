@@ -1,0 +1,42 @@
+#include <Arduino.h>
+#include <USB.h>
+
+#define MODEM_TX 13
+#define MODEM_RX 15
+
+HardwareSerial SerialAT(1);
+
+void setup()
+{
+    // PCとの通信は USBSerial を使用
+    USBSerial.begin(115200);
+
+    // モジュールとの通信
+    SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
+
+    delay(2000);
+
+    USBSerial.println("=======================================");
+    USBSerial.println("ESP32-S3 AT Command Passthrough Ready.");
+    USBSerial.println("Type 'AT' and press Enter.");
+    USBSerial.println("=======================================");
+}
+
+void loop()
+{
+    // PC(USB)から文字が入力されたら、モジュールへ送る
+    while (USBSerial.available())
+    {
+        char c = USBSerial.read();
+
+        USBSerial.write(c); // PCのシリアルモニタにエコーを返す（★ここを追加）
+        SerialAT.write(c);   // モジュールへ送る
+    }
+
+    // モジュールから返事が来たら、PC(USB)へ表示する
+    while (SerialAT.available())
+    {
+        char c = SerialAT.read();
+        USBSerial.write(c);
+    }
+}
