@@ -109,17 +109,25 @@ void dbgPrintf(String msg) { dbgPrintf("%s", msg.c_str()); }
 
 /** >>>> AWS */
 #ifdef USE_CAT_M
-String getResponce(int wait_ms){
+String getResponce(int wait_ms)
+{
     String responce;
     unsigned long st = millis();
-    while (millis() - st < wait_ms) {
-        while (SerialAT.available()) {
+    while (millis() - st < wait_ms)
+    {
+        while (SerialAT.available())
+        {
             char c = (char)SerialAT.read();
-            if(c == '\n') {
+            if (c == '\n')
+            {
                 responce += "\\n";
-            }else if(c == '\r') {
+            }
+            else if (c == '\r')
+            {
                 responce += "\\r";
-            }else{
+            }
+            else
+            {
                 responce += c;
             }
         }
@@ -145,23 +153,54 @@ void connectCATM()
         M5.Display.print("STEP: ");
         M5.Display.println(step);
 
-        if(step == 0){
+        if (step == 0)
+        {
+            if (!modem.init()){
+                step++;
+                continue;
+            }
+            if (!modem.waitForNetwork()){
+                step++;
+                continue;
+            }
+            if (!modem.isNetworkConnected())
+            {
+                step++;
+                continue;
+            }
+            if (!modem.gprsConnect(CATM_APN, CATM_USR, CATM_PWD))
+            {
+                step++;
+                continue;
+            }
+
+            M5.Display.println("APN connected");
+            delay(1000);
+            return;
+        }
+        if (step == 1)
+        {
             M5.Display.println("Restart Modem");
             modem.restart();
             step++;
-            delay(2000);
-        }else if(step == 1){
+            delay(1000);
+        }
+        else if (step == 2)
+        {
             String mi = modem.getModemInfo();
             M5.Display.print("Modem: ");
-            if(mi.isEmpty()){
+            if (mi.isEmpty())
+            {
                 M5.Display.println("Wait Info");
                 delay(1000);
                 continue;
             }
             M5.Display.println(mi);
             step++;
-            delay(2000);
-        }else if(step == 2){
+            delay(1000);
+        }
+        else if (step == 3)
+        {
             if (modem.getSimStatus() != 1)
             {
                 M5.Display.println("Sim: Not READY");
@@ -171,17 +210,10 @@ void connectCATM()
 
             M5.Display.println("Sim: READY");
             step++;
-            delay(2000);
-        }else if(step == 3){
-            M5.Display.print("CSQ: ");
-            SerialAT.println("AT+CSQ");
-            String csq = getResponce(1000);
-            M5.Display.println(csq);
-
-            M5.Display.print("CPIN: ");
-            SerialAT.println("AT+CPIN?");
-            String cpin = getResponce(1000);
-            M5.Display.println(cpin);
+            delay(1000);
+        }
+        else if (step == 4)
+        {
 
             // ④ 信号確認
             int16_t sq = modem.getSignalQuality();
@@ -189,6 +221,17 @@ void connectCATM()
             if (sq == 99)
             {
                 M5.Display.println("Not Ready");
+
+                M5.Display.print("CSQ: ");
+                SerialAT.println("AT+CSQ");
+                String csq = getResponce(1000);
+                M5.Display.println(csq);
+
+                M5.Display.print("CPIN: ");
+                SerialAT.println("AT+CPIN?");
+                String cpin = getResponce(1000);
+                M5.Display.println(cpin);
+
                 delay(1000);
                 continue;
             }
@@ -196,35 +239,41 @@ void connectCATM()
             M5.Display.println("Modem: Stable!");
 
             step++;
-            delay(2000);
-        }else if(step == 4){
-            //fix CAT-M LTE
-            M5.Display.println("FIX: CAT-M, LTE");
+            delay(1000);
+        }
+        else if (step == 5)
+        {
 
-            modem.sendAT("+COPS=0");
-            modem.waitResponse();
-            delay(3000);
+            M5.Display.print("COPS: ");
+            SerialAT.println("AT+COPS?");
+            String cops = getResponce(1000);
+            M5.Display.println(cops);
 
-            modem.sendAT("+CFUN=0");
-            modem.waitResponse();
-            delay(3000);
+            int copsValue = cops.substring(cops.indexOf(':') + 1).toInt();
+            if (copsValue != 0)
+            {
+                M5.Display.print("COPS: from ");
+                M5.Display.print(copsValue);
+                M5.Display.println(" to 0");
 
-            modem.sendAT("+CMNB=1");
-            modem.waitResponse();
-            delay(3000);
+                modem.sendAT("+COPS=0");
+                modem.waitResponse();
+                delay(3000);
+            }
 
-            modem.sendAT("+CNMP=38");
-            modem.waitResponse();
-            delay(3000);
+            M5.Display.print("CGDCONT: ");
+            SerialAT.println("AT+CGDCONT?");
+            String cgdcont = getResponce(1000);
+            M5.Display.println(cgdcont);
 
-            modem.sendAT("+CFUN=1");
-            modem.waitResponse();
-            delay(3000);
+            if (cgdcont.indexOf("\"" CATM_APN "\"") == -1)
+            {
+                M5.Display.println("APN: " CATM_APN);
+                modem.sendAT("+CGDCONT=1,\"IP\",\"" CATM_APN "\"");
+                modem.waitResponse();
+                delay(3000);
+            }
 
-            // modem.sendAT("+CGDCONT=1,\"IP\",\"iot.1nce.net\"");
-            // modem.waitResponse();
-            // delay(3000);
-        
             // M5.Display.print("COPS: ");
             // SerialAT.println("AT+COPS=?");
             // while(!SerialAT.available()){
@@ -236,7 +285,7 @@ void connectCATM()
             // USBSerial.println(copsq);
 
             // M5.Display.print("SET COPS: ");
-            
+
             // //SerialAT.println("AT+COPS=1,2,\"44020\",7");//softbank
             // SerialAT.println("AT+COPS=1,2,\"44020\"");//softbank
             // while(!SerialAT.available()){
@@ -246,11 +295,59 @@ void connectCATM()
             // String set_cops = getResponce(1000);
             // M5.Display.print(set_cops);
             // USBSerial.println(set_cops);
-            
-            step++;
-            delay(2000);
-        }else if(step == 5){
 
+            step++;
+            delay(1000);
+        }
+        else if (step == 6)
+        {
+            M5.Display.println("FIX: CAT-M, LTE");
+
+            M5.Display.print("CMNB: ");
+            SerialAT.println("AT+CMNB?");
+            String cmnb = getResponce(1000);
+            M5.Display.println(cmnb);
+
+            M5.Display.print("CNMP: ");
+            SerialAT.println("AT+CNMP?");
+            String cnmp = getResponce(1000);
+            M5.Display.println(cnmp);
+
+            int cmnbValue = cmnb.substring(cmnb.indexOf(':') + 1).toInt();
+            int cnmpValue = cnmp.substring(cnmp.indexOf(':') + 1).toInt();
+            if (cmnbValue != 1 || cnmpValue != 38)
+            {
+
+                M5.Display.print("CMNB: from ");
+                M5.Display.print(cmnbValue);
+                M5.Display.println(" to 1");
+
+                M5.Display.print("CNMP: from ");
+                M5.Display.print(cnmpValue);
+                M5.Display.println(" to 38");
+
+                modem.sendAT("+CFUN=0");
+                modem.waitResponse();
+                delay(3000);
+
+                modem.sendAT("+CMNB=1");
+                modem.waitResponse();
+                delay(3000);
+
+                modem.sendAT("+CNMP=38");
+                modem.waitResponse();
+                delay(3000);
+
+                modem.sendAT("+CFUN=1");
+                modem.waitResponse();
+                delay(3000);
+            }
+
+            step++;
+            delay(1000);
+        }
+        else if (step == 7)
+        {
             M5.Display.print("waitForNetwork: ");
             if (!modem.waitForNetwork(3000))
             {
@@ -295,45 +392,46 @@ void connectCATM()
                 SerialAT.println("AT+CEER");
                 String ceer = getResponce(1000);
                 M5.Display.println(ceer);
-                
+
                 delay(1000);
                 continue;
             }
-            M5.Display.println("OK!");
 
-            step++;
-            delay(2000);
-        }else if(step == 6){
             if (!modem.isNetworkConnected())
             {
                 M5.Display.println("Network not connected");
                 delay(1000);
                 continue;
             }
+
             M5.Display.println("Network connected");
 
             step++;
-            delay(2000);
-        }else if(step == 7){
-            USBSerial.println("Connecting...");
-            
+            delay(1000);
+        }
+        else if (step == 8)
+        {
+            M5.Display.println("Connecting to APN...");
+
             if (!modem.gprsConnect(CATM_APN, CATM_USR, CATM_PWD))
             {
                 M5.Display.print("CSQ: ");
                 SerialAT.println("AT+CSQ");
                 String csq = getResponce(1000);
                 M5.Display.println(csq);
-                
+
                 delay(1000);
                 continue;
             }
-            
+            M5.Display.println("APN connected");
+
             step++;
-            delay(2000);
-        }else if(step == 8){
-            M5.Display.println("\nOK!");
-            delay(2000);                  // メッセージを確認するために少し待機
-            M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
+            delay(1000);
+        }
+        if (step == 9)
+        {
+            delay(1000);
+            M5.Display.fillScreen(BLACK);
             return;
         }
     }
@@ -431,7 +529,8 @@ void messageHandler(String &topic, String &payload)
 
     // 1. トピックがRPCリクエストか確認
     String rpcRequestTopic = "v1/devices/me/rpc/request/";
-    if (!topic.startsWith(rpcRequestTopic)) {
+    if (!topic.startsWith(rpcRequestTopic))
+    {
         return; // RPC以外のトピックは無視
     }
 
@@ -449,14 +548,14 @@ void messageHandler(String &topic, String &payload)
     }
 
     // 4. メソッド名の確認（ThingsBoardのウィジェット側で指定したmethod名。例: "setPwrCtl"）
-    const char* method = doc["method"];
-    
-    if (method && strcmp(method, "set_pwr_ctl") == 0) 
+    const char *method = doc["method"];
+
+    if (method && strcmp(method, "set_pwr_ctl") == 0)
     {
         // params の中身を取得（単一の値、またはオブジェクト）
         // ThingsBoardのスイッチの設定次第で `doc["params"]` が直接 boolean だったり、オブジェクトだったりします
-        bool pwr_ctl = doc["params"]; 
-        
+        bool pwr_ctl = doc["params"];
+
         g_pwr_ctl = pwr_ctl;
         digitalWrite(PWR_CTR_PIN, g_pwr_ctl ? HIGH : LOW);
         USBSerial.println("DBG : GPIO State Changed via RPC");
@@ -464,19 +563,19 @@ void messageHandler(String &topic, String &payload)
         // 5. サーバー（ダッシュボード）へレスポンスを返却
         // レスポンスを返さないと、ダッシュボード側で「タイムアウトエラー」になります
         String responseTopic = "v1/devices/me/rpc/response/" + requestId;
-        
+
         JsonDocument responseDoc;
         responseDoc["success"] = true; // クライアント側に返すステータス
         responseDoc["pwr_ctl"] = g_pwr_ctl;
 
         String responsePayload;
         serializeJson(responseDoc, responsePayload);
-        
+
         // MQTTでレスポンスをPublish
         client.publish(responseTopic.c_str(), responsePayload.c_str());
         USBSerial.println("DBG : Sent RPC response to " + responseTopic);
     }
-    else 
+    else
     {
         USBSerial.println("Unknown RPC method received");
     }
@@ -499,20 +598,27 @@ void connectTB()
         USBSerial.print(".");
     }
 
-    M5.Display.println("Subscribe");
-    M5.Display.println(String(TB_SUBSCRIBE_TOPIC));
-    bool subret = client.subscribe(TB_SUBSCRIBE_TOPIC);
-    M5.Display.println(subret ? "OK!" : "FAILED!");
-    delay(2000); // メッセージを確認するために少し待機
-
     // 接続成功
     M5.Display.fillScreen(BLACK);
     M5.Display.setCursor(0, 0);
     M5.Display.setTextColor(GREEN); // 成功時は緑に
     M5.Display.println("Connected to");
-    M5.Display.println("AWS IoT!");
+    M5.Display.println("ThingBoard!");
 
-    delay(2000);                  // メッセージを確認するために少し待機
+    M5.Display.println("Subscribe: " TB_SUBSCRIBE_TOPIC);
+    bool subret = client.subscribe(TB_SUBSCRIBE_TOPIC);
+    if (subret)
+    {
+        M5.Display.println("OK!");
+    }
+    else
+    {
+        M5.Display.setTextColor(RED); // 成功時は緑に
+        M5.Display.println("FAILED!");
+        delay(2000);
+    }
+
+    delay(1000);
     M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 }
 #endif
