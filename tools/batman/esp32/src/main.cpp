@@ -39,8 +39,8 @@
 HardwareSerial SerialAT(1);
 
 // SIMモジュールピン（環境に合わせて変更）
-#define MODEM_TX 13
-#define MODEM_RX 15
+#define MODEM_TX 2
+#define MODEM_RX 1
 
 TinyGsm modem(SerialAT);
 TinyGsmClient net(modem);
@@ -205,11 +205,19 @@ void connectCATM()
             modem.waitResponse();
             delay(3000);
 
+            modem.sendAT("+CFUN=0");
+            modem.waitResponse();
+            delay(3000);
+
             modem.sendAT("+CMNB=1");
             modem.waitResponse();
             delay(3000);
 
             modem.sendAT("+CNMP=38");
+            modem.waitResponse();
+            delay(3000);
+
+            modem.sendAT("+CFUN=1");
             modem.waitResponse();
             delay(3000);
 
@@ -326,6 +334,7 @@ void connectCATM()
             M5.Display.println("\nOK!");
             delay(2000);                  // メッセージを確認するために少し待機
             M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
+            return;
         }
     }
 }
