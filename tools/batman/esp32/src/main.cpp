@@ -58,11 +58,6 @@ static bool g_pwr_ctl = false;
 static int g_bat_soc = 0;
 static float g_bat_temp = 0;
 
-// ble
-// ターゲットのBLE情報
-const char *TARGET_NAME = "L-12200BNN160-C00028";
-const char *TARGET_ADDRESS = "C8:47:80:46:03:C0";
-
 // UUIDの設定
 static BLEUUID SERVICE_UUID((uint16_t)0xFFE0);
 static BLEUUID READ_UUID((uint16_t)0xFFE1);
@@ -71,17 +66,24 @@ static BLEUUID WRITE_UUID((uint16_t)0xFFE2);
 // 送信コマンド (QUERY_BATTERY_STATUS)
 const uint8_t QUERY_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x13, 0x55, 0xAA, 0x17};
 
-static NimBLEClient *pClient = nullptr;
-static NimBLERemoteCharacteristic *pWriteChar = nullptr;
-static bool doConnect = false;
-static bool connected = false;
-static NimBLEAdvertisedDevice *advDevice;
+struct BleDeviceInfo {
+    char name[64];
+    NimBLEAddress addr;
+    NimBLEClient *pClient;
+    NimBLERemoteCharacteristic *pWriteChar;
+    bool doConnect;
+    bool connected;
+};
+static QueueHandle_t bleQueue;
+static BleDeviceInfo advDevice_bat = {};
+static BleDeviceInfo advDevice_chg = {};
 
 static std::vector<uint8_t> _read_line;
 static std::string _ssid = "ERROR_NO_RESPONSE";
 static std::string _ip_address = "ERROR_NO_RESPONSE";
 
 // system
+static SemaphoreHandle_t serialMutex;
 static int status_loop_count = 0;
 static unsigned long last_status_msec = 0;
 static long status_interval_msec = 100;
@@ -215,35 +217,6 @@ void connectCATM()
         else if (step == 4)
         {
 
-            // ④ 信号確認
-            int16_t sq = modem.getSignalQuality();
-            M5.Display.print("Signal: ");
-            if (sq == 99)
-            {
-                M5.Display.println("Not Ready");
-
-                M5.Display.print("CSQ: ");
-                SerialAT.println("AT+CSQ");
-                String csq = getResponce(1000);
-                M5.Display.println(csq);
-
-                M5.Display.print("CPIN: ");
-                SerialAT.println("AT+CPIN?");
-                String cpin = getResponce(1000);
-                M5.Display.println(cpin);
-
-                delay(1000);
-                continue;
-            }
-            M5.Display.println(sq);
-            M5.Display.println("Modem: Stable!");
-
-            step++;
-            delay(1000);
-        }
-        else if (step == 5)
-        {
-
             M5.Display.print("COPS: ");
             SerialAT.println("AT+COPS?");
             String cops = getResponce(1000);
@@ -299,7 +272,7 @@ void connectCATM()
             step++;
             delay(1000);
         }
-        else if (step == 6)
+        else if (step == 5)
         {
             M5.Display.println("FIX: CAT-M, LTE");
 
@@ -342,6 +315,34 @@ void connectCATM()
                 modem.waitResponse();
                 delay(3000);
             }
+
+            step++;
+            delay(1000);
+        }
+        else if (step == 6)
+        {
+            // ④ 信号確認
+            int16_t sq = modem.getSignalQuality();
+            M5.Display.print("Signal: ");
+            if (sq == 99)
+            {
+                M5.Display.println("Not Ready");
+
+                M5.Display.print("CSQ: ");
+                SerialAT.println("AT+CSQ");
+                String csq = getResponce(1000);
+                M5.Display.println(csq);
+
+                M5.Display.print("CPIN: ");
+                SerialAT.println("AT+CPIN?");
+                String cpin = getResponce(1000);
+                M5.Display.println(cpin);
+
+                delay(1000);
+                continue;
+            }
+            M5.Display.println(sq);
+            M5.Display.println("Modem: Stable!");
 
             step++;
             delay(1000);
@@ -591,11 +592,24 @@ void connectTB()
     client.onMessage(messageHandler);
     client.begin(TB_SERVER, TB_PORT, net);
 
-    while (!client.connect(THINGNAME, TB_TOKEN, ""))
     {
-        delay(1000);
-        M5.Display.print(".");
-        USBSerial.print(".");
+        unsigned long startAttemptTime = millis(); // 接続開始時間を記録
+        const unsigned long TIMEOUT_MS = 60000;    // タイムアウト時間を1分(60000ミリ秒)に設定
+        while (!client.connect(THINGNAME, TB_TOKEN, ""))
+        {
+            if (millis() - startAttemptTime >= TIMEOUT_MS) {
+                USBSerial.println("\nConnection timeout! Rebooting...");
+                M5.Display.fillScreen(BLACK);
+                M5.Display.setCursor(0, 0);
+                M5.Display.setTextColor(RED); // 成功時は緑に
+                M5.Display.println("Timeout. Rebooting...");
+                delay(5000); // 画面やシリアルに文字を出力し切るための少しの猶予
+                ESP.restart(); // システム再起動
+            }
+            delay(1000);
+            M5.Display.print(".");
+            USBSerial.print(".");
+        }
     }
 
     // 接続成功
@@ -679,24 +693,26 @@ class MyAdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks
 {
     void onResult(NimBLEAdvertisedDevice *advertisedDevice)
     {
-        if (advertisedDevice->getAddress().toString() == TARGET_ADDRESS || advertisedDevice->getName() == TARGET_NAME)
-        {
-            NimBLEDevice::getScan()->stop();
-            advDevice = advertisedDevice;
-            doConnect = true;
-        }
+        BleDeviceInfo devInfo = {};
+
+        strncpy(devInfo.name, advertisedDevice->getName().c_str(), sizeof(devInfo.name) - 1);
+        devInfo.name[sizeof(devInfo.name) - 1] = '\0';
+
+        devInfo.addr = advertisedDevice->getAddress();
+
+        xQueueSend(bleQueue, &devInfo, 0);
     }
 };
 
 // 接続処理
-bool connectToServer()
+bool connectToBle_bat()
 {
-    if (pClient == nullptr)
+    if (advDevice_bat.pClient == nullptr)
     {
-        pClient = NimBLEDevice::createClient();
+        advDevice_bat.pClient = NimBLEDevice::createClient();
     }
 
-    if (!pClient->connect(advDevice))
+    if (!advDevice_bat.pClient->connect(advDevice_bat.addr))
         return false;
 
     // {
@@ -715,12 +731,12 @@ bool connectToServer()
     //     }
     // }
 
-    NimBLERemoteService *pRemoteService = pClient->getService(SERVICE_UUID);
+    NimBLERemoteService *pRemoteService = advDevice_bat.pClient->getService(SERVICE_UUID);
 
     if (pRemoteService == nullptr)
     {
         USBSerial.println("[エラー] サービス(0xFFE0)が見つかりませんでした。");
-        pClient->disconnect();
+        advDevice_bat.pClient->disconnect();
         return false;
     }
     USBSerial.println("[BLE] サービス(0xFFE0)の特定に成功！");
@@ -750,15 +766,15 @@ bool connectToServer()
     else
     {
         USBSerial.println("[エラー] READキャラスティックが見つからない、またはNotifyに対応していません。");
-        pClient->disconnect();
+        advDevice_bat.pClient->disconnect();
         return false;
     }
 
-    pWriteChar = pRemoteService->getCharacteristic(WRITE_UUID);
-    if (pWriteChar == nullptr)
+    advDevice_bat.pWriteChar = pRemoteService->getCharacteristic(WRITE_UUID);
+    if (advDevice_bat.pWriteChar == nullptr)
     {
         USBSerial.println("[エラー] WRITEキャラスティックが見つかりません。");
-        pClient->disconnect();
+        advDevice_bat.pClient->disconnect();
         return false;
     }
 
@@ -806,6 +822,9 @@ void setup()
     pinMode(PWR_CTR_PIN, OUTPUT);
     digitalWrite(PWR_CTR_PIN, LOW); // 初期状態はオフ
 #endif
+
+    serialMutex = xSemaphoreCreateMutex();
+    bleQueue = xQueueCreate(20, sizeof(BleDeviceInfo));
 
     USBSerial.begin(115200); // need to be called for USBSerial.isPlugged=true
     // USBSerial.setRxBufferSize(4096);//for big rtcm data
@@ -940,7 +959,7 @@ void loop()
         LCD_printf("DIAL: %d\n", g_dial_pos); // アクセスポイント時のSSID表示
         LCD_printf("USB: %s\n", USBSerial ? "1" : "0");
         LCD_printf("PWR: %s\n", g_pwr_ctl ? "ON" : "OFF");
-        if (connected)
+        if (advDevice_bat.connected)
         {
             LCD_printf("BAT: %d%%, %.1fC\n", g_bat_soc, g_bat_temp);
         }
@@ -1030,36 +1049,55 @@ void loop()
         }
     }
 
-    // ble
-    if (doConnect)
     {
-        doConnect = false;
-        if (connectToServer())
+        BleDeviceInfo devInfo = {};
+        if (xQueueReceive(bleQueue, &devInfo, 0)) {
+            USBSerial.printf("BLE dev found : %s(%s)\n", devInfo.name, devInfo.addr.toString().c_str());
+            if (strcmp(devInfo.name, BATTERY_NAME) == 0)
+            {
+                advDevice_bat = devInfo;
+                advDevice_bat.doConnect = true;
+            }
+            if (strcmp(devInfo.name, CHARGER_NAME) == 0)
+            {
+                advDevice_chg = devInfo;
+                advDevice_bat.doConnect = true;
+            }
+            if (advDevice_bat.name[0] != '\0' && advDevice_chg.name[0] != '\0') {
+                NimBLEDevice::getScan()->stop();
+            }
+        }
+    }
+    // ble
+    if (advDevice_bat.doConnect)
+    {
+       advDevice_bat.doConnect = false;
+        if (connectToBle_bat())
         {
-            connected = true;
+            advDevice_bat.connected = true;
         }
         else
         {
-            connected = false;
+            advDevice_bat.connected = false;
             delay(2000);
             NimBLEDevice::getScan()->start(10, false); // 再スキャン
         }
     }
 
     // 接続中なら1秒ごとにリクエストコマンドを送信
-    if (connected)
+    if (advDevice_bat.connected)
     {
-        if (pClient->isConnected())
+        if (advDevice_bat.pClient->isConnected())
         {
-            if (pWriteChar != nullptr)
+            if (advDevice_bat.pWriteChar != nullptr)
             {
-                pWriteChar->writeValue(QUERY_CMD, sizeof(QUERY_CMD), true);
+                advDevice_bat.pWriteChar->writeValue(QUERY_CMD, sizeof(QUERY_CMD), true);
             }
             delay(1000);
         }
         else
         {
-            connected = false;
+            advDevice_bat.connected = false;
             NimBLEDevice::getScan()->start(10, false);
         }
     }
