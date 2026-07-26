@@ -875,15 +875,15 @@ void setup()
 
 void LCD_printf(const char *format, ...)
 {
-    char buff[32];
+    char buff[64];
     va_list args;
     va_start(args, format);
-    vsnprintf(buff, 32, format, args);
+    vsnprintf(buff, 64, format, args);
     va_end(args);
 
     int x = M5.Lcd.textWidth(buff);
     int y = M5.Lcd.getCursorY();
-    int w = 128 - x;
+    int w = DinMeter.Display.width() - x;
     int h = M5.Lcd.fontHeight();
 
     M5.Lcd.printf("%s", buff);
@@ -956,6 +956,7 @@ void loop()
         M5.Lcd.setTextSize(1);                // 文字サイズ設定
         M5.Lcd.setTextFont(2);                // フォント
         M5.Lcd.setCursor(0, 0);               // カーソル座標指定
+        LCD_printf("ID: %s\n", THINGNAME); // name
         LCD_printf("DIAL: %d\n", g_dial_pos); // アクセスポイント時のSSID表示
         LCD_printf("USB: %s\n", USBSerial ? "1" : "0");
         LCD_printf("PWR: %s\n", g_pwr_ctl ? "ON" : "OFF");
