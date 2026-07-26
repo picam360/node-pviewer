@@ -1053,12 +1053,12 @@ void loop()
         BleDeviceInfo devInfo = {};
         if (xQueueReceive(bleQueue, &devInfo, 0)) {
             USBSerial.printf("BLE dev found : %s(%s)\n", devInfo.name, devInfo.addr.toString().c_str());
-            if (strcmp(devInfo.name, BATTERY_NAME) == 0)
+            if (advDevice_bat.name[0] == '\0' && strcmp(devInfo.name, BATTERY_NAME) == 0)
             {
                 advDevice_bat = devInfo;
                 advDevice_bat.doConnect = true;
             }
-            if (strcmp(devInfo.name, CHARGER_NAME) == 0)
+            if (advDevice_chg.name[0] == '\0' && strcmp(devInfo.name, CHARGER_NAME) == 0)
             {
                 advDevice_chg = devInfo;
                 advDevice_bat.doConnect = true;
@@ -1069,7 +1069,7 @@ void loop()
         }
     }
     // ble
-    if (advDevice_bat.doConnect)
+    if (!advDevice_bat.connected && advDevice_bat.doConnect)
     {
        advDevice_bat.doConnect = false;
         if (connectToBle_bat())
@@ -1078,7 +1078,7 @@ void loop()
         }
         else
         {
-            advDevice_bat.connected = false;
+            memset(&advDevice_bat, 0, sizeof(advDevice_bat));
             delay(2000);
             NimBLEDevice::getScan()->start(10, false); // 再スキャン
         }
@@ -1097,7 +1097,8 @@ void loop()
         }
         else
         {
-            advDevice_bat.connected = false;
+            memset(&advDevice_bat, 0, sizeof(advDevice_bat));
+            delay(2000);
             NimBLEDevice::getScan()->start(10, false);
         }
     }
