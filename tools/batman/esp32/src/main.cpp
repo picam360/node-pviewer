@@ -70,7 +70,8 @@ static BLEUUID LT_BAT_WRITE_UUID((uint16_t)0xFFE2);
 #define RENOGY_CHAR_TX_UUID    "0000ffd1-0000-1000-8000-00805f9b34fb"
 
 // 送信コマンド (QUERY_BATTERY_STATUS)
-const uint8_t LT_BAT_QUERY_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x13, 0x55, 0xAA, 0x17};
+const uint8_t LT_BAT_QUERY_STATUS_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x13, 0x55, 0xAA, 0x17};
+const uint8_t LT_BAT_DISCHARGE_OFF_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x0d, 0x55, 0xAA, 0x11};
 
 struct BleDeviceInfo {
     char name[64];
@@ -126,18 +127,9 @@ void setPwrCtl(bool turnOn)
         return;
     }
 
-    // --- コマンドの定義（デバイスIDが 0x01 の場合） ---
     // [ID] [Func=0x06] [Reg_H] [Reg_L] [Data_H] [Data_L] [CRC_L] [CRC_H]
     uint8_t cmdOn[]  = {0x01, 0x06, 0x01, 0x0A, 0x00, 0x01, 0x69, 0xF4};
     uint8_t cmdOff[] = {0x01, 0x06, 0x01, 0x0A, 0x00, 0x00, 0xA8, 0x34};
-
-    /* 
-     * ※もし先ほどの「その他の応答」のログが FF から始まっていた場合は、
-     * デバイスIDが 0xFF に設定されているため、以下のコマンドを使用してください。
-     * 
-     * uint8_t cmdOn[]  = {0xFF, 0x06, 0x01, 0x0A, 0x00, 0x01, 0x75, 0xD4};
-     * uint8_t cmdOff[] = {0xFF, 0x06, 0x01, 0x0A, 0x00, 0x00, 0xB4, 0x14};
-     */
 
     // 送信するコマンドを選択
     uint8_t* targetCmd = turnOn ? cmdOn : cmdOff;
@@ -705,6 +697,13 @@ uint16_t calculateModbusCRC(const uint8_t *data, uint8_t len)
     }
     return crc;
 }
+uint8_t calcLiTimeChecksum(const uint8_t* data, size_t length) {
+uint16_t sum = 0;
+  for (size_t i = 0; i < length; i++) {
+    sum += data[i];
+  }
+  return (uint8_t)(sum & 0xFF);
+}
 // エンディアン変換用（Pythonのrev_hexをシミュレート）
 uint32_t get_uint32_le(const uint8_t *data, int start)
 {
@@ -1111,9 +1110,16 @@ void loop()
         M5.Lcd.setTextFont(2);                // フォント
         M5.Lcd.setCursor(0, 0);               // カーソル座標指定
         LCD_printf("ID: %s\n", THINGNAME); // name
-        LCD_printf("DIAL: %d\n", g_dial_pos); // アクセスポイント時のSSID表示
+        LCD_printf("DIAL: %d\n", g_dial_pos);
         LCD_printf("USB: %s\n", USBSerial ? "1" : "0");
-        LCD_printf("PWR: %s\n", g_pwr_ctl ? "ON" : "OFF");
+        if (advDevice_chg.connected)
+        {
+            LCD_printf("PWR: %s\n", g_pwr_ctl ? "ON" : "OFF");
+        }
+        else
+        {
+            LCD_printf("PWR: -\n");
+        }
         if (advDevice_bat.connected)
         {
             LCD_printf("BAT: %d%%, %.1fC\n", g_bat_soc, g_bat_temp);
@@ -1136,10 +1142,23 @@ void loop()
         if (long_press == false && M5.BtnA.pressedFor(3000))
         {
             long_press = true;
+            if (advDevice_bat.connected)
+            {
+                if (advDevice_bat.pClient->isConnected())
+                {
+                    if (advDevice_bat.pWriteChar != nullptr)
+                    {
+                        M5.Lcd.setTextColor(RED, BLACK);    // 文字色
+                        LCD_printf("Battery discharg off...\n");
+                        delay(5000);
 
-            g_pwr_ctl = !g_pwr_ctl;
-
-            setPwrCtl(g_pwr_ctl);
+                        // uint8_t cmd[8] = {0x00, 0x00, 0x04, 0x01, 0x0d, 0x55, 0xAA, 0x00};
+                        // cmd[7] = calcLiTimeChecksum(cmd, 7);
+                        // advDevice_bat.pWriteChar->writeValue(cmd, sizeof(cmd), true);
+                        advDevice_bat.pWriteChar->writeValue(LT_BAT_DISCHARGE_OFF_CMD, sizeof(LT_BAT_DISCHARGE_OFF_CMD), true);
+                    }
+                }
+            }
 
             USBSerial.println("DBG : wasLongPressed");
         }
@@ -1261,7 +1280,10 @@ void loop()
         {
             if (advDevice_bat.pWriteChar != nullptr)
             {
-                advDevice_bat.pWriteChar->writeValue(LT_BAT_QUERY_CMD, sizeof(LT_BAT_QUERY_CMD), true);
+                // uint8_t cmd[8] = {0x00, 0x00, 0x04, 0x01, 0x13, 0x55, 0xAA, 0x00};
+                // cmd[7] = calcLiTimeChecksum(cmd, 7);
+                // advDevice_bat.pWriteChar->writeValue(cmd, sizeof(cmd), true);
+                advDevice_bat.pWriteChar->writeValue(LT_BAT_QUERY_STATUS_CMD, sizeof(LT_BAT_QUERY_STATUS_CMD), true);
             }
             delay(1000);
         }
@@ -1280,7 +1302,6 @@ void loop()
             {
                 // レジスタ 0x010A (負荷状態) から 1ワード を読み取るModbusコマンド
                 // 構成: [0x01(ID)] [0x03(Read)] [0x01(Addr_H)] [0x0A(Addr_L)] [0x00(Num_H)] [0x01(Num_L)] [0xA4(CRC_L)] [0x36(CRC_H)]
-                //uint8_t readCmd[] = {0x01, 0x03, 0x01, 0x0A, 0x00, 0x01, 0x00, 0x00};
                 uint8_t readCmd[] = {0x01, 0x03, 0x01, 0x20, 0x00, 0x01, 0x00, 0x00};
                 
                 uint16_t crc = calculateModbusCRC(readCmd, 6);
@@ -1288,9 +1309,7 @@ void loop()
                 readCmd[6] = crc & 0xFF;        
                 readCmd[7] = (crc >> 8) & 0xFF;
                 
-                // Renogyへコマンドを送信 (レスポンス不要モードで送信)
                 advDevice_chg.pWriteChar->writeValue(readCmd, sizeof(readCmd), false);
-                //advDevice_chg.pWriteChar->writeValue(LT_BAT_QUERY_CMD, sizeof(LT_BAT_QUERY_CMD), true);
             }
             delay(1000);
         }
