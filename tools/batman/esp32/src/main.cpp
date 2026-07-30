@@ -56,10 +56,10 @@ MQTTClient client = MQTTClient(256);
 // params
 static bool g_pwr_ctl = false;
 static bool g_pwr_ctl_set_required = false;
-static unsigned long g_chg_updated_ts = 0;
+static unsigned long g_chg_updated_msec = 0;
 static int g_bat_soc = 0;
 static float g_bat_temp = 0;
-static unsigned long g_bat_updated_ts = 0;
+static unsigned long g_bat_updated_msec = 0;
 
 // UUIDの設定
 static BLEUUID LT_BAT_SERVICE_UUID((uint16_t)0xFFE0);
@@ -68,16 +68,17 @@ static BLEUUID LT_BAT_WRITE_UUID((uint16_t)0xFFE2);
 
 // Renogy BLEモジュールのUUID定義
 #define RENOGY_SERVICE_RX_UUID "0000fff0-0000-1000-8000-00805f9b34fb" // 受信・Notify用
-#define RENOGY_CHAR_RX_UUID    "0000fff1-0000-1000-8000-00805f9b34fb"
+#define RENOGY_CHAR_RX_UUID "0000fff1-0000-1000-8000-00805f9b34fb"
 #define RENOGY_SERVICE_TX_UUID "0000ffd0-0000-1000-8000-00805f9b34fb" // 送信・Write用
-#define RENOGY_CHAR_TX_UUID    "0000ffd1-0000-1000-8000-00805f9b34fb"
+#define RENOGY_CHAR_TX_UUID "0000ffd1-0000-1000-8000-00805f9b34fb"
 
 // 送信コマンド (QUERY_BATTERY_STATUS)
 const uint8_t LT_BAT_QUERY_STATUS_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x13, 0x55, 0xAA, 0x17};
 const uint8_t LT_BAT_DISCHARGE_ON_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x0C, 0x55, 0xAA, 0x10};
 const uint8_t LT_BAT_DISCHARGE_OFF_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x0D, 0x55, 0xAA, 0x11};
 
-struct BleDeviceInfo {
+struct BleDeviceInfo
+{
     char name[64];
     NimBLEAddress addr;
     NimBLEClient *pClient;
@@ -98,6 +99,7 @@ static SemaphoreHandle_t serialMutex;
 static int status_loop_count = 0;
 static unsigned long last_status_msec = 0;
 static long status_interval_msec = 100;
+static unsigned long g_last_ble_scan_msec = 0;
 
 // #define DBG_OUT_ENABLE
 #define DBGP_BUFF_SIZE 512
@@ -168,11 +170,13 @@ void connectCATM()
 
         if (step == 0)
         {
-            if (!modem.init()){
+            if (!modem.init())
+            {
                 step++;
                 continue;
             }
-            if (!modem.waitForNetwork()){
+            if (!modem.waitForNetwork())
+            {
                 step++;
                 continue;
             }
@@ -609,13 +613,14 @@ void connectTB()
         const unsigned long TIMEOUT_MS = 60000;    // タイムアウト時間を1分(60000ミリ秒)に設定
         while (!client.connect(THINGNAME, TB_TOKEN, ""))
         {
-            if (millis() - startAttemptTime >= TIMEOUT_MS) {
+            if (millis() - startAttemptTime >= TIMEOUT_MS)
+            {
                 USBSerial.println("\nConnection timeout! Rebooting...");
                 M5.Display.fillScreen(BLACK);
                 M5.Display.setCursor(0, 0);
                 M5.Display.setTextColor(RED); // 成功時は緑に
                 M5.Display.println("Timeout. Rebooting...");
-                delay(5000); // 画面やシリアルに文字を出力し切るための少しの猶予
+                delay(5000);   // 画面やシリアルに文字を出力し切るための少しの猶予
                 ESP.restart(); // システム再起動
             }
             delay(1000);
@@ -652,31 +657,38 @@ void connectTB()
 
 /** >>>> BLE */
 // Modbus RTU CRC-16 計算関数
-uint16_t calculateModbusCRC(const uint8_t *data, uint8_t len) 
+uint16_t calculateModbusCRC(const uint8_t *data, uint8_t len)
 {
     uint16_t crc = 0xFFFF;
-    for (uint8_t i = 0; i < len; i++) {
+    for (uint8_t i = 0; i < len; i++)
+    {
         crc ^= data[i];
-        for (uint8_t j = 0; j < 8; j++) {
-            if (crc & 1) {
+        for (uint8_t j = 0; j < 8; j++)
+        {
+            if (crc & 1)
+            {
                 crc >>= 1;
                 crc ^= 0xA001;
-            } else {
+            }
+            else
+            {
                 crc >>= 1;
             }
         }
     }
     return crc;
 }
-uint8_t calcLiTimeChecksum(const uint8_t* data, size_t length) {
+uint8_t calcLiTimeChecksum(const uint8_t *data, size_t length)
+{
 
-    //how to use
-    // uint8_t cmd[8] = {0x00, 0x00, 0x04, 0x01, 0x0d, 0x55, 0xAA, 0x00};
-    // cmd[7] = calcLiTimeChecksum(cmd, 7);
-    // advDevice_bat.pWriteChar->writeValue(cmd, sizeof(cmd), true);
+    // how to use
+    //  uint8_t cmd[8] = {0x00, 0x00, 0x04, 0x01, 0x0d, 0x55, 0xAA, 0x00};
+    //  cmd[7] = calcLiTimeChecksum(cmd, 7);
+    //  advDevice_bat.pWriteChar->writeValue(cmd, sizeof(cmd), true);
 
     uint16_t sum = 0;
-    for (size_t i = 0; i < length; i++) {
+    for (size_t i = 0; i < length; i++)
+    {
         sum += data[i];
     }
     return (uint8_t)(sum & 0xFF);
@@ -714,46 +726,53 @@ void parse_litime(const uint8_t *data, size_t length)
 
     g_bat_soc = soc;
     g_bat_temp = cell_temp;
-    g_bat_updated_ts = millis();
+    g_bat_updated_msec = millis();
 
     USBSerial.printf("SOC: %d%%, V: %.2fV, A: %.2fA, Temp: %.1fC\n", soc, total_voltage, current, cell_temp);
 }
 
 // 負荷をON/OFFする関数 (引数に true を渡すとON、false でOFF)
-void setPwrCtl(bool turnOn) 
+void setPwrCtl(bool turnOn)
 {
 
-    //digitalWrite(PWR_CTR_PIN, turnOn ? HIGH : LOW);
+    // digitalWrite(PWR_CTR_PIN, turnOn ? HIGH : LOW);
 
-    if (advDevice_chg.pWriteChar == nullptr) {
+    if (advDevice_chg.pWriteChar == nullptr)
+    {
         USBSerial.println("[エラー] TXキャラスティックが準備されていません");
         return;
     }
 
     // [ID] [Func=0x06] [Reg_H] [Reg_L] [Data_H] [Data_L] [CRC_L] [CRC_H]
-    uint8_t cmdOn[]  = {0xFF, 0x06, 0x01, 0x0A, 0x00, 0x01, 0x69, 0xF4};
+    uint8_t cmdOn[] = {0xFF, 0x06, 0x01, 0x0A, 0x00, 0x01, 0x69, 0xF4};
     uint8_t cmdOff[] = {0xFF, 0x06, 0x01, 0x0A, 0x00, 0x00, 0xA8, 0x34};
 
     // 送信するコマンドを選択
-    uint8_t* cmd = turnOn ? cmdOn : cmdOff;
+    uint8_t *cmd = turnOn ? cmdOn : cmdOff;
     size_t cmdSize = turnOn ? sizeof(cmdOn) : sizeof(cmdOff);
 
     uint16_t crc = calculateModbusCRC(cmd, 6);
     // ModbusのCRCは リトルエンディアン (下位バイトが先)
-    cmd[6] = crc & 0xFF;        
+    cmd[6] = crc & 0xFF;
     cmd[7] = (crc >> 8) & 0xFF;
 
     // 通信方式を自動判定して送信
-    if (advDevice_chg.pWriteChar->canWriteNoResponse()) {
+    if (advDevice_chg.pWriteChar->canWriteNoResponse())
+    {
         advDevice_chg.pWriteChar->writeValue(cmd, cmdSize, false);
-    } else {
+    }
+    else
+    {
         advDevice_chg.pWriteChar->writeValue(cmd, cmdSize, true);
     }
     delay(1000);
 
-    if (turnOn) {
+    if (turnOn)
+    {
         USBSerial.println("[CHG] 負荷を【ON】にするコマンドを送信しました");
-    } else {
+    }
+    else
+    {
         USBSerial.println("[CHG] 負荷を【OFF】にするコマンドを送信しました");
     }
 }
@@ -765,38 +784,48 @@ static void notifyCallback_bat(NimBLERemoteCharacteristic *pBLERemoteCharacteris
 }
 
 // Renogyからの応答を受け取るコールバック
-void notifyCallback_chg(NimBLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify)
+void notifyCallback_chg(NimBLERemoteCharacteristic *pBLERemoteCharacteristic, uint8_t *pData, size_t length, bool isNotify)
 {
     // もし 7バイトあり、ID=0x01、Read応答(0x03)、データ長2バイト(0x02) なら
-    if (length >= 7 /*&& pData[0] == 0x01*/ && pData[1] == 0x03 && pData[2] == 0x02) {
+    if (length >= 7 /*&& pData[0] == 0x01*/ && pData[1] == 0x03 && pData[2] == 0x02)
+    {
 
         // pData[3] が上位バイト、pData[4] が下位バイト
         uint16_t value = (pData[3] << 8) | pData[4];
         USBSerial.printf("[CHG:read 1 word] 0x%04X\n", value);
 
-        //0x1020
-        // 負荷のON/OFFは「下位バイト(pData[4]) の ビット15」に格納されている
+        // 0x1020
+        //  負荷のON/OFFは「下位バイト(pData[4]) の ビット15」に格納されている
         uint8_t loadState = (value >> 15) & 0x01;
-        
-        if(g_pwr_ctl_set_required){
-            //ignore
-        }else{
-            if (loadState == 1) {
+
+        if (g_pwr_ctl_set_required)
+        {
+            // ignore
+        }
+        else
+        {
+            if (loadState == 1)
+            {
                 g_pwr_ctl = true;
-            } else if (loadState == 0) {
+            }
+            else if (loadState == 0)
+            {
                 g_pwr_ctl = false;
             }
-            g_chg_updated_ts = millis();
+            g_chg_updated_msec = millis();
         }
-    } 
+    }
     // 書き込み(0x06)に対するエコーバック応答の場合
-    else if (length >= 8 /*&& pData[0] == 0x01*/ && pData[1] == 0x06) {
+    else if (length >= 8 /*&& pData[0] == 0x01*/ && pData[1] == 0x06)
+    {
         USBSerial.println("[CHG] 書き込み(ON/OFF)コマンドが正常に受理されました");
     }
-    else {
+    else
+    {
         // エラー等のその他の応答
         USBSerial.print("[CHG] 別の応答を受信: ");
-        for (size_t i = 0; i < length; i++) {
+        for (size_t i = 0; i < length; i++)
+        {
             USBSerial.printf("%02X ", pData[i]);
         }
         USBSerial.println();
@@ -850,11 +879,10 @@ bool connectToBle_bat()
 
     if (pRemoteService == nullptr)
     {
-        USBSerial.println("[エラー] サービス(0xFFE0)が見つかりませんでした。");
+        USBSerial.println("[BAT:エラー] サービス(0xFFE0)が見つかりませんでした。");
         advDevice_bat.pClient->disconnect();
         return false;
     }
-    USBSerial.println("[BLE] サービス(0xFFE0)の特定に成功！");
 
     // {
     //     std::vector<NimBLERemoteCharacteristic*>* characteristics = pRemoteService->getCharacteristics(true);
@@ -876,11 +904,11 @@ bool connectToBle_bat()
     if (pReadChar && pReadChar->canNotify())
     {
         pReadChar->subscribe(true, notifyCallback_bat);
-        USBSerial.println("[BLE] Notify（通知）の登録完了！");
+        USBSerial.println("[BAT] Notify（通知）の登録完了！");
     }
     else
     {
-        USBSerial.println("[エラー] READキャラスティックが見つからない、またはNotifyに対応していません。");
+        USBSerial.println("[BAT:エラー] READキャラスティックが見つからない、またはNotifyに対応していません。");
         advDevice_bat.pClient->disconnect();
         return false;
     }
@@ -888,12 +916,12 @@ bool connectToBle_bat()
     advDevice_bat.pWriteChar = pRemoteService->getCharacteristic(LT_BAT_WRITE_UUID);
     if (advDevice_bat.pWriteChar == nullptr)
     {
-        USBSerial.println("[エラー] WRITEキャラスティックが見つかりません。");
+        USBSerial.println("[BAT:エラー] WRITEキャラスティックが見つかりません。");
         advDevice_bat.pClient->disconnect();
         return false;
     }
 
-    USBSerial.println("[BLE] すべての接続・初期化が正常に完了しました！");
+    USBSerial.println("[BAT] すべての接続・初期化が正常に完了しました！");
     return true;
 }
 bool connectToBle_chg()
@@ -903,7 +931,8 @@ bool connectToBle_chg()
         advDevice_chg.pClient = NimBLEDevice::createClient();
     }
 
-    if (!advDevice_chg.pClient->connect(advDevice_chg.addr)) {
+    if (!advDevice_chg.pClient->connect(advDevice_chg.addr))
+    {
         USBSerial.println("[エラー] チャージャーへの接続に失敗しました。");
         return false;
     }
@@ -1020,6 +1049,7 @@ void setup()
     pBLEScan->setWindow(15);
     pBLEScan->setActiveScan(true);
     pBLEScan->start(10, false);
+    g_last_ble_scan_msec = millis();
 
     // xTaskCreatePinnedToCore(
     //     servoTask,  // 実行する関数
@@ -1121,14 +1151,14 @@ void loop()
         DinMeter.update();
 
         // DinMeter.Speaker.tone(8000, 20);
-        M5.Lcd.setTextColor(WHITE, BLACK);    // 文字色
-        M5.Lcd.setTextSize(1);                // 文字サイズ設定
-        M5.Lcd.setTextFont(2);                // フォント
-        M5.Lcd.setCursor(0, 0);               // カーソル座標指定
+        M5.Lcd.setTextColor(WHITE, BLACK); // 文字色
+        M5.Lcd.setTextSize(1);             // 文字サイズ設定
+        M5.Lcd.setTextFont(2);             // フォント
+        M5.Lcd.setCursor(0, 0);            // カーソル座標指定
         LCD_printf("ID: %s\n", THINGNAME); // name
         LCD_printf("DIAL: %d\n", g_dial_pos);
         LCD_printf("USB: %s\n", USBSerial ? "1" : "0");
-        if (msec - g_chg_updated_ts < 5000)
+        if (msec - g_chg_updated_msec < 5000)
         {
             LCD_printf("PWR: %s\n", g_pwr_ctl ? "ON" : "OFF");
         }
@@ -1140,7 +1170,7 @@ void loop()
         {
             LCD_printf("PWR: -\n");
         }
-        if (msec - g_bat_updated_ts < 5000)
+        if (msec - g_bat_updated_msec < 5000)
         {
             LCD_printf("BAT: %d%%, %.1fC\n", g_bat_soc, g_bat_temp);
         }
@@ -1174,14 +1204,17 @@ void loop()
                 {
                     if (advDevice_bat.pWriteChar != nullptr)
                     {
-                        M5.Lcd.setTextColor(RED, BLACK);    // 文字色
+                        M5.Lcd.setTextColor(RED, BLACK); // 文字色
 
-                        if(advDevice_chg.connected){
+                        if (advDevice_chg.connected)
+                        {
                             LCD_printf("Battery discharg off...\n");
                             delay(3000);
                             advDevice_bat.pWriteChar->writeValue(LT_BAT_DISCHARGE_OFF_CMD, sizeof(LT_BAT_DISCHARGE_OFF_CMD), true);
                             delay(1000);
-                        }else{
+                        }
+                        else
+                        {
                             LCD_printf("Battery discharg on...\n");
                             delay(3000);
                             advDevice_bat.pWriteChar->writeValue(LT_BAT_DISCHARGE_ON_CMD, sizeof(LT_BAT_DISCHARGE_ON_CMD), true);
@@ -1232,7 +1265,8 @@ void loop()
 #endif
     }
 
-    if(g_pwr_ctl_set_required){
+    if (g_pwr_ctl_set_required)
+    {
         g_pwr_ctl_set_required = false;
         setPwrCtl(g_pwr_ctl);
     }
@@ -1245,9 +1279,24 @@ void loop()
 
         JsonDocument doc; // ArduinoJson v7の書き方
         doc["time"] = millis();
-        doc["bat_soc"] = g_bat_soc;
-        doc["bat_temp"] = g_bat_temp;
-        doc["pwr_ctl"] = g_pwr_ctl ? 1 : 0;
+        if (msec - g_bat_updated_msec < 5000)
+        {
+            doc["bat_soc"] = g_bat_soc;
+            doc["bat_temp"] = g_bat_temp;
+        }
+        else
+        {
+            doc["bat_soc"] = -1;
+            doc["bat_temp"] = -99;
+        }
+        if (msec - g_chg_updated_msec < 5000 && !g_pwr_ctl_set_required)
+        {
+            doc["pwr_ctl"] = g_pwr_ctl ? 1 : 0;
+        }
+        else
+        {
+            doc["pwr_ctl"] = -1;
+        }
 
         char jsonBuffer[512];
         serializeJson(doc, jsonBuffer);
@@ -1264,7 +1313,8 @@ void loop()
 
     {
         BleDeviceInfo devInfo = {};
-        if (xQueueReceive(bleQueue, &devInfo, 0)) {
+        if (xQueueReceive(bleQueue, &devInfo, 0))
+        {
             USBSerial.printf("BLE dev found : %s(%s)\n", devInfo.name, devInfo.addr.toString().c_str());
             if (advDevice_bat.name[0] == '\0' && strcmp(devInfo.name, BATTERY_NAME) == 0)
             {
@@ -1278,8 +1328,11 @@ void loop()
                 advDevice_chg.doConnect = true;
                 USBSerial.printf("CHG dev found! : %s(%s)\n", devInfo.name, devInfo.addr.toString().c_str());
             }
-            if (advDevice_bat.name[0] != '\0' && advDevice_chg.name[0] != '\0') {
+            if (advDevice_bat.name[0] != '\0' && advDevice_chg.name[0] != '\0')
+            {
                 NimBLEDevice::getScan()->stop();
+
+                USBSerial.println("BLE: All devices have been found!");
             }
         }
     }
@@ -1296,6 +1349,7 @@ void loop()
             memset(&advDevice_bat, 0, sizeof(advDevice_bat));
             delay(2000);
             NimBLEDevice::getScan()->start(10, false); // 再スキャン
+            g_last_ble_scan_msec = millis();
         }
     }
     if (!advDevice_chg.connected && advDevice_chg.doConnect)
@@ -1310,7 +1364,21 @@ void loop()
             memset(&advDevice_chg, 0, sizeof(advDevice_chg));
             delay(2000);
             NimBLEDevice::getScan()->start(10, false); // 再スキャン
+            g_last_ble_scan_msec = millis();
         }
+    }
+    if (advDevice_bat.name[0] != '\0' && advDevice_chg.name[0] != '\0')
+    {
+        // passthrough
+    }
+    else if (msec - g_last_ble_scan_msec > 30 * 1000)//timeout
+    {
+        NimBLEDevice::getScan()->stop();
+        delay(1000);
+        NimBLEDevice::getScan()->start(10, false); // 再スキャン
+        g_last_ble_scan_msec = millis();
+
+        USBSerial.println("BLE: Timeout, Rescan");
     }
 
     // 接続中なら1秒ごとにリクエストコマンドを送信
@@ -1329,6 +1397,7 @@ void loop()
             memset(&advDevice_bat, 0, sizeof(advDevice_bat));
             delay(2000);
             NimBLEDevice::getScan()->start(10, false);
+            g_last_ble_scan_msec = millis();
         }
     }
     if (advDevice_chg.connected)
@@ -1340,12 +1409,12 @@ void loop()
                 // レジスタ 0x010A (負荷状態) から 1ワード を読み取るModbusコマンド
                 // 構成: [0x01(ID)] [0x03(Read)] [0x01(Addr_H)] [0x0A(Addr_L)] [0x00(Num_H)] [0x01(Num_L)] [0xA4(CRC_L)] [0x36(CRC_H)]
                 uint8_t cmd[] = {0xFF, 0x03, 0x01, 0x20, 0x00, 0x01, 0x00, 0x00};
-                
+
                 uint16_t crc = calculateModbusCRC(cmd, 6);
                 // ModbusのCRCは リトルエンディアン (下位バイトが先)
-                cmd[6] = crc & 0xFF;        
+                cmd[6] = crc & 0xFF;
                 cmd[7] = (crc >> 8) & 0xFF;
-                
+
                 advDevice_chg.pWriteChar->writeValue(cmd, sizeof(cmd), false);
             }
             delay(1000);
@@ -1355,6 +1424,7 @@ void loop()
             memset(&advDevice_chg, 0, sizeof(advDevice_chg));
             delay(2000);
             NimBLEDevice::getScan()->start(10, false);
+            g_last_ble_scan_msec = millis();
         }
     }
 
