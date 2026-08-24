@@ -26,10 +26,10 @@ var self = {
                 m_options example:
                 {
                     "enabled": true,
-                    "clientId": "sdk-nodejs-nenkoumuseum-001",
+                    "clientId": "nenkoumuseum-001",
                     "keyPath": "/home/picam360/github/node-pviewer/pserver/certs/aws_iot/nenkoumuseum-001.private.key",
                     "certPath": "/home/picam360/github/node-pviewer/pserver/certs/aws_iot/nenkoumuseum-001.cert.pem",
-                    "caPath": "/home/picam360/github/node-pviewer/pserver/certs/aws_iot/root-CA.crt",
+                    "caPath": "/home/picam360/github/node-pviewer/pserver/certs/aws_iot/AmazonRootCA1.pem",
                     "endpoint": "a23ifs2uf7b3dq-ats.iot.ap-northeast-1.amazonaws.com",
                     "baseTopic": "devices/nenkoumuseum-001"
                 }
