@@ -13,5 +13,5 @@ else
     curl https://get.volta.sh | bash
     export PATH=$HOME/.volta/bin:$PATH
     volta install node@16
-    volta install npm@8
+#    volta install npm@bundled
 fi

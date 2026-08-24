@@ -12,6 +12,9 @@
     "pstdefs" : {
         "default" : "4khdr-stereo",
         "paths" : [
+            "streams/mjpeg-mpp-stereo.json",
+            "streams/mjpeg-mpp-mono.json",
+            
             "streams/4khdr-stereo.json",
             "streams/4khdr-stereo-calib.json",
             "streams/4khdr-mono.json",

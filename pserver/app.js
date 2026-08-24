@@ -302,6 +302,9 @@ async.waterfall([
 			//config_json += "        \"plugins/amimon_rx_st.so\",\n";
 			config_json += "        \"plugins/ptpvf_generator_st.so\",\n";
 			config_json += "        \"plugins/stabilizer_st.so\",\n";
+
+			config_json += "        \"plugins/mpp_encoder_st.so\",\n";
+			config_json += "        \"plugins/mjpeg_mpp_decoder_st.so\",\n";
 		}else if(process.platform === 'win32') {
 			config_json += "        \"plugins/pcuda_remapper_st.so\",\n";
 			config_json += "        \"plugins/mjpeg_decoder_st.so\",\n";
