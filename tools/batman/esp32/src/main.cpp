@@ -66,11 +66,22 @@ static BLEUUID LT_BAT_SERVICE_UUID((uint16_t)0xFFE0);
 static BLEUUID LT_BAT_READ_UUID((uint16_t)0xFFE1);
 static BLEUUID LT_BAT_WRITE_UUID((uint16_t)0xFFE2);
 
-// Renogy BLEモジュールのUUID定義
+// Charger BLEモジュールのUUID定義
+//#define LT_CHG
+#ifdef LT_CHG
+
+static BLEUUID LT_CHG_SERVICE_UUID((uint16_t)0xFFE0);
+static BLEUUID LT_CHG_READ_UUID((uint16_t)0xFFE1);
+static BLEUUID LT_CHG_WRITE_UUID((uint16_t)0xFFE2);
+
+#else//Renogy
+
 #define RENOGY_SERVICE_RX_UUID "0000fff0-0000-1000-8000-00805f9b34fb" // 受信・Notify用
 #define RENOGY_CHAR_RX_UUID "0000fff1-0000-1000-8000-00805f9b34fb"
 #define RENOGY_SERVICE_TX_UUID "0000ffd0-0000-1000-8000-00805f9b34fb" // 送信・Write用
 #define RENOGY_CHAR_TX_UUID "0000ffd1-0000-1000-8000-00805f9b34fb"
+
+#endif
 
 // 送信コマンド (QUERY_BATTERY_STATUS)
 const uint8_t LT_BAT_QUERY_STATUS_CMD[] = {0x00, 0x00, 0x04, 0x01, 0x13, 0x55, 0xAA, 0x17};
@@ -937,6 +948,47 @@ bool connectToBle_chg()
         return false;
     }
 
+#ifdef LT_CHG
+// 2. サービスの取得
+    NimBLERemoteService *pService = advDevice_chg.pClient->getService(LT_CHG_SERVICE_UUID);
+    if (pService == nullptr)
+    {
+        USBSerial.println("[エラー] LiTimeサービスが見つかりませんでした。");
+        advDevice_chg.pClient->disconnect();
+        return false;
+    }
+
+    // 3. RX (受信・Notify) キャラスティックの設定
+    NimBLERemoteCharacteristic *pNotifyChar = pService->getCharacteristic(LT_CHG_READ_UUID);
+    if (pNotifyChar && pNotifyChar->canNotify())
+    {
+        // 第二引数は通知を受け取るコールバック関数
+        if (!pNotifyChar->subscribe(true, notifyCallback_chg))
+        {
+            USBSerial.println("[CHG:エラー] Notifyの購読(subscribe)に失敗しました。");
+            advDevice_chg.pClient->disconnect();
+            return false;
+        }
+        USBSerial.println("[CHG] Notify（通知）の登録完了！");
+    }
+    else
+    {
+        USBSerial.println("[CHG:エラー] RX(Notify)キャラスティックが見つからないか、Notify非対応です。");
+        advDevice_chg.pClient->disconnect();
+        return false;
+    }
+
+    // 4. TX (送信・Write) キャラスティックの取得
+    advDevice_chg.pWriteChar = pService->getCharacteristic(LT_CHG_WRITE_UUID);
+    if (advDevice_chg.pWriteChar == nullptr || (!advDevice_chg.pWriteChar->canWrite() && !advDevice_chg.pWriteChar->canWriteNoResponse()))
+    {
+        USBSerial.println("[CHG:エラー] TX(Write)キャラスティックが見つからないか、書き込み不可です。");
+        advDevice_chg.pClient->disconnect();
+        return false;
+    }
+
+#else
+
     // --- 1. RX (受信・Notify) サービスの取得 ---
     NimBLERemoteService *pRxService = advDevice_chg.pClient->getService(RENOGY_SERVICE_RX_UUID);
     if (pRxService == nullptr)
@@ -975,6 +1027,7 @@ bool connectToBle_chg()
         advDevice_chg.pClient->disconnect();
         return false;
     }
+#endif
 
     USBSerial.println("[CHG] すべての接続・初期化が正常に完了しました！");
     return true;

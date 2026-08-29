@@ -1,0 +1,113 @@
+#include <Arduino.h>
+#include <NimBLEDevice.h>
+
+// LiTime (0xFFE0系) UUID定義
+#define SERVICE_UUID        "0000ffe0-0000-1000-8000-00805f9b34fb"
+#define CHAR_TX_WRITE_UUID  "0000ffe1-0000-1000-8000-00805f9b34fb" // 書き込み用 (TX)
+#define CHAR_RX_NOTIFY_UUID "0000ffe2-0000-1000-8000-00805f9b34fb" // 通知用 (RX)
+
+// FFE1 (Write) に対する書き込み検知コールバック
+class WriteCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* pCharacteristic) override {
+        std::string val = pCharacteristic->getValue();
+        size_t len = val.length();
+
+        if (len > 0) {
+            USBSerial.println("\n----------------------------------------");
+            USBSerial.print("[SNIFFED WRITE DATA]: ");
+            
+            // RAW HEX表示
+            for (size_t i = 0; i < len; i++) {
+                USBSerial.printf("%02X ", (uint8_t)val[i]);
+            }
+            USBSerial.println();
+
+            // デバッグ情報の表示
+            USBSerial.printf(" Length: %d bytes\n", (int)len);
+            
+            // チェックサム計算 (先頭〜末尾1バイト前までの単純和)
+            if (len >= 3) {
+                uint8_t sum = 0;
+                for (size_t i = 0; i < len - 1; i++) {
+                    sum += (uint8_t)val[i];
+                }
+                USBSerial.printf(" Calculated Checksum (8bit): 0x%02X (DEC: %d)\n", sum, sum);
+                USBSerial.printf(" Payload Last Byte (Received): 0x%02X\n", (uint8_t)val[len - 1]);
+            }
+            USBSerial.println("----------------------------------------");
+        }
+    }
+};
+
+// FFE2 (Notify) に対する登録（Subscribe）検知コールバック
+class NotifyCallbacks : public NimBLECharacteristicCallbacks {
+    void onSubscribe(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc, uint16_t subValue) override {
+        USBSerial.println("\n[INFO]: アプリが 0xFFE2 (Notify) の購読を開始しました。");
+    }
+};
+
+// GATT Server 接続/切断イベント
+class ServerCallbacks : public NimBLEServerCallbacks {
+    void onConnect(NimBLEServer* pServer) override {
+        USBSerial.println("\n>> スマホアプリがESP32に接続されました！");
+    }
+
+    void onDisconnect(NimBLEServer* pServer) override {
+        USBSerial.println("\n<< スマホアプリが切断されました。スキャン待機を再開します。");
+        NimBLEDevice::startAdvertising();
+    }
+};
+
+void setup() {
+    USBSerial.begin(115200);
+    delay(1000);
+    USBSerial.println("=== LiTime BLE Sniffer (0xFFE1 / 0xFFE2 Version) Start ===");
+
+    // 1. NimBLEの初期化
+    // ※アプリがバッテリーとして認識しやすい名称を設定
+    NimBLEDevice::init("L-24050BNNA70-C01211");
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9); // 電波強度を最大化
+
+    // 2. サーバーの作成
+    NimBLEServer* pServer = NimBLEDevice::createServer();
+    pServer->setCallbacks(new ServerCallbacks());
+
+    // 3. サービスの作成 (0xFFE0)
+    NimBLEService* pService = pServer->createService(SERVICE_UUID);
+
+    pServer->createService("0000180a-0000-1000-8000-00805f9b34fb"); // Device Info
+    pServer->createService("0000180f-0000-1000-8000-00805f9b34fb"); // Battery Service
+    pServer->createService("f000ffc0-0451-4000-b000-000000000000"); // Vendor OTA
+
+    // 4. Characteristic 1: 0xFFE1 (Write / Write Without Response)
+    NimBLECharacteristic* pCharWrite = pService->createCharacteristic(
+        CHAR_TX_WRITE_UUID,
+        NIMBLE_PROPERTY::READ |
+        NIMBLE_PROPERTY::WRITE |
+        NIMBLE_PROPERTY::WRITE_NR
+    );
+    pCharWrite->setCallbacks(new WriteCallbacks());
+
+    // 5. Characteristic 2: 0xFFE2 (Notify / Read)
+    NimBLECharacteristic* pCharNotify = pService->createCharacteristic(
+        CHAR_RX_NOTIFY_UUID,
+        NIMBLE_PROPERTY::READ |
+        NIMBLE_PROPERTY::NOTIFY
+    );
+    pCharNotify->setCallbacks(new NotifyCallbacks());
+
+    // 6. サービスの開始
+    pService->start();
+
+    // 7. アドバタイズ（接続受付）の設定
+    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setName("LiTime-12V100");
+    pAdvertising->start();
+
+    USBSerial.println("ESP32準備完了。スマホの公式アプリから 'LiTime-12V100' を検索して接続してください。");
+}
+
+void loop() {
+    delay(1000);
+}
