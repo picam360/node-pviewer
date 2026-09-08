@@ -44,9 +44,10 @@ struct Config {
     String WIFI_PASSWORD;
 
     String THING_NAME;
+    String TB_TOKEN;
+
     String BATTERY_NAME;
     String CHARGER_NAME;
-    String TB_TOKEN;
 };
 
 Config config;
@@ -63,43 +64,54 @@ bool loadConfig()
         return false;
     }
 
-    String s;
+    {
+        const String value = prefs.getString("CATM_APN", "");
+        USBSerial.printf("CATM_APN: [%s]\n", value.c_str());
+        config.CATM_APN = value;
+    }
+    {
+        const String value = prefs.getString("CATM_USR", "");
+        USBSerial.printf("CATM_USR: [%s]\n", value.c_str());
+        config.CATM_USR = value;
+    }
+    {
+        const String value = prefs.getString("CATM_PWD", "");
+        USBSerial.printf("CATM_PWD: [%s]\n", value.c_str());
+        config.CATM_PWD = value;
+    }
 
-    s = prefs.getString("CATM_APN", "");
-    USBSerial.printf("CATM_APN: [%s]\n", s.c_str());
-    config.CATM_APN = s;
+    {
+        const String value = prefs.getString("WIFI_SSID", "");
+        USBSerial.printf("WIFI_SSID: [%s]\n", value.c_str());
+        config.WIFI_SSID = value;
+    }
+    {
+        const String value = prefs.getString("WIFI_PASSWORD", "");
+        USBSerial.printf("WIFI_PASSWORD: [%s]\n", value.c_str());
+        config.WIFI_PASSWORD = value;
+    }
 
-    s = prefs.getString("CATM_USR", "");
-    USBSerial.printf("CATM_USR: [%s]\n", s.c_str());
-    config.CATM_USR = s;
+    {
+        const String value = prefs.getString("THING_NAME", "");
+        USBSerial.printf("THING_NAME: [%s]\n", value.c_str());
+        config.THING_NAME = value;
+    }
+    {
+        const String value = prefs.getString("TB_TOKEN", "");
+        USBSerial.printf("TB_TOKEN: [%s]\n", value.c_str());
+        config.TB_TOKEN = value;
+    }
 
-    s = prefs.getString("CATM_PWD", "");
-    USBSerial.printf("CATM_PWD: [%s]\n", s.c_str());
-    config.CATM_PWD = s;
-
-    s = prefs.getString("WIFI_SSID", "");
-    USBSerial.printf("WIFI_SSID: [%s]\n", s.c_str());
-    config.WIFI_SSID = s;
-
-    s = prefs.getString("WIFI_PASSWORD", "");
-    USBSerial.printf("WIFI_PASSWORD: [%s]\n", s.c_str());
-    config.WIFI_PASSWORD = s;
-
-    s = prefs.getString("THING_NAME", "");
-    USBSerial.printf("THING_NAME: [%s]\n", s.c_str());
-    config.THING_NAME = s;
-
-    s = prefs.getString("BATTERY_NAME", "");
-    USBSerial.printf("BATTERY_NAME: [%s]\n", s.c_str());
-    config.BATTERY_NAME = s;
-
-    s = prefs.getString("CHARGER_NAME", "");
-    USBSerial.printf("CHARGER_NAME: [%s]\n", s.c_str());
-    config.CHARGER_NAME = s;
-
-    s = prefs.getString("TB_TOKEN", "");
-    USBSerial.printf("TB_TOKEN: [%s]\n", s.c_str());
-    config.TB_TOKEN = s;
+    {
+        const String value = prefs.getString("BATTERY_NAME", "");
+        USBSerial.printf("BATTERY_NAME: [%s]\n", value.c_str());
+        config.BATTERY_NAME = value;
+    }
+    {
+        const String value = prefs.getString("CHARGER_NAME", "");
+        USBSerial.printf("CHARGER_NAME: [%s]\n", value.c_str());
+        config.CHARGER_NAME = value;
+    }
 
     prefs.end();
 
@@ -167,12 +179,10 @@ bool loadConfig_from_base64(const String& base64)
         const char* value = doc["CATM_APN"];
         config.CATM_APN = value;
     }
-
     if (doc.containsKey("CATM_USR")) {
         const char* value = doc["CATM_USR"];
         config.CATM_USR = value;
     }
-
     if (doc.containsKey("CATM_PWD")) {
         const char* value = doc["CATM_PWD"];
         config.CATM_PWD = value;
@@ -182,7 +192,6 @@ bool loadConfig_from_base64(const String& base64)
         const char* value = doc["WIFI_SSID"];
         config.WIFI_SSID = value;
     }
-
     if (doc.containsKey("WIFI_PASSWORD")) {
         const char* value = doc["WIFI_PASSWORD"];
         config.WIFI_PASSWORD = value;
@@ -192,21 +201,20 @@ bool loadConfig_from_base64(const String& base64)
         const char* value = doc["THING_NAME"];
         config.THING_NAME = value;
     }
+    if (doc.containsKey("TB_TOKEN")) {
+        const char* value = doc["TB_TOKEN"];
+        config.TB_TOKEN = value;
+    }
 
     if (doc.containsKey("BATTERY_NAME")) {
         const char* value = doc["BATTERY_NAME"];
         config.BATTERY_NAME = value;
     }
-
     if (doc.containsKey("CHARGER_NAME")) {
         const char* value = doc["CHARGER_NAME"];
         config.CHARGER_NAME = value;
     }
 
-    if (doc.containsKey("TB_TOKEN")) {
-        const char* value = doc["TB_TOKEN"];
-        config.TB_TOKEN = value;
-    }
     delete[] decoded;
 
     return true;
@@ -224,17 +232,54 @@ bool saveConfig()
         return false;
     }
 
-    prefs.putString("CATM_APN", config.CATM_APN);
-    prefs.putString("CATM_USR", config.CATM_USR);
-    prefs.putString("CATM_PWD", config.CATM_PWD);
+    {
+        const String value = config.CATM_APN;
+        USBSerial.printf("CATM_APN: [%s]\n", value.c_str());
+        prefs.putString("CATM_APN", value);
+    }
+    {
+        const String value = config.CATM_USR;
+        USBSerial.printf("CATM_USR: [%s]\n", value.c_str());
+        prefs.putString("CATM_USR", value);
+    }
+    {
+        const String value = config.CATM_PWD;
+        USBSerial.printf("CATM_PWD: [%s]\n", value.c_str());
+        prefs.putString("CATM_PWD", value);
+    }
 
-    prefs.putString("WIFI_SSID", config.WIFI_SSID);
-    prefs.putString("WIFI_PASSWORD", config.WIFI_PASSWORD);
+    {
+        const String value = config.WIFI_SSID;
+        USBSerial.printf("WIFI_SSID: [%s]\n", value.c_str());
+        prefs.putString("WIFI_SSID", value);
+    }
+    {
+        const String value = config.WIFI_PASSWORD;
+        USBSerial.printf("WIFI_PASSWORD: [%s]\n", value.c_str());
+        prefs.putString("WIFI_PASSWORD", value);
+    }
 
-    prefs.putString("THING_NAME", config.THING_NAME);
-    prefs.putString("BATTERY_NAME", config.BATTERY_NAME);
-    prefs.putString("CHARGER_NAME", config.CHARGER_NAME);
-    prefs.putString("TB_TOKEN", config.TB_TOKEN);
+    {
+        const String value = config.THING_NAME;
+        USBSerial.printf("THING_NAME: [%s]\n", value.c_str());
+        prefs.putString("THING_NAME", value);
+    }
+    {
+        const String value = config.TB_TOKEN;
+        USBSerial.printf("TB_TOKEN: [%s]\n", value.c_str());
+        prefs.putString("TB_TOKEN", value);
+    }
+
+    {
+        const String value = config.BATTERY_NAME;
+        USBSerial.printf("BATTERY_NAME: [%s]\n", value.c_str());
+        prefs.putString("BATTERY_NAME", value);
+    }
+    {
+        const String value = config.CHARGER_NAME;
+        USBSerial.printf("CHARGER_NAME: [%s]\n", value.c_str());
+        prefs.putString("CHARGER_NAME", value);
+    }
 
     prefs.end();
 
@@ -1756,15 +1801,24 @@ void loop()
                 bool ret = loadConfig_from_base64((char *)_read_line.data() + 12);
                 if(ret){
                     saveConfig();
-                    loadConfig();
+                    //loadConfig();
 
-                    M5.Display.fillScreen(BLACK);
-                    M5.Display.setCursor(0, 0);
-                    M5.Display.setTextColor(RED); // 成功時は緑に
                     M5.Display.println("Config loaded. Rebooting...");
                     delay(5000);   // 画面やシリアルに文字を出力し切るための少しの猶予
                     ESP.restart(); // システム再起動
                 }
+            }
+            else if(strcmp((char *)_read_line.data(), "clear_config") == 0)
+            {
+                Preferences prefs;
+
+                prefs.begin("config", false);
+                prefs.clear();
+                prefs.end();
+                    
+                M5.Display.println("Config cleared. Rebooting...");
+                delay(5000);   // 画面やシリアルに文字を出力し切るための少しの猶予
+                ESP.restart(); // システム再起動
             }
             _read_line.clear();
         }
