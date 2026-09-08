@@ -1478,7 +1478,7 @@ void loop()
         M5.Lcd.setTextSize(1);             // 文字サイズ設定
         M5.Lcd.setTextFont(2);             // フォント
         M5.Lcd.setCursor(0, 0);            // カーソル座標指定
-        LCD_printf("ID: %s\n", config.THING_NAME); // name
+        LCD_printf("ID: %s\n", config.THING_NAME.c_str()); // name
         LCD_printf("DIAL: %d\n", g_dial_pos);
         LCD_printf("USB: %s\n", USBSerial ? "1" : "0");
         if (msec - g_chg_updated_msec < 5000)
