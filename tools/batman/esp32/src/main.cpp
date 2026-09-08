@@ -2,6 +2,7 @@
 #include "secrets.h"
 
 #include <Arduino.h>
+#include "mbedtls/base64.h"
 #include <NimBLEDevice.h>
 
 #ifdef USE_CAT_M
@@ -31,6 +32,214 @@
 #include <M5DinMeter.h>
 #define PWR_CTR_PIN 15
 #endif
+
+#include <Preferences.h>
+
+struct Config {
+    String CATM_APN;
+    String CATM_USR;
+    String CATM_PWD;
+
+    String WIFI_SSID;
+    String WIFI_PASSWORD;
+
+    String THING_NAME;
+    String BATTERY_NAME;
+    String CHARGER_NAME;
+    String TB_TOKEN;
+};
+
+Config config;
+
+// ================================
+// 設定をNVSから読み込む
+// ================================
+bool loadConfig()
+{
+    Preferences prefs;
+
+    if (!prefs.begin("config", false)) {
+        USBSerial.println("loadConfig: begin failed");
+        return false;
+    }
+
+    String s;
+
+    s = prefs.getString("CATM_APN", "");
+    USBSerial.printf("CATM_APN: [%s]\n", s.c_str());
+    config.CATM_APN = s;
+
+    s = prefs.getString("CATM_USR", "");
+    USBSerial.printf("CATM_USR: [%s]\n", s.c_str());
+    config.CATM_USR = s;
+
+    s = prefs.getString("CATM_PWD", "");
+    USBSerial.printf("CATM_PWD: [%s]\n", s.c_str());
+    config.CATM_PWD = s;
+
+    s = prefs.getString("WIFI_SSID", "");
+    USBSerial.printf("WIFI_SSID: [%s]\n", s.c_str());
+    config.WIFI_SSID = s;
+
+    s = prefs.getString("WIFI_PASSWORD", "");
+    USBSerial.printf("WIFI_PASSWORD: [%s]\n", s.c_str());
+    config.WIFI_PASSWORD = s;
+
+    s = prefs.getString("THING_NAME", "");
+    USBSerial.printf("THING_NAME: [%s]\n", s.c_str());
+    config.THING_NAME = s;
+
+    s = prefs.getString("BATTERY_NAME", "");
+    USBSerial.printf("BATTERY_NAME: [%s]\n", s.c_str());
+    config.BATTERY_NAME = s;
+
+    s = prefs.getString("CHARGER_NAME", "");
+    USBSerial.printf("CHARGER_NAME: [%s]\n", s.c_str());
+    config.CHARGER_NAME = s;
+
+    s = prefs.getString("TB_TOKEN", "");
+    USBSerial.printf("TB_TOKEN: [%s]\n", s.c_str());
+    config.TB_TOKEN = s;
+
+    prefs.end();
+
+    return true;
+}
+bool loadConfig_from_base64(const String& base64)
+{
+    // デコード後の必要サイズを取得
+    size_t decodedLen = 0;
+
+    int ret = mbedtls_base64_decode(
+        nullptr,
+        0,
+        &decodedLen,
+        (const unsigned char*)base64.c_str(),
+        base64.length()
+    );
+
+    if (ret != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+        USBSerial.println("Base64 length error");
+        return false;
+    }
+
+    // JSON用バッファ
+    uint8_t* decoded = new uint8_t[decodedLen + 1];
+
+    // Base64 decode
+    ret = mbedtls_base64_decode(
+        decoded,
+        decodedLen,
+        &decodedLen,
+        (const unsigned char*)base64.c_str(),
+        base64.length()
+    );
+
+    if (ret != 0) {
+        USBSerial.println("Base64 decode error");
+        delete[] decoded;
+        return false;
+    }
+
+    // JSON文字列として終端
+    decoded[decodedLen] = '\0';
+
+    USBSerial.println("Decoded JSON:");
+    USBSerial.println((char*)decoded);
+
+    // JSON解析
+    JsonDocument doc;
+
+    DeserializationError error =
+        deserializeJson(doc, decoded, decodedLen);
+
+    if (error) {
+        USBSerial.print("JSON error: ");
+        USBSerial.println(error.c_str());
+
+        delete[] decoded;
+        return false;
+    }
+
+    // JSONから値を取得
+
+    if (doc.containsKey("CATM_APN")) {
+        const char* value = doc["CATM_APN"];
+        config.CATM_APN = value;
+    }
+
+    if (doc.containsKey("CATM_USR")) {
+        const char* value = doc["CATM_USR"];
+        config.CATM_USR = value;
+    }
+
+    if (doc.containsKey("CATM_PWD")) {
+        const char* value = doc["CATM_PWD"];
+        config.CATM_PWD = value;
+    }
+
+    if (doc.containsKey("WIFI_SSID")) {
+        const char* value = doc["WIFI_SSID"];
+        config.WIFI_SSID = value;
+    }
+
+    if (doc.containsKey("WIFI_PASSWORD")) {
+        const char* value = doc["WIFI_PASSWORD"];
+        config.WIFI_PASSWORD = value;
+    }
+
+    if (doc.containsKey("THING_NAME")) {
+        const char* value = doc["THING_NAME"];
+        config.THING_NAME = value;
+    }
+
+    if (doc.containsKey("BATTERY_NAME")) {
+        const char* value = doc["BATTERY_NAME"];
+        config.BATTERY_NAME = value;
+    }
+
+    if (doc.containsKey("CHARGER_NAME")) {
+        const char* value = doc["CHARGER_NAME"];
+        config.CHARGER_NAME = value;
+    }
+
+    if (doc.containsKey("TB_TOKEN")) {
+        const char* value = doc["TB_TOKEN"];
+        config.TB_TOKEN = value;
+    }
+    delete[] decoded;
+
+    return true;
+}
+
+// ================================
+// 設定をNVSへ保存
+// ================================
+bool saveConfig()
+{
+    Preferences prefs;
+
+    if (!prefs.begin("config", false)) {
+        USBSerial.println("saveConfig: begin failed");
+        return false;
+    }
+
+    prefs.putString("CATM_APN", config.CATM_APN);
+    prefs.putString("CATM_USR", config.CATM_USR);
+    prefs.putString("CATM_PWD", config.CATM_PWD);
+
+    prefs.putString("WIFI_SSID", config.WIFI_SSID);
+    prefs.putString("WIFI_PASSWORD", config.WIFI_PASSWORD);
+
+    prefs.putString("THING_NAME", config.THING_NAME);
+    prefs.putString("BATTERY_NAME", config.BATTERY_NAME);
+    prefs.putString("CHARGER_NAME", config.CHARGER_NAME);
+    prefs.putString("TB_TOKEN", config.TB_TOKEN);
+
+    prefs.end();
+
+    return true;
+}
 
 // debug flgs
 
@@ -196,7 +405,7 @@ void connectCATM()
                 step++;
                 continue;
             }
-            if (!modem.gprsConnect(CATM_APN, CATM_USR, CATM_PWD))
+            if (!modem.gprsConnect(config.CATM_APN.c_str(), config.CATM_USR.c_str(), config.CATM_PWD.c_str()))
             {
                 step++;
                 continue;
@@ -265,10 +474,10 @@ void connectCATM()
             String cgdcont = getResponce(1000);
             M5.Display.println(cgdcont);
 
-            if (cgdcont.indexOf("\"" CATM_APN "\"") == -1)
+            if (cgdcont.indexOf("\"" + config.CATM_APN + "\"") == -1)
             {
-                M5.Display.println("APN: " CATM_APN);
-                modem.sendAT("+CGDCONT=1,\"IP\",\"" CATM_APN "\"");
+                M5.Display.println("APN: " + config.CATM_APN);
+                modem.sendAT("+CGDCONT=1,\"IP\",\"" + config.CATM_APN + "\"");
                 modem.waitResponse();
                 delay(3000);
             }
@@ -440,7 +649,7 @@ void connectCATM()
         {
             M5.Display.println("Connecting to APN...");
 
-            if (!modem.gprsConnect(CATM_APN, CATM_USR, CATM_PWD))
+            if (!modem.gprsConnect(config.CATM_APN.c_str(), config.CATM_USR.c_str(), config.CATM_PWD.c_str()))
             {
                 M5.Display.print("CSQ: ");
                 SerialAT.println("AT+CSQ");
@@ -473,7 +682,7 @@ void connectWifi()
     M5.Display.println("Wi-Fi...");
 
     WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD);
 
     while (WiFi.status() != WL_CONNECTED)
     {
@@ -526,7 +735,7 @@ void connectAWS()
     client.begin(AWS_IOT_ENDPOINT, 8883, net);
 
     // 接続試行中も表示を更新
-    while (!client.connect(THINGNAME))
+    while (!client.connect(config.THING_NAME))
     {
         delay(1000);
         M5.Display.print(".");
@@ -622,7 +831,7 @@ void connectTB()
     {
         unsigned long startAttemptTime = millis(); // 接続開始時間を記録
         const unsigned long TIMEOUT_MS = 60000;    // タイムアウト時間を1分(60000ミリ秒)に設定
-        while (!client.connect(THINGNAME, TB_TOKEN, ""))
+        while (!client.connect(config.THING_NAME.c_str(), config.TB_TOKEN.c_str(), ""))
         {
             if (millis() - startAttemptTime >= TIMEOUT_MS)
             {
@@ -718,7 +927,7 @@ uint16_t get_uint16_le(const uint8_t *data, int start)
 // データパースと画面表示
 void parse_litime(const uint8_t *data, size_t length)
 {
-    if (length < 90)
+    if (length <= 90)
         return; // 最低限必要なデータ長をチェック
 
     // 電圧・電流・容量の解析
@@ -1078,31 +1287,47 @@ void setup()
     bleQueue = xQueueCreate(20, sizeof(BleDeviceInfo));
 
     USBSerial.begin(115200); // need to be called for USBSerial.isPlugged=true
-    // USBSerial.setRxBufferSize(4096);//for big rtcm data
+    USBSerial.setRxBufferSize(4096);
     USBSerial.println("DBG : setup started.");
+
+    loadConfig();
 
     // aws
 #ifdef USE_CAT_M
-    SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
-    connectCATM();
+    if(config.CATM_APN == "" || config.THING_NAME == "")
+    {
+        //passthrough
+    }
+    else
+    {
+        SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
+        connectCATM();
 #else
-    connectWifi();
+        connectWifi();
 #endif
 #ifdef USE_AWS
-    connectAWS();
+        connectAWS();
 #else
-    connectTB();
+        connectTB();
+    }
 #endif
 
     // ble
-    NimBLEDevice::init("");
-    NimBLEScan *pBLEScan = NimBLEDevice::getScan();
-    pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
-    pBLEScan->setInterval(45);
-    pBLEScan->setWindow(15);
-    pBLEScan->setActiveScan(true);
-    pBLEScan->start(10, false);
-    g_last_ble_scan_msec = millis();
+    if(config.BATTERY_NAME == "" || config.CHARGER_NAME == "")
+    {
+        //passthrough
+    }
+    else
+    {
+        NimBLEDevice::init("");
+        NimBLEScan *pBLEScan = NimBLEDevice::getScan();
+        pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+        pBLEScan->setInterval(45);
+        pBLEScan->setWindow(15);
+        pBLEScan->setActiveScan(true);
+        pBLEScan->start(10, false);
+        g_last_ble_scan_msec = millis();
+    }
 
     // xTaskCreatePinnedToCore(
     //     servoTask,  // 実行する関数
@@ -1114,15 +1339,15 @@ void setup()
     //     0 // コア0で実行
     // );
 
-    xTaskCreatePinnedToCore(
-        dialTask,       // 実行する関数
-        "DialoderTask", // タスク名
-        4096,           // スタックサイズ
-        NULL,           // パラメータ
-        1,              // 優先度
-        NULL,           // ハンドル
-        0               // コア0で実行
-    );
+    // xTaskCreatePinnedToCore(
+    //     dialTask,       // 実行する関数
+    //     "DialoderTask", // タスク名
+    //     4096,           // スタックサイズ
+    //     NULL,           // パラメータ
+    //     1,              // 優先度
+    //     NULL,           // ハンドル
+    //     0               // コア0で実行
+    // );
 }
 
 void LCD_printf(const char *format, ...)
@@ -1208,7 +1433,7 @@ void loop()
         M5.Lcd.setTextSize(1);             // 文字サイズ設定
         M5.Lcd.setTextFont(2);             // フォント
         M5.Lcd.setCursor(0, 0);            // カーソル座標指定
-        LCD_printf("ID: %s\n", THINGNAME); // name
+        LCD_printf("ID: %s\n", config.THING_NAME); // name
         LCD_printf("DIAL: %d\n", g_dial_pos);
         LCD_printf("USB: %s\n", USBSerial ? "1" : "0");
         if (msec - g_chg_updated_msec < 5000)
@@ -1303,79 +1528,88 @@ void loop()
     }
 
     // mqtt
-    client.loop();
-    if (!client.connected())
+
+    if(config.CATM_APN == "" || config.THING_NAME == "")
     {
+        //passthrough;
+    }
+    else
+    {
+        client.loop();
+        if (!client.connected())
+        {
 #ifdef USE_CAT_M
-        connectCATM();
+            connectCATM();
 #else
-        connectWifi();
+            connectWifi();
 #endif
 #ifdef USE_AWS
-        connectAWS();
+            connectAWS();
 #else
-        connectTB();
+            connectTB();
 #endif
-    }
-
-    if (g_pwr_ctl_set_required)
-    {
-        g_pwr_ctl_set_required = false;
-        setPwrCtl(g_pwr_ctl);
-    }
-
-    // 10秒ごとに送信
-    static unsigned long lastMillis = 0;
-    if (millis() - lastMillis > 10000)
-    {
-        lastMillis = millis();
-
-        JsonDocument doc; // ArduinoJson v7の書き方
-        doc["time"] = millis();
-        if (msec - g_bat_updated_msec < 5000)
-        {
-            doc["bat_soc"] = g_bat_soc;
-            doc["bat_temp"] = g_bat_temp;
-        }
-        else
-        {
-            doc["bat_soc"] = -1;
-            doc["bat_temp"] = -99;
-        }
-        if (msec - g_chg_updated_msec < 5000 && !g_pwr_ctl_set_required)
-        {
-            doc["pwr_ctl"] = g_pwr_ctl ? 1 : 0;
-        }
-        else
-        {
-            doc["pwr_ctl"] = -1;
         }
 
-        char jsonBuffer[512];
-        serializeJson(doc, jsonBuffer);
+        if (g_pwr_ctl_set_required)
+        {
+            g_pwr_ctl_set_required = false;
+            setPwrCtl(g_pwr_ctl);
+        }
+
+        // 10秒ごとに送信
+        static unsigned long lastMillis = 0;
+        if (millis() - lastMillis > 10000)
+        {
+            lastMillis = millis();
+
+            JsonDocument doc; // ArduinoJson v7の書き方
+            doc["time"] = millis();
+            if (msec - g_bat_updated_msec < 5000)
+            {
+                doc["bat_soc"] = g_bat_soc;
+                doc["bat_temp"] = g_bat_temp;
+            }
+            else
+            {
+                doc["bat_soc"] = -1;
+                doc["bat_temp"] = -99;
+            }
+            if (msec - g_chg_updated_msec < 5000 && !g_pwr_ctl_set_required)
+            {
+                doc["pwr_ctl"] = g_pwr_ctl ? 1 : 0;
+            }
+            else
+            {
+                doc["pwr_ctl"] = -1;
+            }
+
+            char jsonBuffer[512];
+            serializeJson(doc, jsonBuffer);
 
 #ifdef USE_AWS
-        if (client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer))
+            if (client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer))
 #else
-        if (client.publish(TB_PUBLISH_TOPIC, jsonBuffer))
+            if (client.publish(TB_PUBLISH_TOPIC, jsonBuffer))
 #endif
-        {
-            USBSerial.println("Published: " + String(jsonBuffer));
+            {
+                USBSerial.println("Published: " + String(jsonBuffer));
+            }
         }
     }
 
+    //finding ble
     {
         BleDeviceInfo devInfo = {};
         if (xQueueReceive(bleQueue, &devInfo, 0))
         {
             USBSerial.printf("BLE dev found : %s(%s)\n", devInfo.name, devInfo.addr.toString().c_str());
-            if (advDevice_bat.name[0] == '\0' && strcmp(devInfo.name, BATTERY_NAME) == 0)
+            if (advDevice_bat.name[0] == '\0' && strcmp(devInfo.name, config.BATTERY_NAME.c_str()) == 0)
             {
                 advDevice_bat = devInfo;
                 advDevice_bat.doConnect = true;
                 USBSerial.printf("BAT dev found! : %s(%s)\n", devInfo.name, devInfo.addr.toString().c_str());
             }
-            if (advDevice_chg.name[0] == '\0' && strcmp(devInfo.name, CHARGER_NAME) == 0)
+            if (advDevice_chg.name[0] == '\0' && strcmp(devInfo.name, config.CHARGER_NAME.c_str()) == 0)
             {
                 advDevice_chg = devInfo;
                 advDevice_chg.doConnect = true;
@@ -1390,97 +1624,126 @@ void loop()
         }
     }
     // ble
-    if (!advDevice_bat.connected && advDevice_bat.doConnect)
     {
-        advDevice_bat.doConnect = false;
-        if (connectToBle_bat())
+        if(config.BATTERY_NAME == "")
         {
-            advDevice_bat.connected = true;
+            //passthough
         }
-        else
+        else if (!advDevice_bat.connected && advDevice_bat.doConnect)
         {
-            memset(&advDevice_bat, 0, sizeof(advDevice_bat));
-            delay(2000);
+            advDevice_bat.doConnect = false;
+            if (connectToBle_bat())
+            {
+                advDevice_bat.connected = true;
+            }
+            else
+            {
+                //danger?//memset(&advDevice_bat, 0, sizeof(advDevice_bat));
+                advDevice_bat.name[0] = '\0';
+                advDevice_bat.pClient = nullptr;
+                advDevice_bat.pWriteChar = nullptr;
+                advDevice_bat.doConnect = false;
+                advDevice_bat.connected = false;
+                advDevice_bat.addr = NimBLEAddress();
+
+                delay(2000);
+                NimBLEDevice::getScan()->start(10, false); // 再スキャン
+                g_last_ble_scan_msec = millis();
+            }
+        }
+        if(config.CHARGER_NAME == "")
+        {
+            //passthough
+        }
+        else if (!advDevice_chg.connected && advDevice_chg.doConnect)
+        {
+            advDevice_chg.doConnect = false;
+            if (connectToBle_chg())
+            {
+                advDevice_chg.connected = true;
+            }
+            else
+            {
+                //danger?//memset(&advDevice_chg, 0, sizeof(advDevice_chg));
+                advDevice_chg.name[0] = '\0';
+                advDevice_chg.pClient = nullptr;
+                advDevice_chg.pWriteChar = nullptr;
+                advDevice_chg.doConnect = false;
+                advDevice_chg.connected = false;
+                advDevice_chg.addr = NimBLEAddress();
+
+                delay(2000);
+                NimBLEDevice::getScan()->start(10, false); // 再スキャン
+                g_last_ble_scan_msec = millis();
+            }
+        }
+        if(config.BATTERY_NAME == "" || config.CHARGER_NAME == "")
+        {
+            // passthrough
+        }
+        else if (advDevice_bat.name[0] != '\0' && advDevice_chg.name[0] != '\0')
+        {
+            // passthrough
+        }
+        else if (msec - g_last_ble_scan_msec > 30 * 1000)//timeout
+        {
+            NimBLEDevice::getScan()->stop();
+            delay(1000);
             NimBLEDevice::getScan()->start(10, false); // 再スキャン
             g_last_ble_scan_msec = millis();
-        }
-    }
-    if (!advDevice_chg.connected && advDevice_chg.doConnect)
-    {
-        advDevice_chg.doConnect = false;
-        if (connectToBle_chg())
-        {
-            advDevice_chg.connected = true;
-        }
-        else
-        {
-            memset(&advDevice_chg, 0, sizeof(advDevice_chg));
-            delay(2000);
-            NimBLEDevice::getScan()->start(10, false); // 再スキャン
-            g_last_ble_scan_msec = millis();
-        }
-    }
-    if (advDevice_bat.name[0] != '\0' && advDevice_chg.name[0] != '\0')
-    {
-        // passthrough
-    }
-    else if (msec - g_last_ble_scan_msec > 30 * 1000)//timeout
-    {
-        NimBLEDevice::getScan()->stop();
-        delay(1000);
-        NimBLEDevice::getScan()->start(10, false); // 再スキャン
-        g_last_ble_scan_msec = millis();
 
-        USBSerial.println("BLE: Timeout, Rescan");
-    }
+            USBSerial.println("BLE: Timeout, Rescan");
+        }
 
-    // 接続中なら1秒ごとにリクエストコマンドを送信
-    if (advDevice_bat.connected)
-    {
-        if (advDevice_bat.pClient->isConnected())
+        // 接続中なら1秒ごとにリクエストコマンドを送信
+        if (advDevice_bat.connected)
         {
-            if (advDevice_bat.pWriteChar != nullptr)
+            if (advDevice_bat.pClient->isConnected())
             {
-                advDevice_bat.pWriteChar->writeValue(LT_BAT_QUERY_STATUS_CMD, sizeof(LT_BAT_QUERY_STATUS_CMD), true);
+                if (advDevice_bat.pWriteChar != nullptr)
+                {
+                    advDevice_bat.pWriteChar->writeValue(LT_BAT_QUERY_STATUS_CMD, sizeof(LT_BAT_QUERY_STATUS_CMD), true);
+                }
+                delay(1000);
             }
-            delay(1000);
-        }
-        else
-        {
-            memset(&advDevice_bat, 0, sizeof(advDevice_bat));
-            delay(2000);
-            NimBLEDevice::getScan()->start(10, false);
-            g_last_ble_scan_msec = millis();
-        }
-    }
-    if (advDevice_chg.connected)
-    {
-        if (advDevice_chg.pClient->isConnected())
-        {
-            if (advDevice_chg.pWriteChar != nullptr)
+            else
             {
-                // レジスタ 0x010A (負荷状態) から 1ワード を読み取るModbusコマンド
-                // 構成: [0x01(ID)] [0x03(Read)] [0x01(Addr_H)] [0x0A(Addr_L)] [0x00(Num_H)] [0x01(Num_L)] [0xA4(CRC_L)] [0x36(CRC_H)]
-                uint8_t cmd[] = {0xFF, 0x03, 0x01, 0x20, 0x00, 0x01, 0x00, 0x00};
-
-                uint16_t crc = calculateModbusCRC(cmd, 6);
-                // ModbusのCRCは リトルエンディアン (下位バイトが先)
-                cmd[6] = crc & 0xFF;
-                cmd[7] = (crc >> 8) & 0xFF;
-
-                advDevice_chg.pWriteChar->writeValue(cmd, sizeof(cmd), false);
+                memset(&advDevice_bat, 0, sizeof(advDevice_bat));
+                delay(2000);
+                NimBLEDevice::getScan()->start(10, false);
+                g_last_ble_scan_msec = millis();
             }
-            delay(1000);
         }
-        else
+        if (advDevice_chg.connected)
         {
-            memset(&advDevice_chg, 0, sizeof(advDevice_chg));
-            delay(2000);
-            NimBLEDevice::getScan()->start(10, false);
-            g_last_ble_scan_msec = millis();
+            if (advDevice_chg.pClient->isConnected())
+            {
+                if (advDevice_chg.pWriteChar != nullptr)
+                {
+                    // レジスタ 0x010A (負荷状態) から 1ワード を読み取るModbusコマンド
+                    // 構成: [0x01(ID)] [0x03(Read)] [0x01(Addr_H)] [0x0A(Addr_L)] [0x00(Num_H)] [0x01(Num_L)] [0xA4(CRC_L)] [0x36(CRC_H)]
+                    uint8_t cmd[] = {0xFF, 0x03, 0x01, 0x20, 0x00, 0x01, 0x00, 0x00};
+
+                    uint16_t crc = calculateModbusCRC(cmd, 6);
+                    // ModbusのCRCは リトルエンディアン (下位バイトが先)
+                    cmd[6] = crc & 0xFF;
+                    cmd[7] = (crc >> 8) & 0xFF;
+
+                    advDevice_chg.pWriteChar->writeValue(cmd, sizeof(cmd), false);
+                }
+                delay(1000);
+            }
+            else
+            {
+                memset(&advDevice_chg, 0, sizeof(advDevice_chg));
+                delay(2000);
+                NimBLEDevice::getScan()->start(10, false);
+                g_last_ble_scan_msec = millis();
+            }
         }
     }
 
+    //serial
     while (USBSerial && USBSerial.available() > 0)
     {
         int c = USBSerial.read();
@@ -1488,6 +1751,21 @@ void loop()
         {
             _read_line.push_back('\0');
             USBSerial.printf("ECH %s\n", (char *)_read_line.data());
+            if(strncmp((char *)_read_line.data(), "load_config ", 12) == 0)
+            {
+                bool ret = loadConfig_from_base64((char *)_read_line.data() + 12);
+                if(ret){
+                    saveConfig();
+                    loadConfig();
+
+                    M5.Display.fillScreen(BLACK);
+                    M5.Display.setCursor(0, 0);
+                    M5.Display.setTextColor(RED); // 成功時は緑に
+                    M5.Display.println("Config loaded. Rebooting...");
+                    delay(5000);   // 画面やシリアルに文字を出力し切るための少しの猶予
+                    ESP.restart(); // システム再起動
+                }
+            }
             _read_line.clear();
         }
         else if (c == '\r')
