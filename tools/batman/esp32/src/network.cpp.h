@@ -1,4 +1,36 @@
 #include <ESP32Ping.h>
+
+void connectWifi()
+{
+    M5.Display.fillScreen(BLACK); // 画面を黒でクリア
+    M5.Display.setTextSize(1);    // 文字サイズ設定
+    M5.Display.setCursor(0, 0);   // 左上にカーソルセット
+    M5.Display.println("Connecting...");
+    M5.Display.println("Wi-Fi...");
+
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD);
+
+    for (int i=0;i<20;i++)
+    {
+        if(WiFi.status() == WL_CONNECTED){
+            break;
+        }
+        delay(500);
+        M5.Display.print("."); // 画面にドットを追加していく
+        USBSerial.print(".");  // シリアルにも出力
+    }
+
+    // 接続完了の表示
+    if(WiFi.status() != WL_CONNECTED){
+        M5.Display.println("\nFAIL!");
+    }else{
+        M5.Display.println("\OK!");
+    }
+    delay(2000);                  // メッセージを確認するために少し待機
+    M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
+}
+
 void checkNetwork(String ipString)
 {
     IPAddress ip;
@@ -94,8 +126,14 @@ void checkNetwork(String ipString)
 void networkTask(void *parameter)
 {
     while (true) {
-        if(config.PING_IP != ""){
+
+        if (WiFi.status() == WL_CONNECTED && config.PING_IP != "")
+        {
             checkNetwork(config.PING_IP);
+        }
+        else
+        {
+            USBSerial.println("WiFi disconnected - skip ping");
         }
 
         vTaskDelay(pdMS_TO_TICKS(30000));

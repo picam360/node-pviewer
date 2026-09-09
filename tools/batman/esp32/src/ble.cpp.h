@@ -369,6 +369,11 @@ void ble_loop()
 {
     unsigned long msec = millis();
     //finding ble
+    if(config.BATTERY_NAME == "" || config.CHARGER_NAME == "")
+    {
+        // passthrough
+    }
+    else
     {
         BleDeviceInfo devInfo = {};
         if (xQueueReceive(bleQueue, &devInfo, 0))

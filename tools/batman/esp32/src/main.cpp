@@ -14,10 +14,9 @@
 #include <HTTPClient.h>
 #ifdef USE_AWS
 #include <WiFiClientSecure.h>
-#else
+#endif
+#endif
 #include <WiFi.h>
-#endif
-#endif
 
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
@@ -55,6 +54,8 @@ WiFiClient net;
 #endif
 #endif
 MQTTClient client = MQTTClient(256);
+
+TaskHandle_t networkTaskHandle;
 
 // params
 static bool g_pwr_ctl = false;
@@ -139,30 +140,6 @@ void dbgPrintf(String msg) { dbgPrintf("%s", msg.c_str()); }
 /** >>>> AWS */
 #ifdef USE_CAT_M
 #include "catm.cpp.h"
-#else
-void connectWifi()
-{
-    M5.Display.fillScreen(BLACK); // 画面を黒でクリア
-    M5.Display.setTextSize(1);    // 文字サイズ設定
-    M5.Display.setCursor(0, 0);   // 左上にカーソルセット
-    M5.Display.println("Connecting...");
-    M5.Display.println("Wi-Fi...");
-
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD);
-
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(500);
-        M5.Display.print("."); // 画面にドットを追加していく
-        USBSerial.print(".");  // シリアルにも出力
-    }
-
-    // 接続完了の表示
-    M5.Display.println("\nOK!");
-    delay(2000);                  // メッセージを確認するために少し待機
-    M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
-}
 #endif
 #include "iot.cpp.h"
 /** <<<< AWS */
@@ -216,11 +193,19 @@ void setup()
     USBSerial.setRxBufferSize(4096);
     USBSerial.println("DBG : setup started.");
 
-    loadConfig();
+    if(M5.BtnA.wasPressed())
+    {
+        M5.Display.println("skip config loading");
+        delay(5000);
+    }
+    else
+    {
+        loadConfig();
+    }
 
     // aws
 #ifdef USE_CAT_M
-    if(config.CATM_APN == "" || config.THING_NAME == "")
+    if(config.CATM_APN == "")
     {
         //passthrough
     }
@@ -228,15 +213,30 @@ void setup()
     {
         SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
         connectCATM();
-#else
-        connectWifi();
+    }
 #endif
+
+    if(config.THING_NAME == "")
+    {
+        //passthrough
+    }
+    else
+    {
 #ifdef USE_AWS
         connectAWS();
 #else
         connectTB();
-    }
 #endif
+    }
+
+    if(config.WIFI_SSID == "")
+    {
+        //passthrough
+    }
+    else
+    {
+        connectWifi();
+    }
 
     // ble
     if(config.BATTERY_NAME == "" || config.CHARGER_NAME == "")
@@ -281,7 +281,7 @@ void setup()
         4096,
         nullptr,
         1,
-        nullptr
+        &networkTaskHandle
     );
 }
 
@@ -467,6 +467,7 @@ void loop()
     ble_loop();
 
     //serial
+    bool restart_required = false;
     while (USBSerial && USBSerial.available() > 0)
     {
         int c = USBSerial.read();
@@ -481,9 +482,9 @@ void loop()
                     saveConfig();
                     //loadConfig();
 
-                    M5.Display.println("Config loaded. Rebooting...");
-                    delay(5000);   // 画面やシリアルに文字を出力し切るための少しの猶予
-                    ESP.restart(); // システム再起動
+                    restart_required = true;
+
+                    M5.Display.println("Config loaded.");
                 }
             }
             else if(strcmp((char *)_read_line.data(), "clear_config") == 0)
@@ -493,10 +494,20 @@ void loop()
                 prefs.begin("config", false);
                 prefs.clear();
                 prefs.end();
+
+                restart_required = true;
                     
-                M5.Display.println("Config cleared. Rebooting...");
-                delay(5000);   // 画面やシリアルに文字を出力し切るための少しの猶予
-                ESP.restart(); // システム再起動
+                M5.Display.println("Config cleared.");
+            }
+            else if(strcmp((char *)_read_line.data(), "dump_config") == 0)
+            {
+                String json = dumpConfig();
+                    
+                USBSerial.printf("Config : %s\n", json.c_str());
+            }
+            else if(strcmp((char *)_read_line.data(), "restart") == 0)
+            {
+                restart_required = true;
             }
             _read_line.clear();
         }
@@ -508,5 +519,13 @@ void loop()
         {
             _read_line.push_back(c);
         }
+    }
+    if(restart_required)
+    {
+        vTaskSuspend(networkTaskHandle);
+        
+        M5.Display.println("Rebooting...");
+        delay(5000);   // 画面やシリアルに文字を出力し切るための少しの猶予
+        ESP.restart(); // システム再起動
     }
 }

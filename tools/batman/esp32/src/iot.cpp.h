@@ -193,11 +193,6 @@ void iot_loop()
         client.loop();
         if (!client.connected())
         {
-#ifdef USE_CAT_M
-            connectCATM();
-#else
-            connectWifi();
-#endif
 #ifdef USE_AWS
             connectAWS();
 #else

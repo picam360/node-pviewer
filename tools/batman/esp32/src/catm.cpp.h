@@ -322,3 +322,15 @@ void connectCATM()
         }
     }
 }
+
+void catm_loop()
+{
+    if(config.CATM_APN == "")
+    {
+        //passthrough;
+    }
+    else
+    {
+        connectCATM();
+    }
+}

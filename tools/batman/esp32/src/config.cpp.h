@@ -57,6 +57,11 @@ bool loadConfig()
         USBSerial.printf("WIFI_PASSWORD: [%s]\n", value.c_str());
         config.WIFI_PASSWORD = value;
     }
+    {
+        const String value = prefs.getString("PING_IP", "");
+        USBSerial.printf("PING_IP: [%s]\n", value.c_str());
+        config.PING_IP = value;
+    }
 
     {
         const String value = prefs.getString("THING_NAME", "");
@@ -177,6 +182,10 @@ bool loadConfig_from_json(const String& data)
         const char* value = doc["WIFI_PASSWORD"];
         config.WIFI_PASSWORD = value;
     }
+    if (doc.containsKey("PING_IP")) {
+        const char* value = doc["PING_IP"];
+        config.PING_IP = value;
+    }
 
     if (doc.containsKey("THING_NAME")) {
         const char* value = doc["THING_NAME"];
@@ -237,6 +246,11 @@ bool saveConfig()
         USBSerial.printf("WIFI_PASSWORD: [%s]\n", value.c_str());
         prefs.putString("WIFI_PASSWORD", value);
     }
+    {
+        const String value = config.PING_IP;
+        USBSerial.printf("PING_IP: [%s]\n", value.c_str());
+        prefs.putString("PING_IP", value);
+    }
 
     {
         const String value = config.THING_NAME;
@@ -263,4 +277,28 @@ bool saveConfig()
     prefs.end();
 
     return true;
+}
+
+String dumpConfig()
+{
+    JsonDocument doc;
+
+    doc["CATM_APN"]       = config.CATM_APN;
+    doc["CATM_USR"]       = config.CATM_USR;
+    doc["CATM_PWD"]       = config.CATM_PWD;
+
+    doc["WIFI_SSID"]      = config.WIFI_SSID;
+    doc["WIFI_PASSWORD"]  = config.WIFI_PASSWORD;
+    doc["PING_IP"]        = config.PING_IP;
+
+    doc["THING_NAME"]     = config.THING_NAME;
+    doc["TB_TOKEN"]       = config.TB_TOKEN;
+
+    doc["BATTERY_NAME"]   = config.BATTERY_NAME;
+    doc["CHARGER_NAME"]   = config.CHARGER_NAME;
+
+    String json;
+    serializeJson(doc, json);
+
+    return json;
 }
