@@ -9,6 +9,33 @@ void connectWifi()
     M5.Display.println("Wi-Fi...");
 
     WiFi.mode(WIFI_STA);
+
+    if (config.WIFI_STATIC_IP.length() > 0) {
+        IPAddress localIP;
+        IPAddress subnet;
+        IPAddress gateway;
+
+        localIP.fromString(config.WIFI_STATIC_IP);
+
+        if (config.WIFI_SUBNET.length() > 0) {
+            subnet.fromString(config.WIFI_SUBNET);
+        } else {
+            subnet = IPAddress(255, 255, 255, 0);
+        }
+
+        if (config.WIFI_GATEWAY.length() > 0) {
+            gateway.fromString(config.WIFI_GATEWAY);
+        } else {
+            gateway = IPAddress(0, 0, 0, 0);
+        }
+
+        M5.Display.println("Static IP : " + config.WIFI_STATIC_IP);
+        WiFi.config(localIP, gateway, subnet);
+    }
+    else
+    {
+        M5.Display.println("DHCP...");
+    }
     WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD);
 
     for (int i=0;i<20;i++)

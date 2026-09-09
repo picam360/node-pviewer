@@ -8,6 +8,9 @@ struct Config {
 
     String WIFI_SSID;
     String WIFI_PASSWORD;
+    String WIFI_STATIC_IP;
+    String WIFI_SUBNET;
+    String WIFI_GATEWAY;
     String PING_IP;
 
     String THING_NAME;
@@ -57,6 +60,22 @@ bool loadConfig()
         USBSerial.printf("WIFI_PASSWORD: [%s]\n", value.c_str());
         config.WIFI_PASSWORD = value;
     }
+    {
+        const String value = prefs.getString("WIFI_STATIC_IP", "");
+        USBSerial.printf("WIFI_STATIC_IP: [%s]\n", value.c_str());
+        config.WIFI_STATIC_IP = value;
+    }
+    {
+        const String value = prefs.getString("WIFI_SUBNET", "");
+        USBSerial.printf("WIFI_SUBNET: [%s]\n", value.c_str());
+        config.WIFI_SUBNET = value;
+    }
+    {
+        const String value = prefs.getString("WIFI_GATEWAY", "");
+        USBSerial.printf("WIFI_GATEWAY: [%s]\n", value.c_str());
+        config.WIFI_GATEWAY = value;
+    }
+
     {
         const String value = prefs.getString("PING_IP", "");
         USBSerial.printf("PING_IP: [%s]\n", value.c_str());
@@ -182,6 +201,18 @@ bool loadConfig_from_json(const String& data)
         const char* value = doc["WIFI_PASSWORD"];
         config.WIFI_PASSWORD = value;
     }
+    if (doc.containsKey("WIFI_STATIC_IP")) {
+        const char* value = doc["WIFI_STATIC_IP"];
+        config.WIFI_STATIC_IP = value;
+    }
+    if (doc.containsKey("WIFI_SUBNET")) {
+        const char* value = doc["WIFI_SUBNET"];
+        config.WIFI_SUBNET = value;
+    }
+    if (doc.containsKey("WIFI_GATEWAY")) {
+        const char* value = doc["WIFI_GATEWAY"];
+        config.WIFI_GATEWAY = value;
+    }
     if (doc.containsKey("PING_IP")) {
         const char* value = doc["PING_IP"];
         config.PING_IP = value;
@@ -247,6 +278,21 @@ bool saveConfig()
         prefs.putString("WIFI_PASSWORD", value);
     }
     {
+        const String value = config.WIFI_STATIC_IP;
+        USBSerial.printf("WIFI_STATIC_IP: [%s]\n", value.c_str());
+        prefs.putString("WIFI_STATIC_IP", value);
+    }
+    {
+        const String value = config.WIFI_SUBNET;
+        USBSerial.printf("WIFI_SUBNET: [%s]\n", value.c_str());
+        prefs.putString("WIFI_SUBNET", value);
+    }
+    {
+        const String value = config.WIFI_GATEWAY;
+        USBSerial.printf("WIFI_GATEWAY: [%s]\n", value.c_str());
+        prefs.putString("WIFI_GATEWAY", value);
+    }
+    {
         const String value = config.PING_IP;
         USBSerial.printf("PING_IP: [%s]\n", value.c_str());
         prefs.putString("PING_IP", value);
@@ -289,6 +335,9 @@ String dumpConfig()
 
     doc["WIFI_SSID"]      = config.WIFI_SSID;
     doc["WIFI_PASSWORD"]  = config.WIFI_PASSWORD;
+    doc["WIFI_STATIC_IP"] = config.WIFI_STATIC_IP;
+    doc["WIFI_SUBNET"]    = config.WIFI_SUBNET;
+    doc["WIFI_GATEWAY"]   = config.WIFI_GATEWAY;
     doc["PING_IP"]        = config.PING_IP;
 
     doc["THING_NAME"]     = config.THING_NAME;
