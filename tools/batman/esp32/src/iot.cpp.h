@@ -232,6 +232,14 @@ void iot_loop()
             {
                 doc["pwr_ctl"] = -1;
             }
+            if(msec - network_check_result.timestamp < CHECK_NETWORK_CYCLE + 5000)
+            {
+                doc["ping_packet_loss"] = network_check_result.packetLoss;
+                doc["ping_rtt_avg"] = network_check_result.avgRtt;
+            }else{
+                doc["ping_packet_loss"] = -1;
+                doc["ping_rtt_avg"] = -1;
+            }
 
             char jsonBuffer[512];
             serializeJson(doc, jsonBuffer);

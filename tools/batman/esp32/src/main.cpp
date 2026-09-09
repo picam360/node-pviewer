@@ -137,6 +137,8 @@ void dbgPrintf(char *format, ...)
 
 void dbgPrintf(String msg) { dbgPrintf("%s", msg.c_str()); }
 
+#include "network.cpp.h"
+
 /** >>>> AWS */
 #ifdef USE_CAT_M
 #include "catm.cpp.h"
@@ -148,7 +150,6 @@ void dbgPrintf(String msg) { dbgPrintf("%s", msg.c_str()); }
 #include "ble.cpp.h"
 /** BLE <<<< */
 
-#include "network.cpp.h"
 
 static int32_t g_dial_pos = 0;
 void dialTask(void *pvParameters)
