@@ -483,7 +483,7 @@ void loop()
                     saveConfig();
                     //loadConfig();
 
-                    restart_required = true;
+                    //restart_required = true;
 
                     M5.Display.println("Config loaded.");
                 }

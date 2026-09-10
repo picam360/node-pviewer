@@ -1,4 +1,5 @@
-#include <ESP32Ping.h>
+#include "ping/ping_sock.h"
+#include "lwip/ip_addr.h"
 
 void connectWifi()
 {
@@ -57,134 +58,309 @@ void connectWifi()
     delay(2000);                  // メッセージを確認するために少し待機
     M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 }
-
 struct NetworkCheckResult {
     uint32_t timestamp;
-
     bool validIp;
-
     int sent;
     int received;
     int lost;
-
     float packetLoss;
-
     uint32_t minRtt;
     float avgRtt;
     uint32_t maxRtt;
+    volatile bool finished;
+    int totalCount;
 } network_check_result;
 const uint32_t CHECK_NETWORK_CYCLE = 10000;
 
 NetworkCheckResult checkNetwork(const String& ipString)
 {
     NetworkCheckResult result = {};
+
     result.timestamp = millis();
+    result.validIp = false;
+    result.sent = 0;
+    result.received = 0;
+    result.lost = 0;
+    result.packetLoss = 0.0f;
+    result.minRtt = UINT32_MAX;
+    result.avgRtt = 0.0f;
+    result.maxRtt = 0;
+    result.finished = false;
+    result.totalCount = 0;
 
     IPAddress ip;
+
     if (!ip.fromString(ipString)) {
         USBSerial.printf(
             "Invalid PING_IP: %s\n",
             ipString.c_str()
         );
-
-        result.validIp = false;
         return result;
     }
 
     result.validIp = true;
 
-    const int count = 20;
-
-    uint32_t totalRtt = 0;
-    result.minRtt = UINT32_MAX;
-    result.maxRtt = 0;
+    const uint32_t count = 20;
+    result.totalCount = count;
 
     USBSerial.printf(
-        "PING %s: %d packets\n",
+        "PING %s: %lu packets\n",
         ipString.c_str(),
         count
     );
 
-    for (int i = 0; i < count; i++) {
+    // IPAddress -> ip_addr_t
+    ip_addr_t target_addr;
 
-        const bool success = Ping.ping(ip, 1);
+    ip_addr_set_zero(&target_addr);
 
-        result.sent++;
+    IP4_ADDR(
+        ip_2_ip4(&target_addr),
+        ip[0],
+        ip[1],
+        ip[2],
+        ip[3]
+    );
 
-        if (success) {
-            const uint32_t rtt =
-                (uint32_t)Ping.averageTime();
+    IP_SET_TYPE_VAL(
+        target_addr,
+        IPADDR_TYPE_V4
+    );
 
-            result.received++;
-            totalRtt += rtt;
+    // Ping configuration
+    esp_ping_config_t config = ESP_PING_DEFAULT_CONFIG();
 
-            if (rtt < result.minRtt) {
-                result.minRtt = rtt;
-            }
+    config.target_addr = target_addr;
+    config.count = count;
+    config.interval_ms = 100;
+    config.timeout_ms = 300;
 
-            if (rtt > result.maxRtt) {
-                result.maxRtt = rtt;
-            }
+    // Callbacks
+    esp_ping_callbacks_t callbacks = {};
 
-            USBSerial.printf(
-                "  [%02d/%02d] Reply: %lu ms\n",
-                i + 1,
-                count,
-                rtt
-            );
+    callbacks.cb_args = &result;
+
+    // Success
+    callbacks.on_ping_success =
+        [](esp_ping_handle_t hdl, void *args)
+    {
+        NetworkCheckResult *result =
+            static_cast<NetworkCheckResult *>(args);
+
+        uint16_t seqno = 0;
+        uint32_t rtt = 0;
+
+        esp_ping_get_profile(
+            hdl,
+            ESP_PING_PROF_SEQNO,
+            &seqno,
+            sizeof(seqno)
+        );
+
+        esp_ping_get_profile(
+            hdl,
+            ESP_PING_PROF_TIMEGAP,
+            &rtt,
+            sizeof(rtt)
+        );
+
+        result->received++;
+
+        if (rtt < result->minRtt) {
+            result->minRtt = rtt;
         }
-        else {
-            result.lost++;
 
-            USBSerial.printf(
-                "  [%02d/%02d] Timeout\n",
-                i + 1,
-                count
-            );
+        if (rtt > result->maxRtt) {
+            result->maxRtt = rtt;
         }
 
-        delay(100);
+        result->avgRtt =
+            (
+                result->avgRtt *
+                (result->received - 1)
+                + rtt
+            )
+            / result->received;
+
+        USBSerial.printf(
+            "  [%02u/%02d] Reply: %lu ms\n",
+            seqno,
+            result->totalCount,
+            rtt
+        );
+    };
+
+    // Timeout
+    callbacks.on_ping_timeout =
+        [](esp_ping_handle_t hdl, void *args)
+    {
+        NetworkCheckResult *result =
+            static_cast<NetworkCheckResult *>(args);
+
+        uint16_t seqno = 0;
+
+        esp_ping_get_profile(
+            hdl,
+            ESP_PING_PROF_SEQNO,
+            &seqno,
+            sizeof(seqno)
+        );
+
+        result->lost++;
+
+        USBSerial.printf(
+            "  [%02u/%02d] Timeout\n",
+            seqno,
+            result->totalCount
+        );
+    };
+
+    // End
+    callbacks.on_ping_end =
+        [](esp_ping_handle_t hdl, void *args)
+    {
+        NetworkCheckResult *result =
+            static_cast<NetworkCheckResult *>(args);
+
+        result->finished = true;
+    };
+
+    // Create session
+    esp_ping_handle_t ping = nullptr;
+
+    esp_err_t err =
+        esp_ping_new_session(
+            &config,
+            &callbacks,
+            &ping
+        );
+
+    if (err != ESP_OK) {
+        USBSerial.printf(
+            "Failed to create ping session: %s\n",
+            esp_err_to_name(err)
+        );
+
+        return result;
     }
 
-    result.packetLoss =
-        ((float)result.lost / (float)result.sent) * 100.0f;
+    // Start
+    err = esp_ping_start(ping);
 
-    result.avgRtt =
-        result.received > 0
-            ? (float)totalRtt / (float)result.received
-            : 0.0f;
+    if (err != ESP_OK) {
+        USBSerial.printf(
+            "Failed to start ping: %s\n",
+            esp_err_to_name(err)
+        );
+
+        esp_ping_delete_session(ping);
+
+        return result;
+    }
+
+    // Wait until ping finishes
+    while (!result.finished) {
+        delay(10);
+    }
+
+    // Get final statistics
+    uint32_t sent = 0;
+    uint32_t received = 0;
+
+    esp_ping_get_profile(
+        ping,
+        ESP_PING_PROF_REQUEST,
+        &sent,
+        sizeof(sent)
+    );
+
+    esp_ping_get_profile(
+        ping,
+        ESP_PING_PROF_REPLY,
+        &received,
+        sizeof(received)
+    );
+
+    result.sent = sent;
+    result.received = received;
+    result.lost = sent - received;
+
+    if (result.sent > 0) {
+        result.packetLoss =
+            (
+                (float)result.lost /
+                (float)result.sent
+            ) * 100.0f;
+    } else {
+        result.packetLoss = 0.0f;
+    }
 
     if (result.received == 0) {
         result.minRtt = 0;
+        result.avgRtt = 0.0f;
+        result.maxRtt = 0;
     }
 
+    // Delete session
+    esp_ping_delete_session(ping);
+
+    // Result
     USBSerial.printf("\n");
-    USBSerial.printf("===== PING RESULT =====\n");
-    USBSerial.printf("Target      : %s\n", ipString.c_str());
-    USBSerial.printf("Sent        : %d\n", result.sent);
-    USBSerial.printf("Received    : %d\n", result.received);
-    USBSerial.printf("Lost        : %d\n", result.lost);
-    USBSerial.printf("Packet Loss : %.1f %%\n", result.packetLoss);
+
+    USBSerial.printf(
+        "===== PING RESULT =====\n"
+    );
+
+    USBSerial.printf(
+        "Target      : %s\n",
+        ipString.c_str()
+    );
+
+    USBSerial.printf(
+        "Sent        : %d\n",
+        result.sent
+    );
+
+    USBSerial.printf(
+        "Received    : %d\n",
+        result.received
+    );
+
+    USBSerial.printf(
+        "Lost        : %d\n",
+        result.lost
+    );
+
+    USBSerial.printf(
+        "Packet Loss : %.1f %%\n",
+        result.packetLoss
+    );
 
     if (result.received > 0) {
         USBSerial.printf(
             "Min RTT     : %lu ms\n",
             result.minRtt
         );
+
         USBSerial.printf(
             "Avg RTT     : %.1f ms\n",
             result.avgRtt
         );
+
         USBSerial.printf(
             "Max RTT     : %lu ms\n",
             result.maxRtt
         );
-    }
-    else {
-        USBSerial.printf("RTT         : N/A\n");
+    } else {
+        USBSerial.printf(
+            "RTT         : N/A\n"
+        );
     }
 
-    USBSerial.printf("=======================\n");
+    USBSerial.printf(
+        "=======================\n"
+    );
 
     return result;
 }
