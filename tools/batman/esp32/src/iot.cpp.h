@@ -214,15 +214,19 @@ void iot_loop()
 
             JsonDocument doc; // ArduinoJson v7の書き方
             doc["time"] = millis();
-            if (msec - g_bat_updated_msec < 5000)
+            if (msec - g_bat_info.bat_updated_msec < 5000)
             {
-                doc["bat_soc"] = g_bat_soc;
-                doc["bat_temp"] = g_bat_temp;
+                doc["bat_soc"] = g_bat_info.bat_soc;
+                doc["bat_temp"] = g_bat_info.bat_temp;
+                doc["bat_volt"] = g_bat_info.bat_volt;
+                doc["bat_curr"] = g_bat_info.bat_curr;
             }
             else
             {
                 doc["bat_soc"] = -1;
                 doc["bat_temp"] = -99;
+                doc["bat_volt"] = 0;
+                doc["bat_curr"] = 0;
             }
             if (msec - g_chg_updated_msec < 5000 && !g_pwr_ctl_set_required)
             {

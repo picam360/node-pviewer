@@ -61,9 +61,13 @@ TaskHandle_t networkTaskHandle;
 static bool g_pwr_ctl = false;
 static bool g_pwr_ctl_set_required = false;
 static unsigned long g_chg_updated_msec = 0;
-static int g_bat_soc = 0;
-static float g_bat_temp = 0;
-static unsigned long g_bat_updated_msec = 0;
+struct BatteryInfo{
+    int bat_soc;
+    float bat_temp;
+    float bat_volt;
+    float bat_curr;
+    unsigned long bat_updated_msec;
+} g_bat_info = {};
 
 // UUIDの設定
 static BLEUUID LT_BAT_SERVICE_UUID((uint16_t)0xFFE0);
@@ -236,7 +240,7 @@ void setup()
     }
     else
     {
-        connectWifi();
+        initWifi();
     }
 
     // ble
@@ -384,9 +388,9 @@ void loop()
         {
             LCD_printf("PWR: -\n");
         }
-        if (msec - g_bat_updated_msec < 5000)
+        if (msec - g_bat_info.bat_updated_msec < 5000)
         {
-            LCD_printf("BAT: %d%%, %.1fC\n", g_bat_soc, g_bat_temp);
+            LCD_printf("BAT: %d%%, %.1fC\n", g_bat_info.bat_soc, g_bat_info.bat_temp);
         }
         else if (advDevice_bat.connected)
         {
@@ -466,6 +470,8 @@ void loop()
     iot_loop();
 
     ble_loop();
+
+    network_loop();
 
     //serial
     bool restart_required = false;

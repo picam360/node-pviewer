@@ -54,7 +54,7 @@ void parse_litime(const uint8_t *data, size_t length)
         return; // 最低限必要なデータ長をチェック
 
     // 電圧・電流・容量の解析
-    float total_voltage = get_uint32_le(data, 8) / 1000.0;
+    float voltage = get_uint32_le(data, 8) / 1000.0;
 
     int16_t raw_current = get_uint16_le(data, 48);
     // Pythonの「r = ~raw_current; (-r if r > 0 else raw_current)」に相当する符号付き処理
@@ -67,11 +67,13 @@ void parse_litime(const uint8_t *data, size_t length)
 
     int soc = data[90]; // 90番目のバイト
 
-    g_bat_soc = soc;
-    g_bat_temp = cell_temp;
-    g_bat_updated_msec = millis();
+    g_bat_info.bat_soc = soc;
+    g_bat_info.bat_temp = cell_temp;
+    g_bat_info.bat_volt = voltage;
+    g_bat_info.bat_curr = current;
+    g_bat_info.bat_updated_msec = millis();
 
-    USBSerial.printf("SOC: %d%%, V: %.2fV, A: %.2fA, Temp: %.1fC\n", soc, total_voltage, current, cell_temp);
+    USBSerial.printf("SOC: %d%%, V: %.2fV, A: %.2fA, Temp: %.1fC\n", soc, voltage, current, cell_temp);
 }
 
 // 負荷をON/OFFする関数 (引数に true を渡すとON、false でOFF)
