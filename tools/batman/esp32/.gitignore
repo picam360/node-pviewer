@@ -1,6 +1,9 @@
 .pio
 .vscode
 
+CMakeLists.txt
+sdkconfig.*
+
 src/nvs_tools.cpp
 src/rover_settings.cpp
 src/rtk.cpp

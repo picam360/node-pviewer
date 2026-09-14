@@ -289,32 +289,21 @@ void initWifi()
         String sizeStr = request->arg("size");
         sizeStr.toLowerCase();
         
-        size_t totalBytes = 1024 * 1024; // デフォルト 1MB
+        size_t totalBytes = 1024 * 1024;
         if (sizeStr.endsWith("k")) totalBytes = sizeStr.substring(0, sizeStr.length() - 1).toInt() * 1024;
         else if (sizeStr.endsWith("m")) totalBytes = sizeStr.substring(0, sizeStr.length() - 1).toInt() * 1024 * 1024;
 
-        // 1. ESP32のヒープ上に大きめの静的データバッファを確保（例: 32KB）
-        //    毎回memsetせず、使い回すことでCPU負荷を極限まで下げる
-        static uint8_t dummyBuf[32768];
-        static bool inited = false;
-        if (!inited) {
-            memset(dummyBuf, 'A', sizeof(dummyBuf));
-            inited = true;
-        }
-
-        // 2. レスポンスの生成
         AsyncWebServerResponse *response = request->beginResponse(
             "application/octet-stream",
             totalBytes,
             [totalBytes](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-            if (index >= totalBytes) return 0;
-            
-            size_t bytesLeft = totalBytes - index;
-            size_t len = (bytesLeft < maxLen) ? bytesLeft : maxLen;
+                if (index >= totalBytes) return 0;
+                
+                size_t bytesLeft = totalBytes - index;
+                size_t len = (bytesLeft < maxLen) ? bytesLeft : maxLen;
 
-            // 3. memcpyで高速にバッファへコピー
-            memcpy(buffer, dummyBuf, len);
-            return len;
+                //memcpy(buffer, dummyBuf, len);
+                return len;
             }
         );
 
@@ -374,7 +363,7 @@ NetworkCheckResult checkNetwork(const String& ipString)
     result.totalCount = count;
 
     USBSerial.printf(
-        "PING %s: %lu packets\n",
+        "PING %s: %u packets\n",
         ipString.c_str(),
         count
     );
@@ -453,7 +442,7 @@ NetworkCheckResult checkNetwork(const String& ipString)
             / result->received;
 
         USBSerial.printf(
-            "  [%02u/%02d] Reply: %lu ms\n",
+            "  [%02u/%02d] Reply: %u ms\n",
             seqno,
             result->totalCount,
             rtt
@@ -608,7 +597,7 @@ NetworkCheckResult checkNetwork(const String& ipString)
 
     if (result.received > 0) {
         USBSerial.printf(
-            "Min RTT     : %lu ms\n",
+            "Min RTT     : %u ms\n",
             result.minRtt
         );
 
@@ -618,7 +607,7 @@ NetworkCheckResult checkNetwork(const String& ipString)
         );
 
         USBSerial.printf(
-            "Max RTT     : %lu ms\n",
+            "Max RTT     : %u ms\n",
             result.maxRtt
         );
     } else {

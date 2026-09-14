@@ -536,3 +536,14 @@ void loop()
         ESP.restart(); // システム再起動
     }
 }
+extern "C" void app_main()
+{
+    initArduino();
+
+    setup();
+
+    while (true) {
+        loop();
+        vTaskDelay(1);
+    }
+}

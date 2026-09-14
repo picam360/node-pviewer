@@ -486,7 +486,7 @@ void ble_loop()
             }
             else
             {
-                memset(&advDevice_bat, 0, sizeof(advDevice_bat));
+                advDevice_bat = BleDeviceInfo{};
                 delay(2000);
                 NimBLEDevice::getScan()->start(10, false);
                 g_last_ble_scan_msec = millis();
@@ -513,7 +513,7 @@ void ble_loop()
             }
             else
             {
-                memset(&advDevice_chg, 0, sizeof(advDevice_chg));
+                advDevice_chg = BleDeviceInfo{};
                 delay(2000);
                 NimBLEDevice::getScan()->start(10, false);
                 g_last_ble_scan_msec = millis();
