@@ -400,6 +400,8 @@ void loop()
         {
             LCD_printf("BAT: -\n");
         }
+        
+        LCD_printf("IP: %s\n", WiFi.localIP().toString().c_str());
 
         // M5.Lcd.drawFastHLine(0, 50, 128, WHITE);           // 指定座標から横線
 

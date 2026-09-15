@@ -2,43 +2,73 @@
 #include "lwip/ip_addr.h"
 #include <esp_wifi.h>
 #include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
+#include <WebServer.h>
+#include <HTTPClient.h>
 
-AsyncWebServer server(80);
+WebServer server(80);
 
-void handleGetStats(AsyncWebServerRequest *request) {
-    
-    USBSerial.println("get-stats called");
+float downloadFileBps(const char *url)
+{
+    HTTPClient http;
 
-    // JsonDocument の生成 (ArduinoJson v7ではサイズ指定不要)
-    JsonDocument doc;
+    http.setTimeout(30000);
+    http.begin(url);
 
-    // 基本ステータスの設定
-    doc["status"] = "ok";
-    doc["uptime_sec"] = millis() / 1000;
-    doc["free_heap_bytes"] = ESP.getFreeHeap();
-    doc["connected_clients"] = WiFi.softAPgetStationNum();
+    int httpCode = http.GET();
 
-    // "bat_info" オブジェクトを追加して値を設定
-    JsonObject batInfo = doc["bat_info"].to<JsonObject>();
-    batInfo["soc"] = g_bat_info.bat_soc;
-    batInfo["temp"] = g_bat_info.bat_temp;
-    batInfo["volt"] = g_bat_info.bat_volt;
-    batInfo["curr"] = g_bat_info.bat_curr;
-    batInfo["updated_msec"] = g_bat_info.bat_updated_msec;
+    if (httpCode != HTTP_CODE_OK) {
+        Serial.printf("HTTP error: %d\n", httpCode);
+        http.end();
+        return 0.0f;
+    }
 
-    // JSONオブジェクトを文字列に変換
-    String jsonResponse;
-    serializeJson(doc, jsonResponse);
+    WiFiClient *stream = http.getStreamPtr();
 
-    // レスポンスオブジェクトの作成 (ステータス200, Content-Type: application/json)
-    AsyncWebServerResponse *response = request->beginResponse(200, "application/json", jsonResponse);
+    uint8_t buffer[16 * 1024];
 
-    // CORSヘッダーの追加（Webブラウザや他ドメインからのJavaScriptアクセスを許可）
-    response->addHeader("Access-Control-Allow-Origin", "*");
+    uint64_t totalBytes = 0;
+    uint32_t start = millis();
 
-    // クライアントへ送信
-    request->send(response);
+    while (http.connected()) {
+        size_t available = stream->available();
+
+        if (available > 0) {
+            size_t toRead = min(available, sizeof(buffer));
+
+            int len = stream->readBytes(buffer, toRead);
+
+            if (len > 0) {
+                totalBytes += len;
+            }
+        } else {
+            delay(1);
+        }
+
+        // Content-Lengthが分かっている場合
+        int remaining = http.getSize();
+        if (remaining >= 0 && totalBytes >= (uint64_t)remaining) {
+            break;
+        }
+    }
+
+    uint32_t elapsed = millis() - start;
+
+    http.end();
+
+    if (elapsed == 0) {
+        return 0.0f;
+    }
+
+    float bps = (float)totalBytes * 8.0f * 1000.0f / elapsed;
+
+    USBSerial.printf(
+        "Downloaded: %llu bytes, time: %u ms, speed: %.2f Mbps\n",
+        totalBytes,
+        elapsed,
+        bps / 1000000.0f
+    );
+
+    return bps;
 }
 
 // /uplink-test で返却する HTML + JavaScript
@@ -278,44 +308,102 @@ void initWifi()
 
     esp_wifi_set_ps(WIFI_PS_NONE);
     //server
-    server.on("/get-stats", HTTP_GET, handleGetStats);
-    server.on("/uplink-test", HTTP_GET, [](AsyncWebServerRequest *request){
-        USBSerial.println("uplink-test called");
-        request->send_P(200, "text/html", index_html);
+    server.on("/get-stats", HTTP_GET, []()
+    {
+        USBSerial.println("get-stats called");
+
+        JsonDocument doc;
+
+        doc["status"] = "ok";
+        doc["timestamp"] = millis() / 1000;
+        doc["free_heap_bytes"] = ESP.getFreeHeap();
+        doc["connected_clients"] = WiFi.softAPgetStationNum();
+
+        JsonObject batInfo = doc["bat_info"].to<JsonObject>();
+        batInfo["soc"] = g_bat_info.bat_soc;
+        batInfo["temp"] = g_bat_info.bat_temp;
+        batInfo["volt"] = g_bat_info.bat_volt;
+        batInfo["curr"] = g_bat_info.bat_curr;
+        batInfo["updated_msec"] = g_bat_info.bat_updated_msec;
+
+        String jsonResponse;
+        serializeJson(doc, jsonResponse);
+
+        server.send_P(200, "text/html", jsonResponse.c_str());
     });
-    server.on("/uplink-test-data", HTTP_GET, [](AsyncWebServerRequest *request){
+
+    server.on("/uplink-test", HTTP_GET, []() {
+        USBSerial.println("uplink-test called");
+
+        server.send_P(200, "text/html", index_html);
+    });
+
+    server.on("/uplink-test-data", HTTP_GET, []() {
         USBSerial.println("uplink-test-data called");
 
-        String sizeStr = request->arg("size");
+        String sizeStr = server.arg("size");
         sizeStr.toLowerCase();
-        
+
         size_t totalBytes = 1024 * 1024;
-        if (sizeStr.endsWith("k")) totalBytes = sizeStr.substring(0, sizeStr.length() - 1).toInt() * 1024;
-        else if (sizeStr.endsWith("m")) totalBytes = sizeStr.substring(0, sizeStr.length() - 1).toInt() * 1024 * 1024;
 
-        AsyncWebServerResponse *response = request->beginResponse(
-            "application/octet-stream",
-            totalBytes,
-            [totalBytes](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-                if (index >= totalBytes) return 0;
-                
-                size_t bytesLeft = totalBytes - index;
-                size_t len = (bytesLeft < maxLen) ? bytesLeft : maxLen;
+        if (sizeStr.endsWith("k")) {
+            totalBytes =
+                sizeStr.substring(0, sizeStr.length() - 1).toInt() * 1024;
+        }
+        else if (sizeStr.endsWith("m")) {
+            totalBytes =
+                sizeStr.substring(0, sizeStr.length() - 1).toInt() * 1024 * 1024;
+        }
 
-                //memcpy(buffer, dummyBuf, len);
-                return len;
-            }
+        server.setContentLength(totalBytes);
+        server.send(200, "application/octet-stream", "");
+
+        static uint8_t txBuffer[16 * 1024] = {};
+
+        size_t sent = 0;
+
+        while (sent < totalBytes) {
+            size_t len = min(sizeof(txBuffer), totalBytes - sent);
+
+            size_t written = server.client().write(txBuffer, len);
+
+            if (written == 0)
+                break;
+
+            sent += written;
+        }
+
+        USBSerial.printf(
+            "Sent %u / %u bytes\n",
+            (unsigned int)sent,
+            (unsigned int)totalBytes
         );
+    });
 
-        response->addHeader("Access-Control-Allow-Origin", "*");
-        response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-        request->send(response);
+    server.on("/downlink-test", HTTP_GET, []() {
+        USBSerial.println("downlink-test called");
+
+        String url = server.arg("url");
+        float bps = downloadFileBps(url.c_str());
+
+        JsonDocument doc;
+
+        doc["status"] = "ok";
+        doc["timestamp"] = millis() / 1000;
+        doc["url"] = url;
+        doc["bps"] = bps;
+
+        String jsonResponse;
+        serializeJson(doc, jsonResponse);
+
+        server.send_P(200, "text/html", jsonResponse.c_str());
     });
 
     // HTTPサーバー起動
     server.begin();
     USBSerial.println("HTTP Server started");
 }
+
 struct NetworkCheckResult {
     uint32_t timestamp;
     bool validIp;
@@ -645,4 +733,5 @@ void networkTask(void *parameter)
 
 void network_loop()
 {
+    server.handleClient();
 }
