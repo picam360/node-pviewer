@@ -1,52 +1,50 @@
 #include "ping/ping_sock.h"
 #include "lwip/ip_addr.h"
 #include <esp_wifi.h>
-#include <AsyncTCP.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
 
-WebServer server(80);
+static uint8_t buffer[64 * 1024];
+static WebServer server(80);
+static HTTPClient http;
 
 float downloadFileBps(const char *url)
 {
-    HTTPClient http;
-
-    http.setTimeout(30000);
-    http.begin(url);
+    if (!http.begin(url)) {
+        return 0.0f;
+    }
 
     int httpCode = http.GET();
 
     if (httpCode != HTTP_CODE_OK) {
-        Serial.printf("HTTP error: %d\n", httpCode);
         http.end();
         return 0.0f;
     }
 
     WiFiClient *stream = http.getStreamPtr();
 
-    uint8_t buffer[16 * 1024];
+    const int contentLength = http.getSize();
 
     uint64_t totalBytes = 0;
+
     uint32_t start = millis();
 
     while (http.connected()) {
-        size_t available = stream->available();
 
-        if (available > 0) {
-            size_t toRead = min(available, sizeof(buffer));
+        int len = stream->read(buffer, sizeof(buffer));
 
-            int len = stream->readBytes(buffer, toRead);
-
-            if (len > 0) {
-                totalBytes += len;
-            }
-        } else {
+        if (len > 0) {
+            totalBytes += len;
+        }
+        else if (len == 0) {
             delay(1);
         }
+        else {
+            break;
+        }
 
-        // Content-Lengthが分かっている場合
-        int remaining = http.getSize();
-        if (remaining >= 0 && totalBytes >= (uint64_t)remaining) {
+        if (contentLength >= 0 &&
+            totalBytes >= (uint64_t)contentLength) {
             break;
         }
     }
@@ -55,14 +53,14 @@ float downloadFileBps(const char *url)
 
     http.end();
 
-    if (elapsed == 0) {
+    if (elapsed == 0)
         return 0.0f;
-    }
 
-    float bps = (float)totalBytes * 8.0f * 1000.0f / elapsed;
+    float bps =
+        (float)totalBytes * 8.0f * 1000.0f / elapsed;
 
     USBSerial.printf(
-        "Downloaded: %llu bytes, time: %u ms, speed: %.2f Mbps\n",
+        "Downloaded: %llu bytes, %u ms, %.3f Mbps\n",
         totalBytes,
         elapsed,
         bps / 1000000.0f
@@ -329,7 +327,7 @@ void initWifi()
         String jsonResponse;
         serializeJson(doc, jsonResponse);
 
-        server.send_P(200, "text/html", jsonResponse.c_str());
+        server.send_P(200, "application/json", jsonResponse.c_str());
     });
 
     server.on("/uplink-test", HTTP_GET, []() {
@@ -358,14 +356,12 @@ void initWifi()
         server.setContentLength(totalBytes);
         server.send(200, "application/octet-stream", "");
 
-        static uint8_t txBuffer[16 * 1024] = {};
-
         size_t sent = 0;
 
         while (sent < totalBytes) {
-            size_t len = min(sizeof(txBuffer), totalBytes - sent);
+            size_t len = min(sizeof(buffer), totalBytes - sent);
 
-            size_t written = server.client().write(txBuffer, len);
+            size_t written = server.client().write(buffer, len);
 
             if (written == 0)
                 break;
@@ -380,7 +376,7 @@ void initWifi()
         );
     });
 
-    server.on("/downlink-test", HTTP_GET, []() {
+    server.on("/downlink-test-data", HTTP_GET, []() {
         USBSerial.println("downlink-test called");
 
         String url = server.arg("url");
@@ -396,12 +392,15 @@ void initWifi()
         String jsonResponse;
         serializeJson(doc, jsonResponse);
 
-        server.send_P(200, "text/html", jsonResponse.c_str());
+        server.send_P(200, "application/json", jsonResponse.c_str());
     });
 
     // HTTPサーバー起動
     server.begin();
     USBSerial.println("HTTP Server started");
+
+    http.setReuse(true);
+    http.setTimeout(30000);
 }
 
 struct NetworkCheckResult {
