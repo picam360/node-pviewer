@@ -4,6 +4,8 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 
+//#define WIFI_DEBUG
+
 static uint8_t buffer[64 * 1024];
 static WebServer server(80);
 static HTTPClient http;
@@ -28,24 +30,22 @@ float downloadFileBps(const char *url)
     uint64_t totalBytes = 0;
 
     uint32_t start = millis();
+    while (http.connected() && totalBytes < (uint64_t)contentLength) {
 
-    while (http.connected()) {
+        int available = stream->available();
+        if (available > 0) {
+            int len = stream->read(
+                buffer,
+                min((int)sizeof(buffer), available)
+            );
 
-        int len = stream->read(buffer, sizeof(buffer));
-
-        if (len > 0) {
-            totalBytes += len;
-        }
-        else if (len == 0) {
-            delay(1);
+            if (len > 0) {
+                totalBytes += len;
+            }
+            //USBSerial.printf("len=%d, totalBytes=%llu\n", len, totalBytes);
         }
         else {
-            break;
-        }
-
-        if (contentLength >= 0 &&
-            totalBytes >= (uint64_t)contentLength) {
-            break;
+            taskYIELD();
         }
     }
 
@@ -254,6 +254,9 @@ void initWifi()
     M5.Display.println("Connecting...");
     M5.Display.println("Wi-Fi...");
 
+#ifdef WIFI_DEBUG
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+#endif
     WiFi.mode(WIFI_STA);
 
     if (config.WIFI_STATIC_IP.length() > 0) {
@@ -283,7 +286,9 @@ void initWifi()
         M5.Display.println("DHCP...");
     }
     WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD);
+#ifdef WIFI_DEBUG
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
+#endif
 
     for (int i=0;i<20;i++)
     {
@@ -300,11 +305,23 @@ void initWifi()
         M5.Display.println("\nFAIL!");
     }else{
         M5.Display.println("\OK!");
+
+        //this is trick for rx performance problem
+        WiFi.disconnect();
+        delay(100);
+        WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD);
     }
     delay(2000);                  // メッセージを確認するために少し待機
     M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 
-    esp_wifi_set_ps(WIFI_PS_NONE);
+    WiFi.setSleep(false);
+
+#ifdef WIFI_DEBUG
+    wifi_phy_mode_t phy;
+    esp_wifi_sta_get_negotiated_phymode(&phy);
+    USBSerial.printf("PHY mode=%d\n", phy);
+#endif
+
     //server
     server.on("/get-stats", HTTP_GET, []()
     {
@@ -387,7 +404,7 @@ void initWifi()
         doc["status"] = "ok";
         doc["timestamp"] = millis() / 1000;
         doc["url"] = url;
-        doc["bps"] = bps;
+        doc["mbps"] = bps / 1e6;
 
         String jsonResponse;
         serializeJson(doc, jsonResponse);
