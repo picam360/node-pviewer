@@ -285,7 +285,24 @@ void initWifi()
     {
         M5.Display.println("DHCP...");
     }
-    WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD);
+
+    uint8_t *bssid = NULL;
+    uint8_t _bssid[6];
+    int parsed = sscanf(config.WIFI_BSSID.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                        &_bssid[0], &_bssid[1], &_bssid[2], &_bssid[3], &_bssid[4], &_bssid[5]);
+
+    if (parsed != 6) {
+        parsed = sscanf(config.WIFI_BSSID.c_str(), "%hhx-%hhx-%hhx-%hhx-%hhx-%hhx",
+                &_bssid[0], &_bssid[1], &_bssid[2], &_bssid[3], &_bssid[4], &_bssid[5]);
+    }
+        
+    if(parsed == 6)
+    {
+        bssid = _bssid;
+    }
+
+    WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD, 0, bssid);
+
 #ifdef WIFI_DEBUG
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
 #endif
@@ -308,13 +325,13 @@ void initWifi()
 
         //this is trick for rx performance problem
         WiFi.disconnect();
-        delay(100);
-        WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD);
+        delay(100);  
+        WiFi.begin(config.WIFI_SSID, config.WIFI_PASSWORD, 0, bssid);
     }
     delay(2000);                  // メッセージを確認するために少し待機
     M5.Display.fillScreen(BLACK); // 画面をクリアしてメイン処理へ
 
-    WiFi.setSleep(false);
+    //WiFi.setSleep(false);//bleと同時併用できない
 
 #ifdef WIFI_DEBUG
     wifi_phy_mode_t phy;

@@ -7,6 +7,7 @@ struct Config {
     String CATM_PWD;
 
     String WIFI_SSID;
+    String WIFI_BSSID;
     String WIFI_PASSWORD;
     String WIFI_STATIC_IP;
     String WIFI_SUBNET;
@@ -54,6 +55,11 @@ bool loadConfig()
         const String value = prefs.getString("WIFI_SSID", "");
         USBSerial.printf("WIFI_SSID: [%s]\n", value.c_str());
         config.WIFI_SSID = value;
+    }
+    {
+        const String value = prefs.getString("WIFI_BSSID", "");
+        USBSerial.printf("WIFI_BSSID: [%s]\n", value.c_str());
+        config.WIFI_BSSID = value;
     }
     {
         const String value = prefs.getString("WIFI_PASSWORD", "");
@@ -197,6 +203,10 @@ bool loadConfig_from_json(const String& data)
         const char* value = doc["WIFI_SSID"];
         config.WIFI_SSID = value;
     }
+    if (doc.containsKey("WIFI_BSSID")) {
+        const char* value = doc["WIFI_BSSID"];
+        config.WIFI_BSSID = value;
+    }
     if (doc.containsKey("WIFI_PASSWORD")) {
         const char* value = doc["WIFI_PASSWORD"];
         config.WIFI_PASSWORD = value;
@@ -273,6 +283,11 @@ bool saveConfig()
         prefs.putString("WIFI_SSID", value);
     }
     {
+        const String value = config.WIFI_BSSID;
+        USBSerial.printf("WIFI_BSSID: [%s]\n", value.c_str());
+        prefs.putString("WIFI_BSSID", value);
+    }
+    {
         const String value = config.WIFI_PASSWORD;
         USBSerial.printf("WIFI_PASSWORD: [%s]\n", value.c_str());
         prefs.putString("WIFI_PASSWORD", value);
@@ -334,6 +349,7 @@ String dumpConfig()
     doc["CATM_PWD"]       = config.CATM_PWD;
 
     doc["WIFI_SSID"]      = config.WIFI_SSID;
+    doc["WIFI_BSSID"]      = config.WIFI_BSSID;
     doc["WIFI_PASSWORD"]  = config.WIFI_PASSWORD;
     doc["WIFI_STATIC_IP"] = config.WIFI_STATIC_IP;
     doc["WIFI_SUBNET"]    = config.WIFI_SUBNET;
