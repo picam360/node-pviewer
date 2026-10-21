@@ -12,9 +12,13 @@ mac-address-blacklist=
 mode=ap
 ssid=%SSID%
 
-#[wifi-security]
-#key-mgmt=wpa-psk
-#psk=%PWD%
+[wifi-security]
+group=ccmp;
+key-mgmt=wpa-psk
+pairwise=ccmp;
+proto=rsn;
+pmf=1
+psk=%PWD%
 
 [ipv4]
 address1=10.42.0.%ADDRESS%/24
