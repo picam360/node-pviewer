@@ -1,0 +1,11 @@
+[Unit]
+Description=Set USB role to device
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/set-usb-role-device.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
