@@ -1,3 +1,5 @@
+#!/bin/bash
+
 PORT=$1
 
 echo -n "$PORT-004c" | sudo tee /sys/bus/i2c/drivers/v-link-deser/bind

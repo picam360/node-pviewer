@@ -1,0 +1,13 @@
+[Unit]
+Description=Bind unbound devices on late boot
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 1
+ExecStart=/usr/local/bin/ar2020-via-vlink/bind.sh 9
+#ExecStop=/usr/local/bin/ar2020-via-vlink/unbind.sh 9
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
